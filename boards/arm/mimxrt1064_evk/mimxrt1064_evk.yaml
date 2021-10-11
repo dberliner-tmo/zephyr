@@ -16,9 +16,12 @@ ram: 32768
 flash: 4096
 supported:
   - arduino_gpio
+  - arduino_serial
   - counter
   - display
+  - dma
   - gpio
+  - hwinfo
   - i2c
   - netif:eth
   - pwm
@@ -27,3 +30,4 @@ supported:
   - video
   - kscan:touch
   - can
+  - watchdog

@@ -925,6 +925,11 @@ static int tcp_send_data(struct tcp *conn)
 	len = MIN3(conn->send_data_total - conn->unacked_len,
 		   conn->send_win - conn->unacked_len,
 		   conn_mss(conn));
+	if (len == 0) {
+		NET_DBG("conn: %p no data to send", conn);
+		ret = -ENODATA;
+		goto out;
+	}
 
 	pkt = tcp_pkt_alloc(conn, len);
 	if (!pkt) {
@@ -1070,6 +1075,9 @@ static void tcp_resend_data(struct k_work *work)
 
 			goto out;
 		}
+	} else if (ret == -ENODATA) {
+		conn->data_mode = TCP_DATA_MODE_SEND;
+		goto out;
 	}
 
 	k_work_reschedule_for_queue(&tcp_work_q, &conn->send_data_timer,
@@ -1326,7 +1334,7 @@ static uint32_t tcpv6_init_isn(struct in6_addr *saddr,
 	memcpy(buf.key, unique_key, sizeof(buf.key));
 
 #if IS_ENABLED(CONFIG_NET_TCP_ISN_RFC6528)
-	mbedtls_md5_ret((const unsigned char *)&buf, sizeof(buf), hash);
+	mbedtls_md5((const unsigned char *)&buf, sizeof(buf), hash);
 #endif
 
 	return seq_scale(UNALIGNED_GET((uint32_t *)&hash[0]));
@@ -1361,7 +1369,7 @@ static uint32_t tcpv4_init_isn(struct in_addr *saddr,
 	memcpy(buf.key, unique_key, sizeof(unique_key));
 
 #if IS_ENABLED(CONFIG_NET_TCP_ISN_RFC6528)
-	mbedtls_md5_ret((const unsigned char *)&buf, sizeof(buf), hash);
+	mbedtls_md5((const unsigned char *)&buf, sizeof(buf), hash);
 #endif
 
 	return seq_scale(UNALIGNED_GET((uint32_t *)&hash[0]));
@@ -1827,7 +1835,11 @@ next_state:
 			}
 
 			conn->send_data_total -= len_acked;
-			conn->unacked_len -= len_acked;
+			if (conn->unacked_len < len_acked) {
+				conn->unacked_len = 0;
+			} else {
+				conn->unacked_len -= len_acked;
+			}
 			conn_seq(conn, + len_acked);
 			net_stats_update_tcp_seg_recv(conn->iface);
 
@@ -1913,7 +1925,8 @@ next_state:
 		break;
 	case TCP_FIN_WAIT_2:
 		if (th && (FL(&fl, ==, FIN, th_seq(th) == conn->ack) ||
-			   FL(&fl, ==, FIN | ACK, th_seq(th) == conn->ack))) {
+			   FL(&fl, ==, FIN | ACK, th_seq(th) == conn->ack) ||
+			   FL(&fl, ==, FIN | PSH | ACK, th_seq(th) == conn->ack))) {
 			/* Received FIN on FIN_WAIT_2, so cancel the timer */
 			k_work_cancel_delayable(&conn->fin_timer);
 

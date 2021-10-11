@@ -122,6 +122,8 @@ features:
 +-----------+------------+-------------------------------------+
 | DMA       | on-chip    | dma                                 |
 +-----------+------------+-------------------------------------+
+| HWINFO    | on-chip    | Unique device serial number         |
++-----------+------------+-------------------------------------+
 
 
 The default configuration can be found in the defconfig file:
@@ -150,6 +152,10 @@ The MIMXRT1064 SoC has four pairs of pinmux/gpio controllers.
 | GPIO_AD_B0_12 | LPUART1_TX      | UART Console              |
 +---------------+-----------------+---------------------------+
 | GPIO_AD_B0_13 | LPUART1_RX      | UART Console              |
++---------------+-----------------+---------------------------+
+| GPIO_AD_B1_06 | LPUART3_TX      | UART Arduino              |
++---------------+-----------------+---------------------------+
+| GPIO_AD_B1_07 | LPUART3_RX      | UART Arduino              |
 +---------------+-----------------+---------------------------+
 | WAKEUP        | GPIO            | SW0                       |
 +---------------+-----------------+---------------------------+
@@ -349,7 +355,7 @@ Troubleshooting
 
 If the debug probe fails to connect with the following error, it's possible
 that the boot header in QSPI flash is invalid or corrupted. The boot header is
-configured by :option:`CONFIG_NXP_IMX_RT_BOOT_HEADER`.
+configured by :kconfig:`CONFIG_NXP_IMX_RT_BOOT_HEADER`.
 
 .. code-block:: console
 
