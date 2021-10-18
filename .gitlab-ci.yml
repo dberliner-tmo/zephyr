@@ -7,6 +7,8 @@ variables:
 coding-guidelines:
     image: ubuntu:20.04
     stage: test
+    tags:
+      - selfhost-regular
     cache:
       key: guidelines
       paths:
@@ -30,6 +32,9 @@ coding-guidelines:
 
 coding-guidelines-check-warns:
     stage: test
+    image: ubuntu:latest
+    tags:
+      - selfhost-regular
     needs:
       - coding-guidelines
     script:
@@ -45,6 +50,8 @@ coding-guidelines-check-warns:
 compliance:
    stage: test
    image: ubuntu:latest
+   tags:
+      - selfhost-regular
    variables:
      ZEPHYR_BASE: ${CI_PROJECT_DIR}
    cache:
@@ -83,6 +90,8 @@ compliance:
 compliance-check-warns:
   image: ubuntu:latest
   stage: test
+  tags:
+    - selfhost-regular
   needs: 
     - compliance
   script:
@@ -109,6 +118,8 @@ compliance-check-warns:
 twister:
   image: zephyrprojectrtos/ci:v0.18.4
   stage: test
+  tags:
+    - selfhost-regular
   variables:
     DEBIAN_FRONTEND: noninteractive
     ZEPHYR_TOOLCHAIN_VARIANT: llvm
@@ -131,15 +142,10 @@ twister:
         - 3
         - 4
         - 5
-        - 6
-        - 7
-        - 8
-        - 9
-        - 10
   script:
     # - apt update
     # - apt-get install python3 python3-pip cmake -y
     # - pip3 install pytest colorama pyyaml ply mock tabulate pyserial psutil anytree
     - west init -l . || true
     - west update
-    - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/10 --retry-failed 3
+    - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
