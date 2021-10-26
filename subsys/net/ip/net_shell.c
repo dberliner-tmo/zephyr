@@ -4441,7 +4441,6 @@ static int cmd_net_ppp_status(const struct shell *shell, size_t argc,
 	return 0;
 }
 
-#endif
 
 static int cmd_net_route(const struct shell *shell, size_t argc, char *argv[])
 {
