@@ -242,11 +242,37 @@ static int cmd_modem_info(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
+#include "net/socket.h"
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
+#define SMS_SEND	0	//this is defined murata-1sc.h
+#define PHN_SIZE 24
+#define TEXT_SIZE 160	//max sms text msaage length 146?
+static char phn_text[PHN_SIZE+TEXT_SIZE];
+static int cmd_modem_smssend(const struct shell *shell, size_t argc, char *argv[])
+{
+	int ret= -1;
+	int sock;
+	memset(phn_text, 0, PHN_SIZE+TEXT_SIZE);
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+ 	if (argc == 3) {
+		memcpy(phn_text, argv[1], min(PHN_SIZE, strlen(argv[1])));
+		phn_text[PHN_SIZE-1] = 0;
+		memcpy(&phn_text[PHN_SIZE], argv[2], min(TEXT_SIZE, strlen(argv[2])));
+		//printk("smssend, sock = %d, phn: %s, text: %s\n", sock, phn, text);	//remove me
+		ret = fcntl(sock, SMS_SEND, phn_text, &phn_text[PHN_SIZE]);
+	}
+	return ret;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem,
 	SHELL_CMD(info, NULL, "Show information for a modem", cmd_modem_info),
 	SHELL_CMD(list, NULL, "List registered modems", cmd_modem_list),
 	SHELL_CMD(send, NULL, "Send an AT <command> to a registered modem "
 			      "receiver", cmd_modem_send),
+	SHELL_CMD(smssend, NULL, "Send SMS message via modem ", cmd_modem_smssend),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 
