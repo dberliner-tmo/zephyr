@@ -243,36 +243,66 @@ static int cmd_modem_info(const struct shell *shell, size_t argc, char *argv[])
 }
 
 #include "net/socket.h"
-#define min(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a < _b ? _a : _b; })
-#define SMS_SEND	0	//this is defined murata-1sc.h
-#define PHN_SIZE 24
-#define TEXT_SIZE 160	//max sms text msaage length 146?
-static char phn_text[PHN_SIZE+TEXT_SIZE];
-static int cmd_modem_smssend(const struct shell *shell, size_t argc, char *argv[])
+#include "modem_sms.h"
+
+
+static phn_text_t phn_text;
+static int cmd_modem_sms_send(const struct shell *shell, size_t argc, char *argv[])
 {
 	int ret= -1;
 	int sock;
-	memset(phn_text, 0, PHN_SIZE+TEXT_SIZE);
+	clear_phntext(&phn_text);
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
  	if (argc == 3) {
-		memcpy(phn_text, argv[1], min(PHN_SIZE, strlen(argv[1])));
-		phn_text[PHN_SIZE-1] = 0;
-		memcpy(&phn_text[PHN_SIZE], argv[2], min(TEXT_SIZE, strlen(argv[2])));
-		//printk("smssend, sock = %d, phn: %s, text: %s\n", sock, phn, text);	//remove me
-		ret = fcntl(sock, SMS_SEND, phn_text, &phn_text[PHN_SIZE]);
+		set_sms_phn(&phn_text, argv[1], strlen(argv[1]));
+		set_sms_text(&phn_text, argv[2], strlen(argv[2]));
+		printk("sms-send, sock = %d, phn: %s, text: %s\n", sock, phn_text.phn, phn_text.text);	//remove me
+		ret = fcntl(sock, SMS_SEND, phn_text.phn, phn_text.text);
+		printk("after fcntl, text: %s\n", phn_text.text);	//remove me
 	}
+ 	close(sock);
 	return ret;
 }
+
+static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv[])
+{
+	int ret= -1;
+	int sock;
+	clear_phntext(&phn_text);
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+ 	if (argc == 1) {
+		printk("sms-recv, sock = %d\n", sock);	//remove me
+		ret = fcntl(sock, SMS_RECV);
+	}
+ 	close(sock);
+	return ret;
+}
+
+static int cmd_modem_sms(const struct shell *shell, size_t argc, char *argv[])
+{
+	ARG_UNUSED(shell);
+	ARG_UNUSED(argc);
+	ARG_UNUSED(argv);
+
+	return 0;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(modem_cmd_sms,
+	SHELL_CMD(send, NULL,
+		  "'cmd_sms_send <phn> <text>' send sms message.",
+		  cmd_modem_sms_send),
+	SHELL_CMD(recv, NULL,
+		  "'cmd_sms_recv' recv sms message..",
+		  cmd_modem_sms_recv),
+	SHELL_SUBCMD_SET_END
+);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem,
 	SHELL_CMD(info, NULL, "Show information for a modem", cmd_modem_info),
 	SHELL_CMD(list, NULL, "List registered modems", cmd_modem_list),
 	SHELL_CMD(send, NULL, "Send an AT <command> to a registered modem "
 			      "receiver", cmd_modem_send),
-	SHELL_CMD(smssend, NULL, "Send SMS message via modem ", cmd_modem_smssend),
+	SHELL_CMD(sms, &modem_cmd_sms, "Send or receive SMS message via modem ", cmd_modem_sms),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 

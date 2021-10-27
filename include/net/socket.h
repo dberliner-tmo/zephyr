@@ -699,9 +699,7 @@ static inline int zsock_fcntl_wrapper(int sock, int cmd, ...)
 
 	va_start(args, cmd);
 	flags = va_arg(args, int);
-	printk("phn: %s, &txt: %p\n", (char *)flags, (void *)va_arg(args, int));
 	va_end(args);
-	printk("wrapper, cmd = %x, flags= %x <<<\n", cmd, flags);
 	return zsock_fcntl(sock, cmd, flags);
 }
 

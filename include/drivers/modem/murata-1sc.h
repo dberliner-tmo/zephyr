@@ -49,10 +49,10 @@ enum mdm_control_pins {
 	MDM_RESET,
 };
 
-enum io_ctl {
-	SMS_SEND,
-	SMS_RECV,
-};
+//enum io_ctl {
+//	SMS_SEND,
+//	SMS_RECV,
+//};
 
 /* Socket read callback data */ //might need to remove pointer to use full implementation of address
 struct socket_read_data {
