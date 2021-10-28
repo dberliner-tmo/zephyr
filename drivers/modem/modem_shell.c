@@ -264,6 +264,8 @@ static int cmd_modem_sms_send(const struct shell *shell, size_t argc, char *argv
 	return ret;
 }
 
+#define IN_SMSBUF_SZ	1500
+char incoming_sms_buf[IN_SMSBUF_SZ];
 static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv[])
 {
 	int ret= -1;
@@ -272,7 +274,7 @@ static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv
     sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
  	if (argc == 1) {
 		printk("sms-recv, sock = %d\n", sock);	//remove me
-		ret = fcntl(sock, SMS_RECV);
+		ret = fcntl(sock, SMS_RECV, incoming_sms_buf);
 	}
  	close(sock);
 	return ret;
