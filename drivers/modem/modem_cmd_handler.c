@@ -395,12 +395,6 @@ static void cmd_handler_process_rx_buf(struct modem_cmd_handler_data *data)
 			 */
 			(void)findcrlf(data, &frag, &offset);
 		}
-#if 0	//remove me
-		else {
-			LOG_WRN("No match; cmd [%s] (len:%zu)",
-				log_strdup(data->match_buf), data->match_buf_len);
-		}
-#endif
 
 		k_sem_give(&data->sem_parse_lock);
 
