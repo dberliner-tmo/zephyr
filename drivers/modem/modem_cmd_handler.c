@@ -314,6 +314,12 @@ static void cmd_handler_process_rx_buf(struct modem_cmd_handler_data *data)
 	int ret;
 	uint16_t offset, len;
 
+        // TBD: SMS isn't working reliably when this block is removed
+        printk("JML cmd_handler_process_rx_buf, len: %d, data:`", data->rx_buf->len);
+        for (int i=0;i<data->rx_buf->len;i++)
+            printk("%c", data->rx_buf->data[i]);
+        printk("'\n");
+
 	/* process all of the data in the net_buf */
 	while (data->rx_buf && data->rx_buf->len) {
 		skipcrlf(data);

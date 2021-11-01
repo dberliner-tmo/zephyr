@@ -19,6 +19,7 @@
 #include <net/net_ip.h>
 #include <sys/ring_buffer.h>
 #include <drivers/gpio.h>
+#include "modem_sms.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,6 +83,10 @@ struct modem_context {
 
 	/* command handler config */
 	struct modem_cmd_handler cmd_handler;
+
+        /* SMS functions */
+        send_sms_func send_sms;
+        read_sms_func read_sms;
 
 	/* driver data */
 	void *driver_data;

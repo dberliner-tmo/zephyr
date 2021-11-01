@@ -14,12 +14,14 @@
 
 #include <zephyr.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <device.h>
 #include <shell/shell.h>
 #include <drivers/console/uart_mux.h>
 
 #include <sys/printk.h>
+#include "modem_sms.h"
 
 struct modem_shell_user_data {
 	const struct shell *shell;
@@ -242,41 +244,69 @@ static int cmd_modem_info(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
-#include "net/socket.h"
-#include "modem_sms.h"
-
-
-static phn_text_t phn_text;
 static int cmd_modem_sms_send(const struct shell *shell, size_t argc, char *argv[])
 {
+	struct ms_context *ms_ctx;
+        struct sms_out sms;
 	int ret= -1;
-	int sock;
-	clear_phntext(&phn_text);
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
- 	if (argc == 3) {
-		set_sms_phn(&phn_text, argv[1], strlen(argv[1]));
-		set_sms_text(&phn_text, argv[2], strlen(argv[2]));
-		printk("sms-send, sock = %d, phn: %s, text: %s\n", sock, phn_text.phn, phn_text.text);	//remove me
-		ret = fcntl(sock, SMS_SEND, phn_text.phn, phn_text.text);
-		printk("after fcntl, text: %s\n", phn_text.text);	//remove me
+
+	if (argc != 4) {
+                printk("usage: modem sms send <modem index> <phone number> <message>\n");
+        }
+        else {
+                int modem_index = atoi(argv[1]);
+	        ms_ctx = ms_context_from_id(modem_index);
+                if (ms_ctx == NULL) {
+                    printk("Couldn't open context for modem index %d\n", modem_index);
+                    return -1;
+                }
+
+                if (ms_ctx->send_sms == NULL) {
+                    printk("No function defined to send SMS\n");
+                    return -1;
+                }
+
+                snprintf(sms.phone, sizeof(sms.phone), "%s", argv[2]);
+                snprintf(sms.msg, sizeof(sms.msg), "%s", argv[3]);
+
+                ret = ms_ctx->send_sms(ms_ctx, &sms);
+
+                printk("send_sms func returned %d\n", ret);
 	}
- 	close(sock);
 	return ret;
 }
 
-#define IN_SMSBUF_SZ	1500
-char incoming_sms_buf[IN_SMSBUF_SZ];
-static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv[])
+static int cmd_modem_sms_read(const struct shell *shell, size_t argc, char *argv[])
 {
-	int ret= -1;
-	int sock;
-	clear_phntext(&phn_text);
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
- 	if (argc == 1) {
-		printk("sms-recv, sock = %d\n", sock);	//remove me
-		ret = fcntl(sock, SMS_RECV, incoming_sms_buf);
+        struct ms_context *ms_ctx;
+        struct sms_in sms;
+	int ret = -1;
+
+        if (argc != 2) {
+            printk("usage: modem sms read <modem index>\n");
+        }
+        else {
+            int modem_index = atoi(argv[1]);
+            ms_ctx = ms_context_from_id(modem_index);
+            if (ms_ctx == NULL) {
+                printk("Couldn't open context for modem index %d\n", modem_index);
+                return -1;
+            }
+
+            if (ms_ctx->read_sms == NULL) {
+                printk("No function defined to read SMS\n");
+                return -1;
+            }
+
+            ret = ms_ctx->read_sms(ms_ctx, &sms);
+
+            if (ret < 0)
+                printk("read_sms returned error %d, errno:%d\n", ret, errno);
+            else if (ret == 0)
+                printk("No SMS msgs available\n");
+            else
+                printk("Received SMS from %s dated %s: '%s'\n", sms.phone, sms.time, sms.msg);
 	}
- 	close(sock);
 	return ret;
 }
 
@@ -293,9 +323,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(modem_cmd_sms,
 	SHELL_CMD(send, NULL,
 		  "'cmd_sms_send <phn> <text>' send sms message.",
 		  cmd_modem_sms_send),
-	SHELL_CMD(recv, NULL,
-		  "'cmd_sms_recv' recv sms message..",
-		  cmd_modem_sms_recv),
+	SHELL_CMD(read, NULL,
+		  "'cmd_sms_read' read sms message.",
+		  cmd_modem_sms_read),
 	SHELL_SUBCMD_SET_END
 );
 
