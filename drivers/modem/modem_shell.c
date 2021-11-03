@@ -334,7 +334,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem,
 	SHELL_CMD(list, NULL, "List registered modems", cmd_modem_list),
 	SHELL_CMD(send, NULL, "Send an AT <command> to a registered modem "
 			      "receiver", cmd_modem_send),
-	SHELL_CMD(sms, &modem_cmd_sms, "Send or receive SMS message via modem ", cmd_modem_sms),
+	SHELL_CMD(sms, &modem_cmd_sms, "Send or read SMS message via modem",
+                  cmd_modem_sms),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 
