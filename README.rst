@@ -1,3 +1,17 @@
+tmo-zephyr SDK Special Instructions
+***************
+In order to install the tmo-zephyr repo as the main west repository, the manifest file from suhwdev/firmware/tmo-zephyr needs to be used instead of the default in the zephyr github repository. In step 2 of the Zephyr `Getting Started Guide`_ under **Get Zephyr and install Python dependencies** this can be done by replacing:
+
+``west init ~/zephyrproject``
+
+with the following:
+
+``west init -m git@gitlab.com:tmobile/suhwdev/firmware/tmo-zephyr.git ~/zephyrproject``
+
+Everything else remains the same for the `Getting Started Guide`_.
+
+***************
+
 .. raw:: html
 
    <a href="https://www.zephyrproject.org">
