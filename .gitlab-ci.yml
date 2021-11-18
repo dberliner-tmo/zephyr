@@ -5,56 +5,60 @@ variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
 
 coding-guidelines:
-    image: ubuntu:20.04
-    stage: test
-    tags:
-      - selfhost-regular
-    cache:
-      key: guidelines
-      paths:
-        - output.txt
-    artifacts:
-      paths:
-        - output.txt
-    script:
-      - apt update
-      - apt-get install python3-pip git wget python2 -y
-      - pip3 install unidiff
-      - pip3 install wheel
-      - pip3 install sh
-      - apt-get install ocaml-base-nox
-      - wget https://launchpad.net/~npalix/+archive/ubuntu/coccinelle/+files/coccinelle_1.0.8~20.04npalix1_amd64.deb
-      - dpkg -i coccinelle_1.0.8~20.04npalix1_amd64.deb
-      - source zephyr-env.sh
-      - ls -la
-      - git log  --pretty=oneline | head -n 10 || true
-      - ./scripts/ci/guideline_check.py --output output.txt -c origin/${CI_COMMIT_BRANCH}..
+  image: ubuntu:20.04
+  stage: test
+  tags:
+    - selfhost-regular
+  cache:
+    key: guidelines
+    paths:
+      - output.txt
+  artifacts:
+    paths:
+      - output.txt
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+  script:
+    - apt update
+    - apt-get install python3-pip git wget python2 -y
+    - pip3 install unidiff
+    - pip3 install wheel
+    - pip3 install sh
+    - apt-get install ocaml-base-nox
+    - wget https://launchpad.net/~npalix/+archive/ubuntu/coccinelle/+files/coccinelle_1.0.8~20.04npalix1_amd64.deb
+    - dpkg -i coccinelle_1.0.8~20.04npalix1_amd64.deb
+    - source zephyr-env.sh
+    - ls -la
+    - git log  --pretty=oneline | head -n 10 || true
+    - ./scripts/ci/guideline_check.py --output output.txt -c origin/${CI_COMMIT_BRANCH}..
 
 coding-guidelines-check-warns:
-    stage: test
-    image: ubuntu:latest
-    tags:
-      - selfhost-regular
-    needs:
-      - coding-guidelines
-    script:
-      if [[ -s "output.txt" ]]; then
-            errors=$(cat output.txt)
-            errors="${errors//'%'/'%25'}"
-            errors="${errors//$'\n'/'%0A'}"
-            errors="${errors//$'\r'/'%0D'}"
-            echo "::error file=output.txt::$errors"
-            exit 1;
-        fi
+  stage: test
+  image: ubuntu:latest
+  tags:
+    - selfhost-regular
+  needs:
+    - coding-guidelines
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+  script:
+    if [[ -s "output.txt" ]]; then
+      errors=$(cat output.txt)
+      errors="${errors//'%'/'%25'}"
+      errors="${errors//$'\n'/'%0A'}"
+      errors="${errors//$'\r'/'%0D'}"
+      echo "::error file=output.txt::$errors"
+      exit 1;
+    fi
 
 compliance:
-   stage: test
-   image: ubuntu:latest
-   tags:
-      - selfhost-regular
-   variables:
-     ZEPHYR_BASE: ${CI_PROJECT_DIR}
-   cache:
+  stage: test
+  image: ubuntu:latest
+  tags:
+    - selfhost-regular
+  variables:
+    ZEPHYR_BASE: ${CI_PROJECT_DIR}
+  cache:
     key: compliance
     paths:
       - compliance.xml
@@ -64,7 +68,7 @@ compliance:
       - pylint.txt
       - Devicetree.txt
       - Kconfig.txt
-   artifacts:
+  artifacts:
     paths:
       - compliance.xml
       - Nits.txt
@@ -73,19 +77,21 @@ compliance:
       - pylint.txt
       - Devicetree.txt
       - Kconfig.txt
-   script:
-      - apt update
-      - apt-get install git python3 python3-pip -y
-      - pip3 install setuptools
-      - pip3 install wheel
-      - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
-      - pip3 install west
-      - west init -l . || true
-      - west update
-      - ls -la
-      - git log  --pretty=oneline | head -n 10 || true
-      - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_BRANCH}..
-      - ls -la
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+  script:
+    - apt update
+    - apt-get install git python3 python3-pip -y
+    - pip3 install setuptools
+    - pip3 install wheel
+    - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
+    - pip3 install west
+    - west init -l . || true
+    - west update
+    - ls -la
+    - git log  --pretty=oneline | head -n 10 || true
+    - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_BRANCH}..
+    - ls -la
 
 compliance-check-warns:
   image: ubuntu:latest
@@ -94,6 +100,8 @@ compliance-check-warns:
     - selfhost-regular
   needs: 
     - compliance
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     - ls -la
     - | 
@@ -142,6 +150,8 @@ twister:
         - 3
         - 4
         - 5
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     # - apt update
     # - apt-get install python3 python3-pip cmake -y
@@ -149,3 +159,20 @@ twister:
     - west init -l . || true
     - west update
     - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
+
+git-merge:
+  image: alpine:latest
+  stage: test
+  variables:
+    GIT_STRATEGY: clone
+    MAIN_BRANCH: tmo-main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  script:
+    - ls -la ~/.ssh
+    - printenv
+    - url_host=$(echo "${CI_REPOSITORY_URL}" | sed -e 's|https\?://gitlab-ci-token:.*@|ssh://git@|g')
+    - echo "${url_host}"
+    - git pull $CI_REPOSITORY_URL master
+    - git status
+    #- git push $url_host HEAD:$MAIN_BRANCH
