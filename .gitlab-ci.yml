@@ -165,7 +165,9 @@ git-merge:
   stage: test
   variables:
     GIT_STRATEGY: clone
-    MAIN_BRANCH: tmo-main
+    MAIN_DEST_BRANCH: tmo-main
+    MAIN_SRC_BRANCH: main
+
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   before_script:
@@ -211,6 +213,6 @@ git-merge:
     - printenv
     - url_host=$(echo "${CI_REPOSITORY_URL}" | sed -e 's|https\?://gitlab-ci-token:.*@|ssh://git@|g')
     - echo "${url_host}"
-    - git pull $CI_REPOSITORY_URL master
+    - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
     - git status
-    #- git push $url_host HEAD:$MAIN_BRANCH
+    #- git push $url_host HEAD:$MAIN_DEST_BRANCH
