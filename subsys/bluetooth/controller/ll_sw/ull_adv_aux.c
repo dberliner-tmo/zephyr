@@ -10,6 +10,7 @@
 #include <sys/byteorder.h>
 
 #include "hal/cpu.h"
+#include "hal/ccm.h"
 #include "hal/ticker.h"
 
 #include "util/util.h"
@@ -30,6 +31,7 @@
 #include "lll/lll_adv_pdu.h"
 #include "lll_adv_aux.h"
 #include "lll/lll_df_types.h"
+#include "lll_conn.h"
 
 #include "ull_adv_types.h"
 
@@ -895,10 +897,8 @@ uint8_t ull_adv_aux_hdr_set_clear(struct ll_adv_set *adv,
 	sec_adi->sid = adv->sid;
 
 	/* The DID for a specific SID shall be unique.
-	 * The DID is 12 bits and did_unique may overflow without any negative
-	 * consequences.
 	 */
-	did = did_unique[adv->sid]++;
+	did = ull_adv_aux_did_next_unique_get(adv->sid);
 
 	pri_adi->did = sys_cpu_to_le16(did);
 	sec_adi->did = sys_cpu_to_le16(did);
@@ -964,6 +964,14 @@ uint8_t ull_adv_aux_hdr_set_clear(struct ll_adv_set *adv,
 	lll_adv_aux_data_enqueue(lll_aux, sec_idx);
 
 	return 0;
+}
+
+uint16_t ull_adv_aux_did_next_unique_get(uint8_t sid)
+{
+	/* The DID is 12 bits and did_unique may overflow without any negative
+	 * consequences.
+	 */
+	return BIT_MASK(12) & did_unique[sid]++;
 }
 
 void ull_adv_aux_ptr_fill(struct pdu_adv_aux_ptr *aux_ptr, uint32_t offs_us,

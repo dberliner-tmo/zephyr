@@ -570,8 +570,8 @@ static const struct gpio_driver_api gpio_stm32_driver = {
 };
 
 #ifdef CONFIG_PM_DEVICE
-static int gpio_stm32_pm_device_ctrl(const struct device *dev,
-				     enum pm_device_action action)
+static int gpio_stm32_pm_action(const struct device *dev,
+				enum pm_device_action action)
 {
 	switch (action) {
 	case PM_DEVICE_ACTION_RESUME:
@@ -632,11 +632,11 @@ static int gpio_stm32_init(const struct device *dev)
 	static struct gpio_stm32_data gpio_stm32_data_## __suffix;	       \
 	DEVICE_DT_DEFINE(__node,					       \
 			    gpio_stm32_init,				       \
-			    gpio_stm32_pm_device_ctrl,			       \
+			    gpio_stm32_pm_action,			       \
 			    &gpio_stm32_data_## __suffix,		       \
 			    &gpio_stm32_cfg_## __suffix,		       \
 			    PRE_KERNEL_1,				       \
-			    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	       \
+			    CONFIG_GPIO_INIT_PRIORITY,			       \
 			    &gpio_stm32_driver)
 
 #define GPIO_DEVICE_INIT_STM32(__suffix, __SUFFIX)			\

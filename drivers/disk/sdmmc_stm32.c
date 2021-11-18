@@ -51,6 +51,15 @@ struct stm32_sdmmc_priv {
 	} pinctrl;
 };
 
+#ifdef CONFIG_SDMMC_STM32_HWFC
+static void stm32_sdmmc_fc_enable(struct stm32_sdmmc_priv *priv)
+{
+	MMC_TypeDef *sdmmcx = priv->hsd.Instance;
+
+	sdmmcx->CLKCR |= SDMMC_CLKCR_HWFC_EN;
+}
+#endif
+
 static void stm32_sdmmc_isr(const struct device *dev)
 {
 	struct stm32_sdmmc_priv *priv = dev->data;
@@ -154,6 +163,10 @@ static int stm32_sdmmc_access_init(struct disk_info *disk)
 		return -EIO;
 	}
 
+#ifdef CONFIG_SDMMC_STM32_HWFC
+	stm32_sdmmc_fc_enable(priv);
+#endif
+
 	priv->status = DISK_STATUS_OK;
 	return 0;
 }
@@ -177,7 +190,7 @@ static int stm32_sdmmc_access_read(struct disk_info *disk, uint8_t *data_buf,
 {
 	const struct device *dev = disk->dev;
 	struct stm32_sdmmc_priv *priv = dev->data;
-	int err = 0;
+	int err;
 
 	k_sem_take(&priv->thread_lock, K_FOREVER);
 
@@ -211,7 +224,7 @@ static int stm32_sdmmc_access_write(struct disk_info *disk,
 {
 	const struct device *dev = disk->dev;
 	struct stm32_sdmmc_priv *priv = dev->data;
-	int err = 0;
+	int err;
 
 	k_sem_take(&priv->thread_lock, K_FOREVER);
 
@@ -286,15 +299,6 @@ static struct disk_info stm32_sdmmc_info = {
 	.name = CONFIG_SDMMC_VOLUME_NAME,
 	.ops = &stm32_sdmmc_ops,
 };
-
-#ifdef CONFIG_SDMMC_STM32_HWFC
-static void stm32_sdmmc_fc_enable(struct stm32_sdmmc_priv *priv)
-{
-	MMC_TypeDef *sdmmcx = priv->hsd.Instance;
-
-	sdmmcx->CLKCR |= SDMMC_CLKCR_HWFC_EN;
-}
-#endif
 
 /*
  * Check if the card is present or not. If no card detect gpio is set, assume
@@ -452,10 +456,6 @@ static int disk_stm32_sdmmc_init(const struct device *dev)
 	/* Initialize semaphores */
 	k_sem_init(&priv->thread_lock, 1, 1);
 	k_sem_init(&priv->sync, 0, 1);
-
-#ifdef CONFIG_SDMMC_STM32_HWFC
-	stm32_sdmmc_fc_enable(priv);
-#endif
 
 	err = stm32_sdmmc_card_detect_init(priv);
 	if (err) {
