@@ -216,5 +216,7 @@ git-merge:
     - cp west.yml west.yml.bak
     - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
     - mv west.yml.bak west.yml
+    - git add .
+    - git commit -m 'automerge keep ours'
     - git status -s
     #- git push $url_host HEAD:$MAIN_DEST_BRANCH
