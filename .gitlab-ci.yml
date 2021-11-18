@@ -213,7 +213,9 @@ git-merge:
     - printenv
     - url_host=$(echo "${CI_REPOSITORY_URL}" | sed -e 's|https\?://gitlab-ci-token:.*@|ssh://git@|g')
     - echo "${url_host}"
+    - echo "west.yml" >> .gitignore
+    - git add .gitignore
+    - git commit -m "scheduled merge gitignore west.yml"
     - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
     - git status -s
-    - echo "west.yml" >> .git/info/exclude
     #- git push $url_host HEAD:$MAIN_DEST_BRANCH
