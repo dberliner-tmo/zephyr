@@ -214,6 +214,6 @@ git-merge:
     - url_host=$(echo "${CI_REPOSITORY_URL}" | sed -e 's|https\?://gitlab-ci-token:.*@|ssh://git@|g')
     - echo "${url_host}"
     - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
-    - git status
+    - git status -s
     - echo "west.yml" >> .git/info/exclude
     #- git push $url_host HEAD:$MAIN_DEST_BRANCH
