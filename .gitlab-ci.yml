@@ -216,8 +216,6 @@ git-merge:
     - git config pull.rebase false
     - git config --global merge.ours.driver true
     - echo "west.yml merge=theirs" >> .gitattributes
-    - git add .gitignore
-    - git commit -m "scheduled merge gitignore west.yml"
     - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
     - git status -s
     #- git push $url_host HEAD:$MAIN_DEST_BRANCH
