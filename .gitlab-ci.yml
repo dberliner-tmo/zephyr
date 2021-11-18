@@ -215,4 +215,5 @@ git-merge:
     - echo "${url_host}"
     - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
     - git status
+    - echo "west.yml" >> .git/info/exclude
     #- git push $url_host HEAD:$MAIN_DEST_BRANCH
