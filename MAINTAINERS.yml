@@ -197,6 +197,8 @@ Bluetooth controller:
         - thoh-ot
         - kruithofa
         - ppryga
+        - mtpr-ot
+        - wopu-ot
     files:
         - subsys/bluetooth/controller/
     labels:
@@ -208,6 +210,8 @@ Bluetooth Mesh:
         - trond-snekvik
     collaborators:
         - jhedberg
+        - LingaoM
+        - alxelax
     files:
         - subsys/bluetooth/mesh/
         - include/bluetooth/mesh/
@@ -220,6 +224,7 @@ Build system:
     maintainers:
         - tejlmand
     collaborators:
+        - jeremybettis
         - nashif
         - SebastianBoe
     files:
@@ -1369,6 +1374,26 @@ State machine framework:
     labels:
         - "area: State Machine Framework"
 
+GD32 Platforms:
+    status: maintained
+    maintainers:
+        - nandojve
+        - gmarull
+    files:
+        - boards/arm/gd32*/
+        - drivers/*/*gd32*/
+        - drivers/*/*gd32*
+        - dts/arm/gigadevice/
+        - dts/bindings/*/*gd32*
+        - modules/hal_gigadevice/
+        - soc/arm/gigadevice/
+        - scripts/west_commands/*/*gd32*
+    labels:
+        - "platform: GD32"
+    description: >-
+        GigaDevice GD32 SOCs, dts files and related drivers. Starter and eval
+        boards.
+
 Synopsys Platforms:
     status: maintained
     maintainers:
@@ -1571,7 +1596,8 @@ ITE Platforms:
         - sjg20
     files:
         - boards/riscv/it8xxx2_evb/
-        - drivers/*/*it8xxx2*
+        - drivers/*/*/*it8xxx2*.c
+        - drivers/*/*it8xxx2*.c
         - dts/bindings/*/*ite*
         - dts/riscv/*it8xxx2*
         - soc/riscv/riscv-ite/
@@ -1749,6 +1775,8 @@ ZTest:
     status: maintained
     maintainers:
         - nashif
+    collaborators:
+        - jeremybettis
     files:
         - subsys/testsuite/
         - tests/ztest/

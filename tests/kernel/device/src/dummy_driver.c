@@ -6,6 +6,7 @@
 
 #include <zephyr.h>
 #include <device.h>
+#include <pm/device.h>
 
 
 #define DUMMY_DRIVER_NAME	"dummy_driver"
@@ -40,8 +41,10 @@ int dummy_pm_action(const struct device *dev, enum pm_device_action action)
 /**
  * @cond INTERNAL_HIDDEN
  */
+PM_DEVICE_DEFINE(dummy_driver, dummy_pm_action);
+
 DEVICE_DEFINE(dummy_driver, DUMMY_DRIVER_NAME, dummy_init,
-		dummy_pm_action, NULL, NULL, POST_KERNEL,
+		PM_DEVICE_REF(dummy_driver), NULL, NULL, POST_KERNEL,
 		CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &funcs);
 
 /**

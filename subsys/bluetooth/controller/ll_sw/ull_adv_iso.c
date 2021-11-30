@@ -44,16 +44,20 @@
 #include "common/log.h"
 #include "hal/debug.h"
 
-static uint32_t ull_adv_iso_start(struct ll_adv_iso_set *adv_iso,
-				  uint32_t ticks_anchor,
-				  uint32_t iso_interval_us);
+static int init_reset(void);
+static struct ll_adv_iso_set *adv_iso_get(uint8_t handle);
+static struct stream *adv_iso_stream_acquire(void);
+static struct lll_adv_iso_stream *adv_iso_stream_get(uint16_t handle);
+static uint16_t adv_iso_stream_handle_get(struct lll_adv_iso_stream *stream);
+static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t latency_pdu,
+			uint32_t latency_packing, uint32_t ctrl_spacing);
+static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
+			      uint32_t ticks_anchor, uint32_t iso_interval_us);
 static void mfy_iso_offset_get(void *param);
 static inline struct pdu_big_info *big_info_get(struct pdu_adv *pdu);
 static inline void big_info_offset_fill(struct pdu_big_info *bi,
 					uint32_t ticks_offset,
 					uint32_t start_us);
-static int init_reset(void);
-static inline struct ll_adv_iso_set *ull_adv_iso_get(uint8_t handle);
 static void ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
 		      uint32_t remainder, uint16_t lazy, uint8_t force,
 		      void *param);
@@ -66,7 +70,10 @@ static void tx_lll_flush(void *param);
 static memq_link_t link_lll_prepare;
 static struct mayfly mfy_lll_prepare = {0U, 0U, &link_lll_prepare, NULL, NULL};
 
-static struct ll_adv_iso_set ll_adv_iso[BT_CTLR_ADV_SET];
+static struct ll_adv_iso_set ll_adv_iso[CONFIG_BT_CTLR_ADV_ISO_SET];
+static struct lll_adv_iso_stream
+			stream_pool[CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT];
+static void *stream_free;
 
 uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 		      uint32_t sdu_interval, uint16_t max_sdu,
@@ -94,7 +101,7 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 	uint8_t err;
 	uint8_t bn;
 
-	adv_iso = ull_adv_iso_get(big_handle);
+	adv_iso = adv_iso_get(big_handle);
 
 	/* Already created */
 	if (!adv_iso || adv_iso->lll.adv) {
@@ -156,6 +163,11 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 		}
 	}
 
+	/* Check if free BISes available */
+	if (mem_free_count_get(stream_free) < num_bis) {
+		return BT_HCI_ERR_MEM_CAPACITY_EXCEEDED;
+	}
+
 	/* Allocate link buffer for created event */
 	link_cmplt = ll_rx_link_alloc();
 	if (!link_cmplt) {
@@ -180,6 +192,16 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 
 	/* Mandatory Num_BIS = 1 */
 	lll_adv_iso->num_bis = num_bis;
+
+	/* Allocate streams */
+	for (uint8_t i = 0U; i < num_bis; i++) {
+		struct lll_adv_iso_stream *stream;
+
+		stream = (void *)adv_iso_stream_acquire();
+		stream->big_handle = big_handle;
+		lll_adv_iso->stream_handle[i] =
+			adv_iso_stream_handle_get(stream);
+	}
 
 	/* BN (Burst Count), Mandatory BN = 1 */
 	bn = ceiling_fraction(max_sdu, lll_adv_iso->max_pdu);
@@ -218,41 +240,22 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 
 	/* Based on packing requested, sequential or interleaved */
 	if (packing) {
-		uint32_t latency;
-		uint32_t reserve;
+		uint32_t latency_packing;
 
 		lll_adv_iso->bis_spacing = lll_adv_iso->sub_interval;
-		latency = lll_adv_iso->sub_interval * lll_adv_iso->nse *
-			   lll_adv_iso->num_bis;
-		reserve = latency + ctrl_spacing +
-			  (EVENT_OVERHEAD_START_US + EVENT_OVERHEAD_END_US);
-		if (reserve < latency_pdu) {
-			lll_adv_iso->ptc = ((latency_pdu - reserve) /
-					    (lll_adv_iso->sub_interval *
-					     lll_adv_iso->bn)) *
-					   lll_adv_iso->bn;
-		} else {
-			lll_adv_iso->ptc = 0U;
-		}
+		latency_packing = lll_adv_iso->sub_interval * lll_adv_iso->nse *
+				  lll_adv_iso->num_bis;
+		lll_adv_iso->ptc = ptc_calc(lll_adv_iso, latency_pdu,
+					    latency_packing, ctrl_spacing);
 		lll_adv_iso->nse += lll_adv_iso->ptc;
 		lll_adv_iso->sub_interval = lll_adv_iso->bis_spacing *
 					    lll_adv_iso->nse;
 	} else {
-		uint32_t latency;
-		uint32_t reserve;
+		uint32_t latency_packing;
 
-		latency = lll_adv_iso->sub_interval * lll_adv_iso->nse;
-		reserve = latency + ctrl_spacing +
-			  (EVENT_OVERHEAD_START_US + EVENT_OVERHEAD_END_US);
-		if (reserve < latency_pdu) {
-			lll_adv_iso->ptc = ((latency_pdu - reserve) /
-					    (lll_adv_iso->sub_interval *
-					     lll_adv_iso->bn)) *
-					   lll_adv_iso->bn;
-		} else {
-			lll_adv_iso->ptc = 0U;
-		}
-
+		latency_packing = lll_adv_iso->sub_interval * lll_adv_iso->nse;
+		lll_adv_iso->ptc = ptc_calc(lll_adv_iso, latency_pdu,
+					    latency_packing, ctrl_spacing);
 		lll_adv_iso->nse += lll_adv_iso->ptc;
 		lll_adv_iso->bis_spacing = lll_adv_iso->sub_interval *
 					   lll_adv_iso->nse;
@@ -372,7 +375,7 @@ uint8_t ll_big_create(uint8_t big_handle, uint8_t adv_handle, uint8_t num_bis,
 
 	/* Start sending BIS empty data packet for each BIS */
 	ticks_anchor_iso = ticker_ticks_now_get();
-	ret = ull_adv_iso_start(adv_iso, ticks_anchor_iso, iso_interval_us);
+	ret = adv_iso_start(adv_iso, ticks_anchor_iso, iso_interval_us);
 	if (ret) {
 		/* FIXME: release resources */
 		return BT_HCI_ERR_CMD_DISALLOWED;
@@ -427,7 +430,7 @@ uint8_t ll_big_terminate(uint8_t big_handle, uint8_t reason)
 	uint8_t ter_idx;
 	uint8_t err;
 
-	adv_iso = ull_adv_iso_get(big_handle);
+	adv_iso = adv_iso_get(big_handle);
 	if (!adv_iso) {
 		return BT_HCI_ERR_UNKNOWN_ADV_IDENTIFIER;
 	}
@@ -515,7 +518,7 @@ uint8_t ll_adv_iso_by_hci_handle_get(uint8_t hci_handle, uint8_t *handle)
 
 	adv_iso =  &ll_adv_iso[0];
 
-	for (idx = 0U; idx < BT_CTLR_ADV_SET; idx++, adv_iso++) {
+	for (idx = 0U; idx < CONFIG_BT_CTLR_ADV_ISO_SET; idx++, adv_iso++) {
 		if (adv_iso->lll.adv &&
 		    (adv_iso->hci_handle == hci_handle)) {
 			*handle = idx;
@@ -534,7 +537,7 @@ uint8_t ll_adv_iso_by_hci_handle_new(uint8_t hci_handle, uint8_t *handle)
 	adv_iso = &ll_adv_iso[0];
 	adv_iso_empty = NULL;
 
-	for (idx = 0U; idx < BT_CTLR_ADV_SET; idx++, adv_iso++) {
+	for (idx = 0U; idx < CONFIG_BT_CTLR_ADV_ISO_SET; idx++, adv_iso++) {
 		if (adv_iso->lll.adv) {
 			if (adv_iso->hci_handle == hci_handle) {
 				return BT_HCI_ERR_CMD_DISALLOWED;
@@ -627,15 +630,45 @@ void ull_adv_iso_done_terminate(struct node_rx_event_done *done)
 	lll->handle = LLL_ADV_HANDLE_INVALID;
 }
 
+struct ll_adv_iso_set *ull_adv_iso_by_stream_get(uint16_t handle)
+{
+	if (handle >= CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT) {
+		return NULL;
+	}
+
+	return adv_iso_get(stream_pool[handle].big_handle);
+}
+
+void ull_adv_iso_stream_release(struct ll_adv_iso_set *adv_iso)
+{
+	struct lll_adv_iso *lll;
+
+	lll = &adv_iso->lll;
+	while (lll->num_bis--) {
+		struct lll_adv_iso_stream *stream;
+		uint16_t handle;
+
+		handle = lll->stream_handle[lll->num_bis];
+		stream = adv_iso_stream_get(handle);
+		mem_release(stream, &stream_free);
+	}
+
+	lll->adv = NULL;
+}
+
 static int init_reset(void)
 {
 	/* Add initializations common to power up initialization and HCI reset
 	 * initializations.
 	 */
+
+	mem_init((void *)stream_pool, sizeof(struct lll_adv_iso_stream),
+		 CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT, &stream_free);
+
 	return 0;
 }
 
-static inline struct ll_adv_iso_set *ull_adv_iso_get(uint8_t handle)
+static struct ll_adv_iso_set *adv_iso_get(uint8_t handle)
 {
 	if (handle >= CONFIG_BT_CTLR_ADV_SET) {
 		return NULL;
@@ -644,11 +677,46 @@ static inline struct ll_adv_iso_set *ull_adv_iso_get(uint8_t handle)
 	return &ll_adv_iso[handle];
 }
 
-static uint32_t ull_adv_iso_start(struct ll_adv_iso_set *adv_iso,
-				  uint32_t ticks_anchor,
-				  uint32_t iso_interval_us)
+static struct stream *adv_iso_stream_acquire(void)
+{
+	return mem_acquire(&stream_free);
+}
+
+static struct lll_adv_iso_stream *adv_iso_stream_get(uint16_t handle)
+{
+	if (handle >= CONFIG_BT_CTLR_ADV_ISO_STREAM_COUNT) {
+		return NULL;
+	}
+
+	return &stream_pool[handle];
+}
+
+static uint16_t adv_iso_stream_handle_get(struct lll_adv_iso_stream *stream)
+{
+	return mem_index_get(stream, stream_pool, sizeof(*stream));
+}
+
+static uint8_t ptc_calc(const struct lll_adv_iso *lll, uint32_t latency_pdu,
+			uint32_t latency_packing, uint32_t ctrl_spacing)
+{
+	uint32_t reserve;
+
+	reserve = latency_packing + ctrl_spacing +
+		  EVENT_OVERHEAD_START_US + EVENT_OVERHEAD_END_US;
+	if (reserve < latency_pdu) {
+		return ((latency_pdu - reserve) / (lll->sub_interval * lll->bn *
+						   lll->num_bis)) *
+			lll->bn;
+	}
+
+	return 0U;
+}
+
+static uint32_t adv_iso_start(struct ll_adv_iso_set *adv_iso,
+			      uint32_t ticks_anchor, uint32_t iso_interval_us)
 {
 	uint32_t ticks_slot_overhead;
+	uint32_t ticks_slot_offset;
 	uint32_t volatile ret_cb;
 	uint32_t slot_us;
 	uint32_t ret;
@@ -666,12 +734,14 @@ static uint32_t ull_adv_iso_start(struct ll_adv_iso_set *adv_iso,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
 	adv_iso->ull.ticks_slot = HAL_TICKER_US_TO_TICKS(slot_us);
 
+	ticks_slot_offset = MAX(adv_iso->ull.ticks_active_to_start,
+				adv_iso->ull.ticks_prepare_to_start);
 	if (IS_ENABLED(CONFIG_BT_CTLR_LOW_LAT)) {
-		ticks_slot_overhead = MAX(adv_iso->ull.ticks_active_to_start,
-					  adv_iso->ull.ticks_prepare_to_start);
+		ticks_slot_overhead = ticks_slot_offset;
 	} else {
 		ticks_slot_overhead = 0U;
 	}
+	ticks_slot_offset += HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US);
 
 	/* setup to use ISO create prepare function for first radio event */
 	mfy_lll_prepare.fp = lll_adv_iso_create_prepare;
@@ -679,7 +749,7 @@ static uint32_t ull_adv_iso_start(struct ll_adv_iso_set *adv_iso,
 	ret_cb = TICKER_STATUS_BUSY;
 	ret = ticker_start(TICKER_INSTANCE_ID_CTLR, TICKER_USER_ID_THREAD,
 			   (TICKER_ID_ADV_ISO_BASE + adv_iso->lll.handle),
-			   ticks_anchor, 0U,
+			   (ticks_anchor - ticks_slot_offset), 0U,
 			   HAL_TICKER_US_TO_TICKS(iso_interval_us),
 			   HAL_TICKER_REMAINDER(iso_interval_us),
 			   TICKER_NULL_LAZY,

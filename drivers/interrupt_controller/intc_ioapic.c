@@ -58,6 +58,7 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <device.h>
+#include <pm/device.h>
 #include <string.h>
 
 #include <drivers/interrupt_controller/ioapic.h> /* public API declarations */
@@ -495,10 +496,7 @@ static void IoApicRedUpdateLo(unsigned int irq,
 	ioApicRedSetLo(irq, (ioApicRedGetLo(irq) & ~mask) | (value & mask));
 }
 
+PM_DEVICE_DEFINE(ioapic, ioapic_pm_action);
 
-#ifdef CONFIG_PM_DEVICE
-SYS_DEVICE_DEFINE("ioapic", ioapic_init, ioapic_pm_action, PRE_KERNEL_1,
-		  CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
-#else
-SYS_INIT(ioapic_init, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
-#endif
+DEVICE_DEFINE(ioapic, "ioapic", ioapic_init, PM_DEVICE_REF(ioapic), NULL, NULL,
+	      PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, NULL);

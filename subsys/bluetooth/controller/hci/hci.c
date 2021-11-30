@@ -44,17 +44,24 @@
 #include "ll_sw/lll_conn.h"
 #include "ll_sw/lll_conn_iso.h"
 
-#include "ll_sw/ull_adv_types.h"
-#include "ll_sw/ull_scan_types.h"
-#include "ll_sw/ull_sync_types.h"
+#include "ll_sw/isoal.h"
+
 #if !defined(CONFIG_BT_LL_SW_LLCP_LEGACY)
 #include "ull_tx_queue.h"
 #endif
-#include "ll_sw/ull_sync_internal.h"
+
+#include "ll_sw/ull_adv_types.h"
+#include "ll_sw/ull_scan_types.h"
+#include "ll_sw/ull_sync_types.h"
 #include "ll_sw/ull_conn_types.h"
-#include "ll_sw/ull_conn_internal.h"
+#include "ll_sw/ull_iso_types.h"
 #include "ll_sw/ull_conn_iso_types.h"
 #include "ll_sw/ull_df_types.h"
+
+#include "ll_sw/ull_adv_internal.h"
+#include "ll_sw/ull_sync_internal.h"
+#include "ll_sw/ull_conn_internal.h"
+#include "ll_sw/ull_sync_iso_internal.h"
 #include "ll_sw/ull_df_internal.h"
 
 #include "ll.h"
@@ -1286,7 +1293,7 @@ static void le_read_buffer_size(struct net_buf *buf, struct net_buf **evt)
 
 	rp->status = 0x00;
 
-	rp->le_max_len = sys_cpu_to_le16(CONFIG_BT_BUF_ACL_TX_SIZE);
+	rp->le_max_len = sys_cpu_to_le16(LL_LENGTH_OCTETS_TX_MAX);
 	rp->le_max_num = CONFIG_BT_BUF_ACL_TX_COUNT;
 }
 
@@ -1299,7 +1306,7 @@ static void le_read_buffer_size_v2(struct net_buf *buf, struct net_buf **evt)
 
 	rp->status = 0x00;
 
-	rp->acl_max_len = sys_cpu_to_le16(CONFIG_BT_BUF_ACL_TX_SIZE);
+	rp->acl_max_len = sys_cpu_to_le16(LL_LENGTH_OCTETS_TX_MAX);
 	rp->acl_max_num = CONFIG_BT_BUF_ACL_TX_COUNT;
 	rp->iso_max_len = sys_cpu_to_le16(CONFIG_BT_CTLR_ISO_TX_BUFFER_SIZE);
 	rp->iso_max_num = CONFIG_BT_CTLR_ISO_TX_BUFFERS;
@@ -1753,9 +1760,7 @@ static void le_big_terminate_sync(struct net_buf *buf, struct net_buf **evt,
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_OBSERVER */
 
-#if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
-
 static uint8_t check_cconn_params(bool ext, uint16_t scan_interval,
 				  uint16_t scan_window,
 				  uint16_t conn_interval_max,
@@ -2334,6 +2339,7 @@ static void le_reject_cis(struct net_buf *buf, struct net_buf **evt)
 
 #endif /* CONFIG_BT_PERIPHERAL */
 
+#if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL) || defined(CONFIG_BT_CTLR_PER_INIT_FEAT_XCHG)
 static void le_read_remote_features(struct net_buf *buf, struct net_buf **evt)
 {
@@ -3904,7 +3910,6 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_OBSERVER */
 
-#if defined(CONFIG_BT_CONN)
 #if defined(CONFIG_BT_CENTRAL)
 	case BT_OCF(BT_HCI_OP_LE_CREATE_CONN):
 		le_create_connection(cmd, evt);
@@ -4002,6 +4007,7 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 		break;
 #endif /* CONFIG_BT_CTLR_SET_HOST_FEATURE */
 
+#if defined(CONFIG_BT_CONN)
 	case BT_OCF(BT_HCI_OP_LE_READ_CHAN_MAP):
 		le_read_chan_map(cmd, evt);
 		break;
@@ -4774,7 +4780,7 @@ int hci_acl_handle(struct net_buf *buf, struct net_buf **evt)
 		return -EINVAL;
 	}
 
-	if (len > CONFIG_BT_BUF_ACL_TX_SIZE) {
+	if (len > LL_LENGTH_OCTETS_TX_MAX) {
 		BT_ERR("Invalid HCI ACL Data length");
 		return -EINVAL;
 	}
@@ -6418,25 +6424,40 @@ static void le_big_sync_established(struct pdu_data *pdu,
 	}
 
 	/* FIXME: Fill latency */
-	sys_put_le32(0, sep->latency);
+	sys_put_le24(0, sep->latency);
 
 	sep->nse = lll->nse;
 	sep->bn = lll->bn;
 	sep->pto = lll->pto;
 	sep->irc = lll->irc;
 	sep->max_pdu = sys_cpu_to_le16(lll->max_pdu);
-	sep->iso_interval = sys_cpu_to_le16(sync_iso->iso_interval);
-	sep->num_bis = lll->num_bis;
+	sep->iso_interval = sys_cpu_to_le16(lll->iso_interval);
+	sep->num_bis = lll->stream_count;
 
-	/* FIXME: Connection handle list of all BISes in the BIG */
-	sep->handle[0] = sys_cpu_to_le16(0);
+	/* Connection handle list of all BISes synchronized in the BIG */
+	for (uint8_t i = 0U; i < lll->stream_count; i++) {
+		uint16_t handle;
+
+		handle = BT_CTLR_SYNC_ISO_STREAM_HANDLE_BASE +
+			 lll->stream_handle[i];
+		sep->handle[i] = sys_cpu_to_le16(handle);
+	}
 }
 
 static void le_sync_iso_pdu(struct pdu_data *pdu,
 			    struct node_rx_pdu *node_rx,
 			    struct net_buf *buf)
 {
-	/* FIXME: integrate with ISOAL interface */
+	/* If HCI datapath pass to ISO AL here */
+	const struct lll_sync_iso_stream *stream;
+	struct isoal_pdu_rx isoal_rx;
+	isoal_status_t err;
+
+	stream = ull_sync_iso_stream_get(node_rx->hdr.handle);
+	isoal_rx.meta = &node_rx->hdr.rx_iso_meta;
+	isoal_rx.pdu = (void *)node_rx->pdu;
+	err = isoal_rx_pdu_recombine(stream->dp->sink_hdl, &isoal_rx);
+	LL_ASSERT(err == ISOAL_STATUS_OK || err == ISOAL_STATUS_ERR_SDU_ALLOC);
 }
 
 static void le_big_sync_lost(struct pdu_data *pdu,
@@ -6517,8 +6538,14 @@ static void le_big_complete(struct pdu_data *pdu_data,
 	sep->max_pdu = sys_cpu_to_le16(lll->max_pdu);
 	sep->num_bis = lll->num_bis;
 
-	/* FIXME: Connection handle list of all BISes in the BIG */
-	sep->handle[0] = sys_cpu_to_le16(0);
+	/* Connection handle list of all BISes in the BIG */
+	for (uint8_t i = 0U; i < lll->num_bis; i++) {
+		uint16_t handle;
+
+		handle = BT_CTLR_ADV_ISO_STREAM_HANDLE_BASE +
+			 lll->stream_handle[i];
+		sep->handle[i] = sys_cpu_to_le16(handle);
+	}
 }
 
 static void le_big_terminate(struct pdu_data *pdu,

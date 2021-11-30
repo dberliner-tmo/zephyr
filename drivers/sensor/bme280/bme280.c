@@ -12,6 +12,7 @@
 #include <drivers/sensor.h>
 #include <init.h>
 #include <drivers/gpio.h>
+#include <pm/device.h>
 #include <sys/byteorder.h>
 #include <sys/__assert.h>
 
@@ -447,9 +448,12 @@ static int bme280_pm_action(const struct device *dev,
 		COND_CODE_1(DT_INST_ON_BUS(inst, spi),			\
 			    (BME280_CONFIG_SPI(inst)),			\
 			    (BME280_CONFIG_I2C(inst)));			\
+									\
+	PM_DEVICE_DT_INST_DEFINE(inst, bme280_pm_action);		\
+									\
 	DEVICE_DT_INST_DEFINE(inst,					\
 			 bme280_chip_init,				\
-			 bme280_pm_action,				\
+			 PM_DEVICE_DT_INST_REF(inst),			\
 			 &bme280_data_##inst,				\
 			 &bme280_config_##inst,				\
 			 POST_KERNEL,					\

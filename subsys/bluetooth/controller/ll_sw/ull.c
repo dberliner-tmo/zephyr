@@ -441,7 +441,8 @@ static struct {
 #define LINK_RX_POOL_SIZE                                                      \
 	(sizeof(memq_link_t) *                                                 \
 	 (RX_CNT + 2 + BT_CTLR_MAX_CONN + BT_CTLR_ADV_SET +                    \
-	  (BT_CTLR_SCAN_SYNC_SET * 2) + (BT_CTLR_SCAN_SYNC_ISO_SET * 2) +      \
+	  (BT_CTLR_ADV_ISO_SET * 2) + (BT_CTLR_SCAN_SYNC_SET * 2) +            \
+	  (BT_CTLR_SCAN_SYNC_ISO_SET * 2) +                                    \
 	  (IQ_REPORT_CNT)))
 static struct {
 	uint8_t quota_pdu; /* Number of un-utilized buffers */
@@ -1018,16 +1019,6 @@ void ll_rx_dequeue(void)
 		adv->is_enabled = 0U;
 	}
 	break;
-
-#if defined(CONFIG_BT_CTLR_ADV_ISO)
-	case NODE_RX_TYPE_BIG_TERMINATE:
-	{
-		struct ll_adv_iso_set *adv_iso = rx->rx_ftr.param;
-
-		adv_iso->lll.adv = NULL;
-	}
-	break;
-#endif /* CONFIG_BT_CTLR_ADV_ISO */
 #endif /* CONFIG_BT_BROADCASTER */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 
@@ -1143,6 +1134,7 @@ void ll_rx_dequeue(void)
 
 #if defined(CONFIG_BT_CTLR_ADV_ISO)
 	case NODE_RX_TYPE_BIG_COMPLETE:
+	case NODE_RX_TYPE_BIG_TERMINATE:
 #endif /* CONFIG_BT_CTLR_ADV_ISO */
 
 #if defined(CONFIG_BT_OBSERVER)
@@ -1272,11 +1264,19 @@ void ll_rx_mem_release(void **node_rx)
 		case NODE_RX_TYPE_EXT_ADV_TERMINATE:
 			mem_release(rx_free, &mem_pdu_rx.free);
 			break;
+
 #if defined(CONFIG_BT_CTLR_ADV_ISO)
 		case NODE_RX_TYPE_BIG_COMPLETE:
-		case NODE_RX_TYPE_BIG_TERMINATE:
 			/* Nothing to release */
 			break;
+
+		case NODE_RX_TYPE_BIG_TERMINATE:
+		{
+			struct ll_adv_iso_set *adv_iso = rx_free->rx_ftr.param;
+
+			ull_adv_iso_stream_release(adv_iso);
+		}
+		break;
 #endif /* CONFIG_BT_CTLR_ADV_ISO */
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_BROADCASTER */
@@ -1284,10 +1284,8 @@ void ll_rx_mem_release(void **node_rx)
 #if defined(CONFIG_BT_OBSERVER)
 #if defined(CONFIG_BT_CTLR_ADV_EXT)
 		case NODE_RX_TYPE_EXT_SCAN_TERMINATE:
-		{
 			mem_release(rx_free, &mem_pdu_rx.free);
-		}
-		break;
+			break;
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
 
@@ -1494,9 +1492,7 @@ void ll_rx_mem_release(void **node_rx)
 			struct ll_sync_iso_set *sync_iso =
 				(void *)rx_free->rx_ftr.param;
 
-			sync_iso->timeout_reload = 0U;
-
-			ull_sync_iso_release(sync_iso);
+			ull_sync_iso_stream_release(sync_iso);
 		}
 		break;
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */

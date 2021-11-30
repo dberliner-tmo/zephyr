@@ -17,7 +17,7 @@
 # It exists to reduce boilerplate code that Zephyr expects to be in
 # application CMakeLists.txt code.
 
-# CMake version 3.13.1 is the real minimum supported version.
+# CMake version 3.20 is the real minimum supported version.
 #
 # Unfortunately CMake requires the toplevel CMakeLists.txt file to
 # define the required version, not even invoking it from an included
@@ -557,6 +557,14 @@ set(SOC_NAME   ${CONFIG_SOC})
 set(SOC_SERIES ${CONFIG_SOC_SERIES})
 set(SOC_TOOLCHAIN_NAME ${CONFIG_SOC_TOOLCHAIN_NAME})
 set(SOC_FAMILY ${CONFIG_SOC_FAMILY})
+
+# For the gen_app_partitions.py to work correctly, we must ensure that
+# all targets exports their compile commands to fetch object files.
+# We enable it unconditionally, as this is also useful for several IDEs
+set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE CACHE BOOL
+    "Export CMake compile commands. Used by gen_app_partitions.py script"
+    FORCE
+)
 
 if("${SOC_SERIES}" STREQUAL "")
   set(SOC_PATH ${SOC_NAME})

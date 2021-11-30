@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <drivers/flash.h>
 #include <init.h>
+#include <pm/device.h>
 #include <string.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(qspi_nor, CONFIG_FLASH_LOG_LEVEL);
@@ -608,11 +609,13 @@ static int qspi_sfdp_read(const struct device *dev, off_t offset,
 		.io3_level = true,
 	};
 
-	int res = ANOMALY_122_INIT(dev);
+	int ret = ANOMALY_122_INIT(dev);
+	nrfx_err_t res = NRFX_SUCCESS;
 
-	if (res != NRFX_SUCCESS) {
-		LOG_DBG("ANOMALY_122_INIT: %x", res);
-		goto out;
+	if (ret != 0) {
+		LOG_DBG("ANOMALY_122_INIT: %d", ret);
+		ANOMALY_122_UNINIT(dev);
+		return ret;
 	}
 
 	qspi_lock(dev);
@@ -1139,8 +1142,6 @@ static int qspi_nor_pm_action(const struct device *dev,
 
 	return 0;
 }
-#else
-#define qspi_nor_pm_action NULL
 #endif /* CONFIG_PM_DEVICE */
 
 static struct qspi_nor_data qspi_nor_dev_data = {
@@ -1196,7 +1197,9 @@ static const struct qspi_nor_config qspi_nor_dev_config = {
 	.id = DT_INST_PROP(0, jedec_id),
 };
 
-DEVICE_DT_INST_DEFINE(0, qspi_nor_init, qspi_nor_pm_action,
+PM_DEVICE_DT_INST_DEFINE(0, qspi_nor_pm_action);
+
+DEVICE_DT_INST_DEFINE(0, qspi_nor_init, PM_DEVICE_DT_INST_REF(0),
 		      &qspi_nor_dev_data, &qspi_nor_dev_config,
 		      POST_KERNEL, CONFIG_NORDIC_QSPI_NOR_INIT_PRIORITY,
 		      &qspi_nor_api);
