@@ -86,7 +86,7 @@ struct modem_context {
 
         /* SMS functions */
         send_sms_func send_sms;
-        read_sms_func read_sms;
+        recv_sms_func recv_sms;
 
 	/* driver data */
 	void *driver_data;

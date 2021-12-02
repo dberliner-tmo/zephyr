@@ -34,9 +34,9 @@ struct sms_in {
 };
 
 typedef int (*send_sms_func)(void *obj, struct sms_out *sms);
-typedef int (*read_sms_func)(void *obj, struct sms_in  *sms);
+typedef int (*recv_sms_func)(void *obj, struct sms_in  *sms);
 
 enum io_ctl {
 	SMS_SEND,
-	SMS_READ,
+	SMS_RECV,
 };

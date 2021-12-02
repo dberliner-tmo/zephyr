@@ -293,15 +293,15 @@ static int cmd_modem_sms_read(const struct shell *shell, size_t argc, char *argv
                 return -1;
             }
 
-            if (ms_ctx->read_sms == NULL) {
+            if (ms_ctx->recv_sms == NULL) {
                 printk("No function defined to read SMS\n");
                 return -1;
             }
 
-            ret = ms_ctx->read_sms(ms_ctx, &sms);
+            ret = ms_ctx->recv_sms(ms_ctx, &sms);
 
             if (ret < 0)
-                printk("read_sms returned error %d, errno:%d\n", ret, errno);
+                printk("recv_sms returned error %d, errno:%d\n", ret, errno);
             else if (ret == 0)
                 printk("No SMS msgs available\n");
             else
