@@ -16,13 +16,13 @@ LOG_MODULE_DECLARE(pm, CONFIG_PM_LOG_LEVEL);
 
 #if DT_NODE_EXISTS(DT_PATH(cpus))
 
-#define CPU_STATES(n) (struct pm_state_info[])PM_STATE_INFO_DT_ITEMS_LIST(n),
+#define CPU_STATES(n) (struct pm_state_info[])PM_STATE_INFO_LIST_FROM_DT_CPU(n),
 
 static const struct pm_state_info *pm_min_residency[] = {
 	DT_FOREACH_CHILD(DT_PATH(cpus), CPU_STATES)
 };
 
-#define CPU_STATES_SIZE(n) PM_STATE_DT_ITEMS_LEN(n),
+#define CPU_STATES_SIZE(n) DT_NUM_CPU_POWER_STATES(n),
 
 static int pm_min_residency_sizes[] = {
 	DT_FOREACH_CHILD(DT_PATH(cpus), CPU_STATES_SIZE)
