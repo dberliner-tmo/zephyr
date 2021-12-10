@@ -85,47 +85,16 @@ extern "C" {
 /** @} */
 
 /**
- * @name CAN specific error codes
- *
- * The `CAN_TX_*` error codes are used for CAN specific error return codes from
- * @a can_send() and for `error_flags` values in @a can_tx_callback_t().
- *
- * `CAN_NO_FREE_FILTER` is returned by `can_attach_*()` if no free filters are
- * available. `CAN_TIMEOUT` indicates that @a can_recover() timed out.
- *
- * @{
- */
-
-/** Transmitted successfully. */
-#define CAN_TX_OK          (0)
-/** General transmit error. */
-#define CAN_TX_ERR         (-2)
-/** Bus arbitration lost during transmission. */
-#define CAN_TX_ARB_LOST    (-3)
-/** CAN controller is in bus off state. */
-#define CAN_TX_BUS_OFF     (-4)
-/** Unknown error. */
-#define CAN_TX_UNKNOWN     (-5)
-/** Invalid parameter. */
-#define CAN_TX_EINVAL      (-22)
-/** No free filters available. */
-#define CAN_NO_FREE_FILTER (-1)
-/** Operation timed out. */
-#define CAN_TIMEOUT        (-1)
-
-/** @} */
-
-/**
  * @brief Defines the mode of the CAN controller
  */
 enum can_mode {
-	/* Normal mode. */
+	/** Normal mode. */
 	CAN_NORMAL_MODE,
-	/* Controller is not allowed to send dominant bits. */
+	/** Controller is not allowed to send dominant bits. */
 	CAN_SILENT_MODE,
-	/* Controller is in loopback mode (receives own frames). */
+	/** Controller is in loopback mode (receives own frames). */
 	CAN_LOOPBACK_MODE,
-	/* Combination of loopback and silent modes. */
+	/** Combination of loopback and silent modes. */
 	CAN_SILENT_LOOPBACK_MODE
 };
 
@@ -294,7 +263,8 @@ struct can_timing {
  * @typedef can_tx_callback_t
  * @brief Defines the application callback handler function signature
  *
- * @param error_flags Status of the performed send operation.
+ * @param error_flags Status of the performed send operation. See the list of
+ *                    return values for @a can_send() for value descriptions.
  * @param user_data   User data provided when the frame was sent.
  */
 typedef void (*can_tx_callback_t)(uint32_t error_flags, void *user_data);
@@ -644,34 +614,6 @@ static inline int can_set_bitrate(const struct device *dev,
 #endif /* !CONFIG_CAN_FD_MODE */
 }
 
-/**
- * @brief Configure operation of a host controller.
- *
- * @warning This function is deprecated. Use @a can_set_bitrate() and @a
- * can_set_mode() instead.
- *
- * @param dev Pointer to the device structure for the driver instance.
- * @param mode Operation mode.
- * @param bitrate bus-speed in Baud/s.
- *
- * @retval 0 If successful.
- * @retval -EIO General input/output error, failed to configure device.
- */
-__deprecated static inline int can_configure(const struct device *dev, enum can_mode mode,
-					     uint32_t bitrate)
-{
-	int err;
-
-	if (bitrate > 0) {
-		err = can_set_bitrate(dev, bitrate, bitrate);
-		if (err != 0) {
-			return err;
-		}
-	}
-
-	return can_set_mode(dev, mode);
-}
-
 /** @} */
 
 /**
@@ -697,8 +639,12 @@ __deprecated static inline int can_configure(const struct device *dev, enum can_
  *                  if called from user mode.
  * @param user_data User data to pass to callback function.
  *
- * @retval 0 If successful.
- * @retval CAN_TX_* on failure.
+ * @retval 0 if successful.
+ * @retval -EINVAL if an invalid parameter was passed to the function.
+ * @retval -ENETDOWN if the CAN controller is in bus-off state.
+ * @retval -EBUSY if CAN bus arbitration was lost.
+ * @retval -EIO if a general transmit error occurred.
+ * @retval -EAGAIN on timeout.
  */
 __syscall int can_send(const struct device *dev, const struct zcan_frame *frame,
 		       k_timeout_t timeout, can_tx_callback_t callback,
@@ -727,10 +673,12 @@ static inline int z_impl_can_send(const struct device *dev, const struct zcan_fr
  * @param rtr     Write as data frame or Remote Transmission Request (RTR) frame.
  * @param timeout Timeout waiting for an empty TX mailbox or ``K_FOREVER``.
  *
- * @retval 0 If successful.
- * @retval -EIO General input/output error.
- * @retval -EINVAL if length > 8.
- * @retval CAN_TX_* on failure.
+ * @retval 0 if successful.
+ * @retval -EINVAL if an invalid parameter was passed to the function.
+ * @retval -ENETDOWN if the CAN controller is in bus-off state.
+ * @retval -EBUSY if CAN bus arbitration was lost.
+ * @retval -EIO if a general transmit error occurred.
+ * @retval -EAGAIN on timeout.
  */
 static inline int can_write(const struct device *dev, const uint8_t *data, uint8_t length,
 			    uint32_t id, enum can_rtr rtr, k_timeout_t timeout)
@@ -783,7 +731,7 @@ static inline int can_write(const struct device *dev, const uint8_t *data, uint8
  * @param filter    Pointer to a @a zcan_filter structure defining the filter.
  *
  * @retval filter_id on success.
- * @retval CAN_NO_FREE_FILTER if there are no free filters.
+ * @retval -ENOSPC if there are no free filters.
  */
 static inline int can_attach_isr(const struct device *dev, can_rx_callback_t callback,
 				 void *user_data, const struct zcan_filter *filter)
@@ -818,7 +766,7 @@ static inline int can_attach_isr(const struct device *dev, can_rx_callback_t cal
  * @param filter    Pointer to a @a zcan_filter structure defining the filter.
  *
  * @retval filter_id on success.
- * @retval CAN_NO_FREE_FILTER if there are no free filters.
+ * @retval -ENOSPC if there are no free filters.
  */
 int can_attach_workq(const struct device *dev, struct k_work_q  *work_q,
 		     struct zcan_work *work, can_rx_callback_t callback, void *user_data,
@@ -855,7 +803,7 @@ int can_attach_workq(const struct device *dev, struct k_work_q  *work_q,
  * @param filter Pointer to a @a zcan_filter structure defining the filter.
  *
  * @retval filter_id on success.
- * @retval CAN_NO_FREE_FILTER if there are no free filters.
+ * @retval -ENOSPC if there are no free filters.
  */
 __syscall int can_attach_msgq(const struct device *dev, struct k_msgq *msg_q,
 			      const struct zcan_filter *filter);
@@ -945,7 +893,7 @@ static inline enum can_state z_impl_can_get_state(const struct device *dev,
  * @param timeout Timeout for waiting for the recovery or ``K_FOREVER``.
  *
  * @retval 0 on success.
- * @retval CAN_TIMEOUT on timeout.
+ * @retval -EAGAIN on timeout.
  */
 #if !defined(CONFIG_CAN_AUTO_BUS_OFF_RECOVERY) || defined(__DOXYGEN__)
 __syscall int can_recover(const struct device *dev, k_timeout_t timeout);
@@ -1151,6 +1099,75 @@ static inline void can_copy_zfilter_to_filter(const struct zcan_filter *zfilter,
 }
 
 /** @} */
+
+/**
+ * @cond INTERNAL_HIDDEN
+ * Deprecated APIs
+ */
+
+/**
+ * @name CAN specific error codes
+ *
+ * The `CAN_TX_*` error codes are used for CAN specific error return codes from
+ * @a can_send() and for `error_flags` values in @a can_tx_callback_t().
+ *
+ * `CAN_NO_FREE_FILTER` is returned by `can_attach_*()` if no free filters are
+ * available. `CAN_TIMEOUT` indicates that @a can_recover() timed out.
+ *
+ * @warning These definitions are deprecated. Use the corresponding errno
+ * definitions instead.
+ *
+ * @{
+ */
+
+/** Transmitted successfully. */
+#define CAN_TX_OK          (0)          __DEPRECATED_MACRO
+/** General transmit error. */
+#define CAN_TX_ERR         (-EIO)       __DEPRECATED_MACRO
+/** Bus arbitration lost during transmission. */
+#define CAN_TX_ARB_LOST    (-EBUSY)     __DEPRECATED_MACRO
+/** CAN controller is in bus off state. */
+#define CAN_TX_BUS_OFF     (-ENETDOWN)  __DEPRECATED_MACRO
+/** Unknown error. */
+#define CAN_TX_UNKNOWN     (CAN_TX_ERR) __DEPRECATED_MACRO
+/** Invalid parameter. */
+#define CAN_TX_EINVAL      (-EINVAL)    __DEPRECATED_MACRO
+/** No free filters available. */
+#define CAN_NO_FREE_FILTER (-ENOSPC)    __DEPRECATED_MACRO
+/** Operation timed out. */
+#define CAN_TIMEOUT        (-EAGAIN)    __DEPRECATED_MACRO
+
+/** @} */
+
+/**
+ * @brief Configure operation of a host controller.
+ *
+ * @warning This function is deprecated. Use @a can_set_bitrate() and @a
+ * can_set_mode() instead.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param mode Operation mode.
+ * @param bitrate bus-speed in Baud/s.
+ *
+ * @retval 0 If successful.
+ * @retval -EIO General input/output error, failed to configure device.
+ */
+__deprecated static inline int can_configure(const struct device *dev, enum can_mode mode,
+					     uint32_t bitrate)
+{
+	int err;
+
+	if (bitrate > 0) {
+		err = can_set_bitrate(dev, bitrate, bitrate);
+		if (err != 0) {
+			return err;
+		}
+	}
+
+	return can_set_mode(dev, mode);
+}
+
+/** @endcond */
 
 /**
  * @}

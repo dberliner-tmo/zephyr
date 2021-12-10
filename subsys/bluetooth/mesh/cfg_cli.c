@@ -188,9 +188,13 @@ static int relay_status(struct bt_mesh_model *model,
 
 	if (bt_mesh_msg_ack_ctx_match(&cli->ack_ctx, OP_RELAY_STATUS, ctx->addr,
 				      (void **)&param)) {
+		if (param->status) {
+			*param->status = status;
+		}
 
-		*param->status = status;
-		*param->transmit = transmit;
+		if (param->transmit) {
+			*param->transmit = transmit;
+		}
 
 		bt_mesh_msg_ack_ctx_rx(&cli->ack_ctx);
 	}
@@ -708,7 +712,10 @@ static int hb_sub_status(struct bt_mesh_model *model,
 
 	if (bt_mesh_msg_ack_ctx_match(&cli->ack_ctx, OP_HEARTBEAT_SUB_STATUS,
 				      ctx->addr, (void **)&param)) {
-		*param->status = status;
+		if (param->status) {
+			*param->status = status;
+		}
+
 		if (param->sub) {
 			*param->sub = sub;
 		}
@@ -745,7 +752,10 @@ static int hb_pub_status(struct bt_mesh_model *model,
 
 	if (bt_mesh_msg_ack_ctx_match(&cli->ack_ctx, OP_HEARTBEAT_PUB_STATUS,
 				      ctx->addr, (void **)&param)) {
-		*param->status = status;
+		if (param->status) {
+			*param->status = status;
+		}
+
 		if (param->pub) {
 			*param->pub = pub;
 		}
@@ -1139,6 +1149,10 @@ int bt_mesh_cfg_relay_get(uint16_t net_idx, uint16_t addr, uint8_t *status,
 		.transmit = transmit,
 	};
 	int err;
+
+	if (!status || !transmit) {
+		return -EINVAL;
+	}
 
 	err = cli_prepare(&param, OP_RELAY_STATUS, addr);
 	if (err) {
