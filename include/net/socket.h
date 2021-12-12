@@ -878,7 +878,12 @@ struct net_socket_register {
 	int family;
 	bool (*is_supported)(int family, int type, int proto);
 	int (*handler)(int family, int type, int proto);
+	char *dev_name;
 };
+
+#define xstr(s) str(s)
+#define str(s)  #s
+
 
 #define NET_SOCKET_DEFAULT_PRIO CONFIG_NET_SOCKETS_PRIORITY_DEFAULT
 
@@ -891,6 +896,7 @@ struct net_socket_register {
 		.family = _family,					\
 		.is_supported = _is_supported,				\
 		.handler = _handler,					\
+		.dev_name = xstr(socket_name),		\
 	}
 
 /** @endcond */
