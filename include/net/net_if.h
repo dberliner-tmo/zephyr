@@ -670,6 +670,10 @@ static inline bool net_if_is_socket_offloaded(struct net_if *iface)
 #endif
 }
 
+/** Socket handler for offload driver. */
+int (*socket)(int family, int type, int proto);
+
+
 /**
  * @brief Get an network interface's link address
  *
