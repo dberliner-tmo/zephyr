@@ -166,11 +166,17 @@ int pm_device_runtime_put_async(const struct device *dev)
 	return ret;
 }
 
-void pm_device_runtime_enable(const struct device *dev)
+int pm_device_runtime_enable(const struct device *dev)
 {
+	int ret = 0;
 	struct pm_device *pm = dev->pm;
 
 	SYS_PORT_TRACING_FUNC_ENTER(pm, device_runtime_enable, dev);
+
+	if (pm_device_state_is_locked(dev)) {
+		ret = -EPERM;
+		goto end;
+	}
 
 	if (!k_is_pre_kernel()) {
 		(void)k_mutex_lock(&pm->lock, K_FOREVER);
@@ -195,7 +201,9 @@ unlock:
 		k_mutex_unlock(&pm->lock);
 	}
 
-	SYS_PORT_TRACING_FUNC_EXIT(pm, device_runtime_enable, dev);
+end:
+	SYS_PORT_TRACING_FUNC_EXIT(pm, device_runtime_enable, dev, ret);
+	return ret;
 }
 
 int pm_device_runtime_disable(const struct device *dev)

@@ -1,79 +1,108 @@
-/*
- * Copyright(c) 2016 Intel Corporation. All rights reserved.
- *
+/* Copyright(c) 2021 Intel Corporation. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
- *
- * Author: Liam Girdwood <liam.r.girdwood@linux.intel.com>
  */
 
-/* Older (GCC 4.2-based) XCC variants need a fixup file. */
-#if defined(__XCC__) && (__GNUC__ == 4)
-#include <toolchain/xcc_missing_defs.h>
-#endif
-
-#include <autoconf.h> /* not built by zephyr */
 #include <devicetree.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <cavs/version.h>
 
-#include <adsp/io.h>
 #include <soc.h>
 #include <arch/xtensa/cache.h>
 #include <cavs-shim.h>
 #include <cavs-mem.h>
-#include "platform.h"
+#include <cpu_init.h>
 #include "manifest.h"
+
+/* Important note about linkage:
+ *
+ * The C code here, starting from boot_core0(), is running entirely in
+ * IMR memory.  The sram banks are not initialized yet and the Zephyr
+ * code is not yet copied there.  No use of this memory is legal until
+ * after parse_manifest() returns.  This means that all symbols in
+ * this file must be flagged "__imr" or "__imrdata" (or be guaranteed
+ * to inline via ALWAYS_INLINE, normal gcc "inline" is only a hint)!
+ *
+ * There's a similar note with Xtensa register windows: the Zephyr
+ * exception handles for window overflow are not present in IMR.
+ * While on existing systems, we start running with a VECBASE pointing
+ * to ROM handlers (that seem to work), it seems unsafe to rely on
+ * that.  It's not possible to hit an overflow until at least four
+ * nested function calls, so this is mostly theoretical.  Nonetheless
+ * care should be taken here to make sure the function tree remains
+ * shallow until SRAM initialization is finished.
+ */
+
+/* Various cAVS platform dependencies needed by the bootloader code.
+ * These probably want to migrate to devicetree.
+ */
+
+#if defined(CONFIG_SOC_SERIES_INTEL_CAVS_V25)
+#define PLATFORM_RESET_MHE_AT_BOOT
+#define PLATFORM_MEM_INIT_AT_BOOT
+#define PLATFORM_HPSRAM_EBB_COUNT 30
+#define EBB_SEGMENT_SIZE          32
+
+#elif defined(CONFIG_SOC_SERIES_INTEL_CAVS_V20)
+#define PLATFORM_RESET_MHE_AT_BOOT
+#define PLATFORM_MEM_INIT_AT_BOOT
+#define PLATFORM_HPSRAM_EBB_COUNT 47
+#define EBB_SEGMENT_SIZE          32
+
+#elif defined(CONFIG_SOC_SERIES_INTEL_CAVS_V18)
+#define PLATFORM_RESET_MHE_AT_BOOT
+#define PLATFORM_MEM_INIT_AT_BOOT
+#define PLATFORM_HPSRAM_EBB_COUNT 47
+#define EBB_SEGMENT_SIZE          32
+
+#elif defined(CONFIG_SOC_SERIES_INTEL_CAVS_V15)
+#define PLATFORM_RESET_MHE_AT_BOOT
+#define PLATFORM_DISABLE_L2CACHE_AT_BOOT
+
+#endif
 
 #define LPSRAM_MASK(x) 0x00000003
 #define SRAM_BANK_SIZE (64 * 1024)
 #define HOST_PAGE_SIZE 4096
 
-#if CONFIG_SOC_INTEL_S1000
-#define MANIFEST_BASE	BOOT_LDR_MANIFEST_BASE
-#else
-#define MANIFEST_BASE	IMR_BOOT_LDR_MANIFEST_BASE
-#endif
-
-extern void __start(void);
-
-#if !defined(CONFIG_SOC_INTEL_S1000)
 #define MANIFEST_SEGMENT_COUNT 3
-#undef UNUSED_MEMORY_CALCULATION_HAS_BEEN_FIXED
 
-static inline void idelay(int n)
+/* Initial/true entry point.  Does nothing but jump to
+ * z_boot_asm_entry (which cannot be here, because it needs to be able
+ * to reference immediates which must link before it)
+ */
+__asm__(".pushsection .boot_entry.text, \"ax\" \n\t"
+	".global rom_entry             \n\t"
+	"rom_entry:                    \n\t"
+	"  j z_boot_asm_entry          \n\t"
+	".popsection                   \n\t");
+
+/* Entry stub.  Sets up register windows and stack such that we can
+ * enter C code successfully, and calls boot_core0()
+ */
+#define STRINGIFY_MACRO(x) Z_STRINGIFY(x)
+#define IMRSTACK STRINGIFY_MACRO(CONFIG_IMR_MANIFEST_ADDR)
+__asm__(".section .imr.z_boot_asm_entry, \"x\" \n\t"
+	".align 4                   \n\t"
+	"z_boot_asm_entry:          \n\t"
+	"  movi  a0, 0x4002f        \n\t"
+	"  wsr   a0, PS             \n\t"
+	"  movi  a0, 0              \n\t"
+	"  wsr   a0, WINDOWBASE     \n\t"
+	"  movi  a0, 1              \n\t"
+	"  wsr   a0, WINDOWSTART    \n\t"
+	"  rsync                    \n\t"
+	"  movi  a1, " IMRSTACK    "\n\t"
+	"  call4 boot_core0   \n\t");
+
+static ALWAYS_INLINE void idelay(int n)
 {
 	while (n--) {
 		__asm__ volatile("nop");
 	}
 }
 
-/* generic string compare cloned into the bootloader to
- * compact code and make it more readable
- */
-int strcmp(const char *s1, const char *s2)
-{
-	while (*s1 != 0 && *s2 != 0) {
-		if (*s1 < *s2)
-			return -1;
-		if (*s1 > *s2)
-			return 1;
-		s1++;
-		s2++;
-	}
-
-	/* did both string end */
-	if (*s1 != 0)
-		return 1;
-	if (*s2 != 0)
-		return -1;
-
-	/* match */
-	return 0;
-}
-
 /* memcopy used by boot loader */
-static inline void bmemcpy(void *dest, void *src, size_t bytes)
+static ALWAYS_INLINE void bmemcpy(void *dest, void *src, size_t bytes)
 {
 	uint32_t *d = dest;
 	uint32_t *s = src;
@@ -87,7 +116,7 @@ static inline void bmemcpy(void *dest, void *src, size_t bytes)
 }
 
 /* bzero used by bootloader */
-static inline void bbzero(void *dest, size_t bytes)
+static ALWAYS_INLINE void bbzero(void *dest, size_t bytes)
 {
 	uint32_t *d = dest;
 	int i;
@@ -98,8 +127,8 @@ static inline void bbzero(void *dest, size_t bytes)
 	z_xtensa_cache_flush(dest, bytes);
 }
 
-static void parse_module(struct sof_man_fw_header *hdr,
-	struct sof_man_module *mod)
+static __imr void parse_module(struct sof_man_fw_header *hdr,
+			       struct sof_man_module *mod)
 {
 	int i;
 	uint32_t bias;
@@ -120,10 +149,7 @@ static void parse_module(struct sof_man_fw_header *hdr,
 				HOST_PAGE_SIZE);
 			break;
 		case SOF_MAN_SEGMENT_BSS:
-			/* copy from IMR to SRAM */
-			bbzero((void *)mod->segment[i].v_base_addr,
-			       mod->segment[i].flags.r.length *
-			       HOST_PAGE_SIZE);
+			/* already bbzero'd by sram init */
 			break;
 		default:
 			/* ignore */
@@ -132,49 +158,13 @@ static void parse_module(struct sof_man_fw_header *hdr,
 	}
 }
 
-/* On Sue Creek the boot loader is attached separately, no need to skip it */
-#if CONFIG_SOC_INTEL_S1000
-#define MAN_SKIP_ENTRIES 0
-#else
 #define MAN_SKIP_ENTRIES 1
-#endif
-
-#ifdef UNUSED_MEMORY_CALCULATION_HAS_BEEN_FIXED
-static uint32_t get_fw_size_in_use(void)
-{
-	struct sof_man_fw_desc *desc =
-		(struct sof_man_fw_desc *)MANIFEST_BASE;
-	struct sof_man_fw_header *hdr = &desc->header;
-	struct sof_man_module *mod;
-	uint32_t fw_size_in_use = 0xffffffff;
-	int i;
-
-	/* Calculate fw size passed in BASEFW module in MANIFEST */
-	for (i = MAN_SKIP_ENTRIES; i < hdr->num_module_entries; i++) {
-		mod = desc->man_module + i;
-
-		if (strcmp((char *)mod->name, "BASEFW"))
-			continue;
-		for (i = 0; i < MANIFEST_SEGMENT_COUNT; i++) {
-			if (mod->segment[i].flags.r.type
-				== SOF_MAN_SEGMENT_BSS) {
-				fw_size_in_use = mod->segment[i].v_base_addr
-				- L2_SRAM_BASE
-				+ (mod->segment[i].flags.r.length
-				* HOST_PAGE_SIZE);
-			}
-		}
-	}
-
-	return fw_size_in_use;
-}
-#endif
 
 /* parse FW manifest and copy modules */
-static void parse_manifest(void)
+static __imr void parse_manifest(void)
 {
 	struct sof_man_fw_desc *desc =
-		(struct sof_man_fw_desc *)MANIFEST_BASE;
+		(struct sof_man_fw_desc *)CONFIG_IMR_MANIFEST_ADDR;
 	struct sof_man_fw_header *hdr = &desc->header;
 	struct sof_man_module *mod;
 	int i;
@@ -189,14 +179,13 @@ static void parse_manifest(void)
 		parse_module(hdr, mod);
 	}
 }
-#endif
 
-#if CAVS_VERSION >= CAVS_VERSION_1_8
 /* function powers up a number of memory banks provided as an argument and
  * gates remaining memory banks
  */
-static int32_t hp_sram_pm_banks(uint32_t banks)
+static __imr void hp_sram_pm_banks(uint32_t banks)
 {
+#ifndef CONFIG_SOC_SERIES_INTEL_CAVS_V15
 	int delay_count = 256;
 	uint32_t status;
 	uint32_t ebb_mask0, ebb_mask1, ebb_avail_mask0, ebb_avail_mask1;
@@ -257,11 +246,10 @@ static int32_t hp_sram_pm_banks(uint32_t banks)
 	idelay(delay_count);
 
 	CAVS_SHIM.ldoctl = SHIM_LDOCTL_HPSRAM_LDO_BYPASS;
-
-	return 0;
+#endif
 }
 
-static uint32_t hp_sram_power_on_memory(uint32_t memory_size)
+static __imr void hp_sram_init(uint32_t memory_size)
 {
 	uint32_t ebb_in_use;
 
@@ -270,39 +258,12 @@ static uint32_t hp_sram_power_on_memory(uint32_t memory_size)
 	 */
 	ebb_in_use = ceiling_fraction(memory_size, SRAM_BANK_SIZE);
 
-	return hp_sram_pm_banks(ebb_in_use);
+	hp_sram_pm_banks(ebb_in_use);
+
+	bbzero((void *)L2_SRAM_BASE, L2_SRAM_SIZE);
 }
 
-#ifdef UNUSED_MEMORY_CALCULATION_HAS_BEEN_FIXED
-static int32_t hp_sram_power_off_unused_banks(uint32_t memory_size)
-{
-	/* keep enabled only memory banks used by FW */
-	return hp_sram_power_on_memory(memory_size);
-}
-#endif
-
-static int32_t hp_sram_init(void)
-{
-	return hp_sram_power_on_memory(L2_SRAM_SIZE);
-}
-
-#else
-
-#ifdef UNUSED_MEMORY_CALCULATION_HAS_BEEN_FIXED
-static int32_t hp_sram_power_off_unused_banks(uint32_t memory_size)
-{
-	return 0;
-}
-#endif
-
-static uint32_t hp_sram_init(void)
-{
-	return 0;
-}
-
-#endif
-
-static int32_t lp_sram_init(void)
+static __imr void lp_sram_init(void)
 {
 	uint32_t status = 0;
 	uint32_t timeout_counter, delay_count = 256;
@@ -331,37 +292,44 @@ static int32_t lp_sram_init(void)
 	}
 
 	CAVS_SHIM.ldoctl = SHIM_LDOCTL_LPSRAM_LDO_BYPASS;
-
-	return status;
+	bbzero((void *)LP_SRAM_BASE, LP_SRAM_SIZE);
 }
 
-/* boot master core */
-void boot_master_core(void)
+static __imr void win_setup(void)
 {
-	int32_t result;
+	uint32_t *win0 = z_soc_uncached_ptr((void *)HP_SRAM_WIN0_BASE);
 
+	/* Software protocol: "firmware entered" has the value 5 */
+	win0[0] = 5;
 
-	/* init the HPSRAM */
-	result = hp_sram_init();
-	if (result < 0) {
-		return;
+	CAVS_WIN[0].dmwlo = HP_SRAM_WIN0_SIZE | 0x7;
+	CAVS_WIN[0].dmwba = (HP_SRAM_WIN0_BASE | CAVS_DMWBA_READONLY
+			     | CAVS_DMWBA_ENABLE);
+
+	CAVS_WIN[3].dmwlo = HP_SRAM_WIN3_SIZE | 0x7;
+	CAVS_WIN[3].dmwba = (HP_SRAM_WIN3_BASE | CAVS_DMWBA_READONLY
+			     | CAVS_DMWBA_ENABLE);
+}
+
+__imr void boot_core0(void)
+{
+	cpu_early_init();
+
+	if (IS_ENABLED(CONFIG_SOC_SERIES_INTEL_CAVS_V15)) {
+		/* FIXME: L2 cache control PCFG register */
+		*(uint32_t *)0x1508 = 0;
 	}
 
-	/* init the LPSRAM */
+	/* reset memory hole */
+	CAVS_SHIM.l2mecs = 0;
 
-	result = lp_sram_init();
-	if (result < 0) {
-		return;
-	}
-
-#if !defined(CONFIG_SOC_INTEL_S1000)
-	/* parse manifest and copy modules */
+	hp_sram_init(L2_SRAM_SIZE);
+	win_setup();
+	lp_sram_init();
 	parse_manifest();
+	z_xtensa_cache_flush_all();
 
-#ifdef UNUSED_MEMORY_CALCULATION_HAS_BEEN_FIXED
-	hp_sram_power_off_unused_banks(get_fw_size_in_use());
-#endif
-#endif
-	/* now call SOF entry */
-	__start();
+	/* Zephyr! */
+	extern FUNC_NORETURN void z_cstart(void);
+	z_cstart();
 }

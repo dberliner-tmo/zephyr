@@ -20,9 +20,9 @@ LOG_MODULE_REGISTER(soc_mp, CONFIG_SOC_LOG_LEVEL);
 #include <cavs-idc.h>
 #include <soc.h>
 #include <arch/xtensa/cache.h>
-#include <adsp/io.h>
 #include <cavs-shim.h>
 #include <cavs-mem.h>
+#include <cpu_init.h>
 
 extern void z_sched_ipi(void);
 extern void z_smp_start_cpu(int id);
@@ -45,7 +45,6 @@ struct cpustart_rec {
 	uint32_t        cpu;
 	arch_cpustart_t	fn;
 	void            *arg;
-	uint32_t        vecbase;
 };
 
 static struct cpustart_rec start_rec;
@@ -94,93 +93,9 @@ __asm__(".align 4                   \n\t"
 	"  call4 z_mp_entry         \n\t");
 BUILD_ASSERT(XCHAL_EXCM_LEVEL == 5);
 
-#define CxL1CCAP (*(volatile uint32_t *)0x9F080080)
-#define CxL1CCFG (*(volatile uint32_t *)0x9F080084)
-#define CxL1PCFG (*(volatile uint32_t *)0x9F080088)
-
-/* "Data/Instruction Cache Memory Way Count" fields */
-#define CxL1CCAP_DCMWC ((CxL1CCAP >> 16) & 7)
-#define CxL1CCAP_ICMWC ((CxL1CCAP >> 20) & 7)
-
-static ALWAYS_INLINE void enable_l1_cache(void)
+__imr void z_mp_entry(void)
 {
-	uint32_t reg;
-
-#ifdef CONFIG_SOC_SERIES_INTEL_CAVS_V25
-	/* First, on cAVS 2.5 we need to power the cache SRAM banks
-	 * on!  Write a bit for each cache way in the bottom half of
-	 * the L1CCFG register and poll the top half for them to turn
-	 * on.
-	 */
-	uint32_t dmask = BIT(CxL1CCAP_DCMWC) - 1;
-	uint32_t imask = BIT(CxL1CCAP_ICMWC) - 1;
-	uint32_t waymask = (imask << 8) | dmask;
-
-	CxL1CCFG = waymask;
-	while (((CxL1CCFG >> 16) & waymask) != waymask) {
-	}
-
-	/* Prefetcher also power gates, same interface */
-	CxL1PCFG = 1;
-	while ((CxL1PCFG & 0x10000) == 0) {
-	}
-#endif
-
-	/* Now set up the Xtensa CPU to enable the cache logic.  The
-	 * details of the fields are somewhat complicated, but per the
-	 * ISA ref: "Turning on caches at power-up usually consists of
-	 * writing a constant with bits[31:8] all 1’s to MEMCTL.".
-	 * Also set bit 0 to enable the LOOP extension instruction
-	 * fetch buffer.
-	 */
-#ifdef XCHAL_HAVE_ICACHE_DYN_ENABLE
-	reg = 0xffffff01;
-	__asm__ volatile("wsr %0, MEMCTL; rsync" :: "r"(reg));
-#endif
-
-	/* Likewise enable prefetching.  Sadly these values are not
-	 * architecturally defined by Xtensa (they're just documented
-	 * as priority hints), so this constant is just copied from
-	 * SOF for now.  If we care about prefetch priority tuning
-	 * we're supposed to ask Cadence I guess.
-	 */
-	reg = IS_ENABLED(CONFIG_SOC_SERIES_INTEL_CAVS_V25) ? 0x1038 : 0;
-	__asm__ volatile("wsr %0, PREFCTL; rsync" :: "r"(reg));
-
-	/* Finally we need to enable the cache in the Region
-	 * Protection Option "TLB" entries.  The hardware defaults
-	 * have this set to RW/uncached (2) everywhere.  We want
-	 * writeback caching (4) in the sixth mapping (the second of
-	 * two RAM mappings) and to mark all unused regions
-	 * inaccessible (15) for safety.  Note that there is a HAL
-	 * routine that does this (by emulating the older "cacheattr"
-	 * hardware register), but it generates significantly larger
-	 * code.
-	 */
-#ifdef CONFIG_SOC_SERIES_INTEL_CAVS_V25
-	/* Already set up by the ROM on older hardware. */
-	const uint8_t attribs[] = { 2, 15, 15, 15, 2, 4, 15, 15 };
-
-	for (int region = 0; region < 8; region++) {
-		reg = 0x20000000 * region;
-		__asm__ volatile("wdtlb %0, %1" :: "r"(attribs[region]), "r"(reg));
-	}
-#endif
-}
-
-void z_mp_entry(void)
-{
-	uint32_t reg;
-
-	enable_l1_cache();
-
-	/* Fix ATOMCTL to match CPU0.  Hardware defaults for S32C1I
-	 * use internal operations (and are thus presumably atomic
-	 * only WRT the local CPU!).  We need external transactions on
-	 * the shared bus.
-	 */
-	reg = 0x15;
-	__asm__ volatile("wsr %0, ATOMCTL" :: "r"(reg));
+	cpu_early_init();
 
 	/* We don't know what the boot ROM (on pre-2.5 DSPs) might
 	 * have touched and we don't care.  Make sure it's not in our
@@ -194,15 +109,6 @@ void z_mp_entry(void)
 	if (!IS_ENABLED(CONFIG_SOC_SERIES_INTEL_CAVS_V25)) {
 		z_xtensa_cache_flush_inv_all();
 	}
-
-	/* Copy over VECBASE from the main CPU for an initial value
-	 * (will need to revisit this if we ever allow a user API to
-	 * change interrupt vectors at runtime).
-	 */
-	reg = 0;
-	__asm__ volatile("wsr %0, INTENABLE" : : "r"(reg));
-	__asm__ volatile("wsr %0, VECBASE" : : "r"(start_rec.vecbase));
-	__asm__ volatile("rsync");
 
 	/* Set up the CPU pointer. */
 	_cpu_t *cpu = &_kernel.cpus[start_rec.cpu];
@@ -255,7 +161,7 @@ static ALWAYS_INLINE uint32_t prid(void)
 void arch_start_cpu(int cpu_num, k_thread_stack_t *stack, int sz,
 		    arch_cpustart_t fn, void *arg)
 {
-	uint32_t vecbase, curr_cpu = prid();
+	uint32_t curr_cpu = prid();
 
 	__ASSERT_NO_MSG(!cpus_active[cpu_num]);
 
@@ -302,12 +208,9 @@ void arch_start_cpu(int cpu_num, k_thread_stack_t *stack, int sz,
 	lpsram[1] = z_soc_mp_asm_entry;
 #endif
 
-	__asm__ volatile("rsr %0, VECBASE\n\t" : "=r"(vecbase));
-
 	start_rec.cpu = cpu_num;
 	start_rec.fn = fn;
 	start_rec.arg = arg;
-	start_rec.vecbase = vecbase;
 
 	z_mp_stack_top = Z_THREAD_STACK_BUFFER(stack) + sz;
 
@@ -379,13 +282,13 @@ void idc_isr(void *param)
 }
 
 /* Fallback stub for external SOF code */
-int cavs_idc_smp_init(const struct device *dev)
+__imr int cavs_idc_smp_init(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 	return 0;
 }
 
-void soc_idc_init(void)
+__imr void soc_idc_init(void)
 {
 	IRQ_CONNECT(DT_IRQN(DT_NODELABEL(idc)), 0, idc_isr, NULL, 0);
 
@@ -423,7 +326,7 @@ void soc_idc_init(void)
  *
  * @param id CPU to start, in the range [1:CONFIG_MP_NUM_CPUS)
  */
-int soc_relaunch_cpu(int id)
+__imr int soc_relaunch_cpu(int id)
 {
 	int ret = 0;
 	k_spinlock_key_t k = k_spin_lock(&mplock);
@@ -464,7 +367,7 @@ int soc_relaunch_cpu(int id)
  * @param id CPU to halt, not current cpu or cpu 0
  * @return 0 on success, -EINVAL on error
  */
-int soc_halt_cpu(int id)
+__imr int soc_halt_cpu(int id)
 {
 	int ret = 0;
 	k_spinlock_key_t k = k_spin_lock(&mplock);
