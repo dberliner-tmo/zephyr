@@ -25,7 +25,6 @@ LOG_MODULE_DECLARE(pm_device, CONFIG_PM_DEVICE_LOG_LEVEL);
  * @param async Perform operation asynchronously.
  *
  * @retval 0 If device has been suspended or queued for suspend.
- * @retval -ENOSTUP If runtime PM is not enabled for the device.
  * @retval -EALREADY If device is already suspended (can only happen if get/put
  * calls are unbalanced).
  * @retval -errno Other negative errno, result of the action callback.
@@ -42,7 +41,6 @@ static int runtime_suspend(const struct device *dev, bool async)
 	}
 
 	if ((pm->flags & BIT(PM_DEVICE_FLAG_RUNTIME_ENABLED)) == 0U) {
-		ret = -ENOTSUP;
 		goto unlock;
 	}
 
@@ -109,7 +107,6 @@ int pm_device_runtime_get(const struct device *dev)
 	}
 
 	if ((pm->flags & BIT(PM_DEVICE_FLAG_RUNTIME_ENABLED)) == 0U) {
-		ret = -ENOTSUP;
 		goto unlock;
 	}
 
@@ -191,6 +188,14 @@ int pm_device_runtime_enable(const struct device *dev)
 		pm->dev = dev;
 		k_work_init_delayable(&pm->work, runtime_suspend_work);
 	}
+
+	if (pm->state == PM_DEVICE_STATE_ACTIVE) {
+		ret = pm->action_cb(pm->dev, PM_DEVICE_ACTION_SUSPEND);
+		if (ret < 0) {
+			goto unlock;
+		}
+	}
+
 	pm->state = PM_DEVICE_STATE_SUSPENDED;
 	pm->usage = 0U;
 
