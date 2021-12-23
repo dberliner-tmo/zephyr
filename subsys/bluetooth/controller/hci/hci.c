@@ -2858,7 +2858,7 @@ static void le_df_connectionless_iq_report(struct pdu_data *pdu_rx,
 }
 #endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
 
-#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX)
 static void le_df_set_conn_cte_tx_params(struct net_buf *buf,
 					 struct net_buf **evt)
 {
@@ -2879,7 +2879,7 @@ static void le_df_set_conn_cte_tx_params(struct net_buf *buf,
 	rp->status = status;
 	rp->handle = handle_le16;
 }
-#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RSP */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
 
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
 static void le_df_set_conn_cte_rx_params(struct net_buf *buf, struct net_buf **evt)
@@ -4238,11 +4238,11 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 	case BT_OCF(BT_HCI_OP_LE_READ_ANT_INFO):
 		le_df_read_ant_inf(cmd, evt);
 		break;
-#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_TX)
 	case BT_OCF(BT_HCI_OP_LE_SET_CONN_CTE_TX_PARAMS):
 		le_df_set_conn_cte_tx_params(cmd, evt);
 		break;
-#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RSP */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
 	case BT_OCF(BT_HCI_OP_LE_SET_CONN_CTE_RX_PARAMS):
 		le_df_set_conn_cte_rx_params(cmd, evt);
@@ -5562,7 +5562,7 @@ static void ext_adv_pdu_frag(uint8_t evt_type, uint8_t phy, uint8_t sec_phy,
 			     int8_t tx_pwr, int8_t rssi, uint16_t interval_le16,
 			     const struct pdu_adv_adi *adi,
 			     uint8_t data_len_max,
-			     uint8_t *const data_len_total,
+			     uint16_t *const data_len_total,
 			     uint8_t *const data_len,
 			     const uint8_t **const data, struct net_buf *buf,
 			     struct net_buf **const evt_buf)
@@ -5592,7 +5592,7 @@ static void ext_adv_data_frag(const struct node_rx_pdu *node_rx_data,
 			      int8_t tx_pwr, int8_t rssi,
 			      uint16_t interval_le16,
 			      const struct pdu_adv_adi *adi,
-			      uint8_t data_len_max, uint8_t data_len_total,
+			      uint8_t data_len_max, uint16_t data_len_total,
 			      uint8_t *const data_len,
 			      const uint8_t **const data, struct net_buf *buf,
 			      struct net_buf **const evt_buf)
@@ -5608,6 +5608,16 @@ static void ext_adv_data_frag(const struct node_rx_pdu *node_rx_data,
 
 		node_rx_data = node_rx_data->hdr.rx_ftr.extra;
 		if (node_rx_data) {
+			if (*data_len) {
+				ext_adv_pdu_frag(evt_type, phy, *sec_phy,
+						 adv_addr_type, adv_addr,
+						 direct_addr_type, direct_addr,
+						 rl_idx, tx_pwr, rssi,
+						 interval_le16, adi,
+						 data_len_max, &data_len_total,
+						 data_len, data, buf, evt_buf);
+			}
+
 			*data_len = ext_adv_data_get(node_rx_data, sec_phy,
 						     data);
 		}
@@ -5622,9 +5632,9 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 	struct node_rx_pdu *node_rx_scan_data = NULL;
 	struct node_rx_pdu *node_rx_data = NULL;
 	const struct pdu_adv_adi *adi = NULL;
+	uint16_t scan_data_len_total = 0U;
 	struct node_rx_pdu *node_rx_curr;
 	struct node_rx_pdu *node_rx_next;
-	uint8_t scan_data_len_total = 0U;
 	const uint8_t *scan_data = NULL;
 	uint8_t scan_data_status = 0U;
 	uint8_t direct_addr_type = 0U;
@@ -5865,7 +5875,11 @@ no_ext_hdr:
 			/* Detect the scan response in the list of node_rx */
 			if (node_rx_curr->hdr.rx_ftr.scan_rsp) {
 				node_rx_scan_data = node_rx_curr;
-				sec_phy_scan = sec_phy_curr;
+				if (sec_phy_curr) {
+					sec_phy_scan = sec_phy_curr;
+				} else {
+					sec_phy_scan = sec_phy;
+				}
 				scan_data_len = data_len_curr;
 				scan_data = data_curr;
 			}
@@ -6142,7 +6156,6 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 	if (!(event_mask & BT_EVT_MASK_LE_META_EVENT) ||
 	    (!(le_event_mask & BT_EVT_MASK_LE_PER_ADVERTISING_REPORT) &&
 	     !(le_event_mask & BT_EVT_MASK_LE_BIGINFO_ADV_REPORT))) {
-		node_rx_extra_list_release(node_rx->hdr.rx_ftr.extra);
 		return;
 	}
 
@@ -6214,10 +6227,6 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 
 		aux_ptr = (void *)ptr;
 		if (aux_ptr->phy > EXT_ADV_AUX_PHY_LE_CODED) {
-			struct node_rx_ftr *ftr;
-
-			ftr = &node_rx->hdr.rx_ftr;
-			node_rx_extra_list_release(ftr->extra);
 			return;
 		}
 

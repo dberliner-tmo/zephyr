@@ -323,6 +323,7 @@ uint8_t ll_sync_create_cancel(void **rx)
 
 uint8_t ll_sync_terminate(uint16_t handle)
 {
+	struct lll_scan_aux *lll_aux;
 	memq_link_t *link_sync_lost;
 	struct ll_sync_set *sync;
 	int err;
@@ -337,6 +338,17 @@ uint8_t ll_sync_terminate(uint16_t handle)
 	LL_ASSERT(err == 0 || err == -EALREADY);
 	if (err) {
 		return BT_HCI_ERR_CMD_DISALLOWED;
+	}
+
+	lll_aux = sync->lll.lll_aux;
+	if (lll_aux) {
+		struct ll_scan_aux_set *aux;
+
+		aux = HDR_LLL2ULL(lll_aux);
+		err = ull_scan_aux_stop(aux);
+		if (err) {
+			return BT_HCI_ERR_CMD_DISALLOWED;
+		}
 	}
 
 	link_sync_lost = sync->node_rx_lost.hdr.link;
@@ -476,6 +488,16 @@ void ull_sync_setup_addr_check(struct ll_scan_set *scan, uint8_t addr_type,
 		   !memcmp(addr, scan->per_scan.adv_addr, BDADDR_SIZE)) {
 		/* Address matched */
 		scan->per_scan.state = LL_SYNC_STATE_ADDR_MATCH;
+
+	/* Check identity address with explicitly supplied address */
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_PRIVACY) &&
+		   (rl_idx < ll_rl_size_get())) {
+		ll_rl_id_addr_get(rl_idx, &addr_type, addr);
+		if ((addr_type == scan->per_scan.adv_addr_type) &&
+		    !memcmp(addr, scan->per_scan.adv_addr, BDADDR_SIZE)) {
+			/* Identity address matched */
+			scan->per_scan.state = LL_SYNC_STATE_ADDR_MATCH;
+		}
 	}
 }
 

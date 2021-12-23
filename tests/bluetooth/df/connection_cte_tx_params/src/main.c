@@ -9,15 +9,12 @@
 
 #include <bt_common.h>
 
-#include <bt_conn_common.h>
-#include "test_cte_set_rx_params.h"
-#include "test_cte_req_enable.h"
+#include "test_set_conn_cte_tx_params.h"
 
 /*test case main entry*/
 void test_main(void)
 {
 	ut_bt_setup();
 
-	run_set_cte_rx_params_tests();
-	run_cte_request_enable_tests();
+	run_set_conn_cte_tx_params_tests();
 }
