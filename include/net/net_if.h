@@ -455,6 +455,8 @@ struct net_if_dev {
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
 	/** Indicate whether interface is offloaded at socket level. */
 	bool offloaded;
+	/** Socket handler for offload driver. */
+	int (*socket)(int family, int type, int proto);
 #endif /* CONFIG_NET_SOCKETS_OFFLOAD */
 };
 
@@ -669,9 +671,6 @@ static inline bool net_if_is_socket_offloaded(struct net_if *iface)
 	return false;
 #endif
 }
-
-/** Socket handler for offload driver. */
-int (*socket)(int family, int type, int proto);
 
 
 /**
