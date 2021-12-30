@@ -1679,7 +1679,7 @@ static void le_set_scan_enable(struct net_buf *buf, struct net_buf **evt)
 		if (0) {
 
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT)
-		} else if (dup_count <= DUP_FILTER_DISABLED) {
+		} else if (dup_count == DUP_FILTER_DISABLED) {
 			dup_scan = true;
 
 			/* All entries reset */
@@ -3396,7 +3396,7 @@ static void le_set_ext_scan_enable(struct net_buf *buf, struct net_buf **evt)
 		if (0) {
 
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT)
-		} else if (dup_count < 0) {
+		} else if (dup_count == DUP_FILTER_DISABLED) {
 			dup_scan = true;
 
 			/* All entries reset */
@@ -3473,7 +3473,7 @@ static void le_per_adv_create_sync(struct net_buf *buf, struct net_buf **evt)
 #if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
 	/* Initialize duplicate filtering */
 	if (cmd->options & BT_HCI_LE_PER_ADV_CREATE_SYNC_FP_FILTER_DUPLICATE) {
-		if (!dup_scan || (dup_count < 0)) {
+		if (!dup_scan || (dup_count == DUP_FILTER_DISABLED)) {
 			dup_count = 0;
 			dup_curr = 0U;
 		} else {
@@ -3550,6 +3550,22 @@ static void le_per_adv_recv_enable(struct net_buf *buf, struct net_buf **evt)
 	handle = sys_le16_to_cpu(cmd->handle);
 
 	status = ll_sync_recv_enable(handle, cmd->enable);
+
+#if CONFIG_BT_CTLR_DUP_FILTER_LEN > 0
+	if (!status) {
+		if (cmd->enable &
+		    BT_HCI_LE_SET_PER_ADV_RECV_ENABLE_FILTER_DUPLICATE) {
+			if (!dup_scan || (dup_count == DUP_FILTER_DISABLED)) {
+				dup_count = 0;
+				dup_curr = 0U;
+			} else {
+				/* FIXME: Invalidate dup_ext_adv_mode array entries */
+			}
+		} else if (!dup_scan) {
+			dup_count = DUP_FILTER_DISABLED;
+		}
+	}
+#endif
 
 	ccst = hci_cmd_complete(evt, sizeof(*ccst));
 	ccst->status = status;
@@ -6148,10 +6164,10 @@ static void le_per_adv_sync_report(struct pdu_data *pdu_data,
 	uint8_t data_len_max;
 	uint8_t *acad = NULL;
 	uint8_t hdr_buf_len;
-	bool dup = false;
 	uint8_t hdr_len;
 	uint8_t *ptr;
 	int8_t rssi;
+	bool accept;
 
 	if (!(event_mask & BT_EVT_MASK_LE_META_EVENT) ||
 	    (!(le_event_mask & BT_EVT_MASK_LE_PER_ADVERTISING_REPORT) &&
@@ -6276,23 +6292,30 @@ no_ext_hdr:
 		BT_DBG("    AD Data (%u): <todo>", data_len);
 	}
 
+	if (0) {
+
 #if (CONFIG_BT_CTLR_DUP_FILTER_LEN > 0) && \
 	defined(CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT)
-	if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT) && adi) {
+	} else if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT) &&
+		   adi) {
 		const struct ll_sync_set *sync = HDR_LLL2ULL(ftr->param);
 
 		/* FIXME: Use correct data status else chain PDU report will
 		 *        be filtered out.
 		 */
-		dup = sync->nodups && dup_found(PDU_ADV_TYPE_EXT_IND,
-						sync->peer_id_addr_type,
-						sync->peer_id_addr,
-						DUP_EXT_ADV_MODE_PERIODIC,
-						adi, 0U);
-	}
+		accept = ftr->sync_rx_enabled &&
+			 (!sync->nodups ||
+			  !dup_found(PDU_ADV_TYPE_EXT_IND,
+				     sync->peer_id_addr_type,
+				     sync->peer_id_addr,
+				     DUP_EXT_ADV_MODE_PERIODIC,
+				     adi, 0U));
 #endif /* CONFIG_BT_CTLR_DUP_FILTER_LEN > 0 &&
 	* CONFIG_BT_CTLR_SYNC_PERIODIC_ADI_SUPPORT
 	*/
+	} else {
+		accept = ftr->sync_rx_enabled;
+	}
 
 	data_len_max = ADV_REPORT_EVT_MAX_LEN -
 		       sizeof(struct bt_hci_evt_le_meta_event) -
@@ -6300,7 +6323,7 @@ no_ext_hdr:
 
 	evt_buf = buf;
 
-	if (!dup && (le_event_mask & BT_EVT_MASK_LE_PER_ADVERTISING_REPORT)) {
+	if ((le_event_mask & BT_EVT_MASK_LE_PER_ADVERTISING_REPORT) && accept) {
 		do {
 			struct bt_hci_evt_le_per_advertising_report *sep;
 			uint8_t data_len_frag;
