@@ -1,0 +1,19 @@
+identifier: pets_v2_dev_kit
+name: PETS_V2_DEV_KIT
+type: mcu
+arch: arm
+ram: 256
+flash: 1024
+toolchain:
+  - zephyr
+  - gnuarmemb
+  - xtools
+supported:
+  - i2c
+  - gpio
+  - nvs
+  - watchdog
+testing:
+  ignore_tags:
+    - net
+    - bluetooth

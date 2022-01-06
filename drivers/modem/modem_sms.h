@@ -39,4 +39,5 @@ typedef int (*recv_sms_func)(void *obj, struct sms_in  *sms);
 enum io_ctl {
 	SMS_SEND,
 	SMS_RECV,
+	GET_IPV4_CONF,
 };

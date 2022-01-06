@@ -1,0 +1,219 @@
+/*
+ * Copyright (c) 2017 Christian Taedcke
+ * Copyright (c) 2019 Lemonbeat GmbH
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+#include <silabs/efm32pg12b500f1024gl125.dtsi>
+
+/ {
+    model = "Silicon Labs EFM32PG STK3402A board";
+    compatible = "tmo,pets_v2";
+    
+    chosen {
+        zephyr,console = &leuart0;
+        zephyr,shell-uart = &leuart0;
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        watchdog0 = &wdog0;
+        watchdog1 = &wdog1;
+    };
+
+    /* These aliases are provided for compatibility with samples */
+    aliases {
+        led0 = &led0;
+        sw0 = &button0;
+        modem = &usart1;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+
+        led0: led_0 {
+            gpios = <&gpioc 7 0>;
+            label = "LED 0";
+        };
+    };
+
+    buttons {
+        compatible = "gpio-keys";
+        button0: button_0 {
+            gpios = <&gpiob 13 GPIO_ACTIVE_LOW>;
+            label = "User Push Button 0";
+        };
+    };
+};
+
+&cpu0 {
+    clock-frequency = <40000000>;
+};
+
+&usart0 {
+    current-speed = <115200>;
+    location-rx = <GECKO_LOCATION(0) GECKO_PORT_A GECKO_PIN(1)>;
+    location-tx = <GECKO_LOCATION(0) GECKO_PORT_A GECKO_PIN(0)>;
+    status = "okay";   
+    label = "UART_0";
+     
+    zoe_m8: zoe_m8 {
+        compatible = "ublox,zoem8";
+        ublox-safe-boot = <&gpiof 6 GPIO_ACTIVE_LOW>;        
+        ublox-time-pulse = <&gpiof 14 GPIO_ACTIVE_LOW>;
+        ublox-reset = <&gpiof 15 GPIO_ACTIVE_LOW>;
+        ublox-enable = <&gpiof 15 GPIO_ACTIVE_LOW>;
+        ublox-bkup-enable = <&gpiof 15 GPIO_ACTIVE_LOW>;
+        ublox-select = <&gpiof 15 GPIO_ACTIVE_LOW>;
+        status = "okay";
+    };
+};
+
+&usart1 {
+    current-speed   = <115200>;
+    location-rx     = <GECKO_LOCATION(20) GECKO_PORT_D GECKO_PIN(13)>;
+    location-tx     = <GECKO_LOCATION(20) GECKO_PORT_D GECKO_PIN(12)>;
+    location-cts    = <GECKO_LOCATION(15) GECKO_PORT_D GECKO_PIN(11)>;    
+    location-rts    = <GECKO_LOCATION(13) GECKO_PORT_D GECKO_PIN(10)>;
+    hw-flow-control; 
+    status = "okay";
+    
+    label = "UART_1";
+    
+    murata_1sc: murata_1sc {
+        compatible = "murata,1sc";
+        label = "murata,1sc";
+        mdm-wake-host-gpios = <&gpiod 14 GPIO_ACTIVE_HIGH>;        
+        mdm-wake-mdm-gpios = <&gpiod 15 GPIO_ACTIVE_HIGH>;
+        mdm-reset-gpios = <&gpiod 8 GPIO_ACTIVE_HIGH>;
+        status = "okay";
+    };
+};
+
+&usart2 {
+    compatible = "silabs,gecko-spi-usart";         
+
+    location-clk = <GECKO_LOCATION(3) GECKO_PORT_I GECKO_PIN(0)>;
+    location-rx = <GECKO_LOCATION(6) GECKO_PORT_I GECKO_PIN(2)>;
+    location-tx = <GECKO_LOCATION(8) GECKO_PORT_I GECKO_PIN(3)>;
+    cs-gpios = <&gpioi 1 GPIO_ACTIVE_LOW>;
+    status = "okay";
+    #address-cells = <1>;
+    #size-cells = <0>;
+    label = "SPI_0";
+
+    rs9116w@0 {
+        compatible = "redpinesignals,rs9116w";
+        reg = <0>;
+        label = "RS9116W_0";
+        spi-max-frequency = <15000000>;
+        // spi-max-frequency = <66>;
+        int-gpios = <&gpioa 6 GPIO_ACTIVE_HIGH>;   // input
+        reset-gpios = <&gpioa 9 GPIO_ACTIVE_LOW>;  // output should be initialized LOW
+        sleep-gpios = <&gpioa 5 GPIO_ACTIVE_LOW>;  // input
+        wake-gpios = <&gpioa 3 GPIO_ACTIVE_HIGH>;  // input
+        wakeo-gpios = <&gpioa 4 GPIO_ACTIVE_HIGH>; // output should be initialized HIGH
+        poc-gpios = <&gpioa 8 GPIO_ACTIVE_LOW>;    // output should be initialized LOW
+        status = "okay";
+    };
+};
+
+&leuart0 {
+    current-speed = <9600>;
+    location-rx = <GECKO_LOCATION(6) GECKO_PORT_B GECKO_PIN(12)>;
+    location-tx = <GECKO_LOCATION(6) GECKO_PORT_B GECKO_PIN(11)>;
+    status = "okay";
+};
+
+&i2c0 {
+    location-sda = <GECKO_LOCATION(15) GECKO_PORT_C GECKO_PIN(10)>;
+    location-scl = <GECKO_LOCATION(15) GECKO_PORT_C GECKO_PIN(11)>;
+    status = "okay";
+};
+
+&i2c1 {
+    location-sda = <GECKO_LOCATION(12) GECKO_PORT_J GECKO_PIN(15)>;
+    location-scl = <GECKO_LOCATION(10) GECKO_PORT_J GECKO_PIN(14)>;
+    status = "okay";
+
+    tmp108: tmp108@48 {
+        compatible = "ti,tmp108";
+        reg = <0x48 0x4>;
+        alert-gpios = <&gpiof 14 GPIO_ACTIVE_LOW>;
+        label = "TEMP_0";
+        status = "okay";
+    };
+        
+    bma400: bma400@14 {
+        compatible = "bosch,bma400";
+        reg = <0x14 0x4>;
+        status = "okay";
+    };
+};
+
+&rtcc0 {
+    prescaler = <1>;
+    status = "okay";
+};
+
+&gpio {
+    location-swo = <0>;
+    status = "okay";
+};
+
+&gpioa {
+    status = "okay";
+};
+
+&gpiob {
+    status = "okay";
+};
+
+&gpioc {
+    status = "okay";
+};
+
+&gpiod {
+    status = "okay";
+};
+
+&gpiof {
+    status = "okay";
+};
+
+&gpioi {
+    status = "okay";
+};
+
+&gpioj {
+    status = "okay";
+};
+
+&wdog0 {
+    status = "okay";
+};
+
+&wdog1 {
+    status = "okay";
+};
+
+
+&flash0 {
+
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        /* Set 6Kb of storage at the end of the 1024Kb of flash */
+        storage_partition: partition@fe800 {
+            label = "storage";
+            reg = <0x000fe800 0x00001800>;
+        };
+
+    };
+};
+
+&trng0 {
+        status = "okay";
+};

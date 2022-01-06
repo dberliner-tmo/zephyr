@@ -1,0 +1,22 @@
+
+description: murata 1sc modem
+
+compatible: "murata,1sc"
+
+include: uart-device.yaml
+
+properties:
+    label:
+      required: true
+
+    mdm-wake-host-gpios:
+      type: phandle-array
+      required: true
+
+    mdm-wake-mdm-gpios:
+      type: phandle-array
+      required: true
+
+    mdm-reset-gpios:
+      type: phandle-array
+      required: true
