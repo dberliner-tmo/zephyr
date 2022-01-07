@@ -91,11 +91,13 @@ static uint8_t vcs_client_notify_handler(struct bt_conn *conn,
 					 const void *data, uint16_t length)
 {
 	uint16_t handle = params->value_handle;
-	struct bt_vcs *vcs_inst = &vcs_insts[bt_conn_index(conn)];
+	struct bt_vcs *vcs_inst;
 
-	if (data == NULL) {
+	if (data == NULL || conn == NULL) {
 		return BT_GATT_ITER_CONTINUE;
 	}
+
+	vcs_inst = &vcs_insts[bt_conn_index(conn)];
 
 	if (handle == vcs_inst->cli.state_handle &&
 	    length == sizeof(vcs_inst->cli.state)) {
@@ -772,8 +774,8 @@ int bt_vcs_discover(struct bt_conn *conn, struct bt_vcs **vcs)
 	vcs_inst->cli.discover_params.func = primary_discover_func;
 	vcs_inst->cli.discover_params.uuid = &vcs_inst->cli.uuid.uuid;
 	vcs_inst->cli.discover_params.type = BT_GATT_DISCOVER_PRIMARY;
-	vcs_inst->cli.discover_params.start_handle = BT_ATT_FIRST_ATTTRIBUTE_HANDLE;
-	vcs_inst->cli.discover_params.end_handle = BT_ATT_LAST_ATTTRIBUTE_HANDLE;
+	vcs_inst->cli.discover_params.start_handle = BT_ATT_FIRST_ATTRIBUTE_HANDLE;
+	vcs_inst->cli.discover_params.end_handle = BT_ATT_LAST_ATTRIBUTE_HANDLE;
 
 	err = bt_gatt_discover(conn, &vcs_inst->cli.discover_params);
 	if (err == 0) {

@@ -24,6 +24,12 @@ extern "C" {
 /** Number of used VRING buffers. */
 #define VRING_COUNT	(2)
 
+<<<<<<< HEAD
+=======
+/** VRING alignment. */
+#define VRING_ALIGNMENT	CONFIG_IPC_SERVICE_STATIC_VRINGS_ALIGNMENT
+
+>>>>>>> tmo-main
 /**
  * @typedef ipc_notify_cb
  * @brief Define the notify callback.

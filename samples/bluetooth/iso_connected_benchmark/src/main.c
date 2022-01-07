@@ -59,7 +59,7 @@ static uint32_t iso_send_count;
 static struct bt_iso_cig *cig;
 
 NET_BUF_POOL_FIXED_DEFINE(tx_pool, 1, BT_ISO_SDU_BUF_SIZE(CONFIG_BT_ISO_TX_MTU),
-			  NULL);
+			   8, NULL);
 static uint8_t iso_data[CONFIG_BT_ISO_TX_MTU];
 
 static K_SEM_DEFINE(sem_adv, 0, 1);
@@ -86,7 +86,7 @@ static struct bt_iso_chan_qos iso_qos = {
 	.rx = &iso_rx_qos,
 };
 
-static struct bt_iso_cig_create_param cig_create_param = {
+static struct bt_iso_cig_param cig_create_param = {
 	.interval = DEFAULT_CIS_INTERVAL_US, /* in microseconds */
 	.latency = DEFAULT_CIS_LATENCY_MS, /* milliseconds */
 	.sca = BT_GAP_SCA_UNKNOWN,

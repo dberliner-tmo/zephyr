@@ -255,8 +255,8 @@ uint8_t ll_conn_update(uint16_t handle, uint8_t cmd, uint8_t status, uint16_t in
 		    uint16_t interval_max, uint16_t latency, uint16_t timeout);
 uint8_t ll_chm_update(uint8_t const *const chm);
 uint8_t ll_chm_get(uint16_t handle, uint8_t *const chm);
-uint8_t ll_enc_req_send(uint16_t handle, uint8_t const *const rand,
-		     uint8_t const *const ediv, uint8_t const *const ltk);
+uint8_t ll_enc_req_send(uint16_t handle, uint8_t const *const rand_num, uint8_t const *const ediv,
+			uint8_t const *const ltk);
 uint8_t ll_start_enc_req_send(uint16_t handle, uint8_t err_code,
 			   uint8_t const *const ltk);
 uint8_t ll_feature_req_send(uint16_t handle);
@@ -285,6 +285,9 @@ uint8_t ll_phy_get(uint16_t handle, uint8_t *const tx, uint8_t *const rx);
 uint8_t ll_phy_default_set(uint8_t tx, uint8_t rx);
 uint8_t ll_phy_req_send(uint16_t handle, uint8_t tx, uint8_t flags, uint8_t rx);
 
+uint8_t ll_set_min_used_chans(uint16_t handle, uint8_t const phys,
+		     uint8_t const min_used_chans);
+
 /* Direction Finding */
 /* Sets CTE transmission parameters for periodic advertising */
 uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
@@ -294,8 +297,7 @@ uint8_t ll_df_set_cl_cte_tx_params(uint8_t adv_handle, uint8_t cte_len,
 uint8_t ll_df_set_cl_cte_tx_enable(uint8_t adv_handle, uint8_t cte_enable);
 /* Provides information about antennae switching and sampling settings */
 uint8_t ll_df_set_conn_cte_tx_params(uint16_t handle, uint8_t cte_types,
-				     uint8_t switching_patterns_len,
-				     uint8_t *ant_id);
+				     uint8_t switching_patterns_len, const uint8_t *ant_id);
 /* Enables or disables CTE sampling in direction fingin connected mode. */
 uint8_t ll_df_set_conn_cte_rx_params(uint16_t handle, uint8_t sampling_enable,
 				     uint8_t slot_durations, uint8_t switch_pattern_len,

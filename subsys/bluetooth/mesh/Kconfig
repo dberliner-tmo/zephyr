@@ -69,6 +69,7 @@ config BT_MESH_PROVISIONER
 config BT_MESH_CDB
 	bool "Mesh Configuration Database [EXPERIMENTAL]"
 	default y if BT_MESH_PROVISIONER
+	select EXPERIMENTAL
 
 if BT_MESH_CDB
 
@@ -299,6 +300,26 @@ config BT_MESH_ADV_EXT
 	  advertising, but isn't supported by all controllers.
 
 endchoice
+
+if BT_MESH_ADV_EXT
+
+config BT_MESH_RELAY_ADV_SETS
+	int "Maximum of simultaneous relay message support"
+	default 0
+	range 0 BT_EXT_ADV_MAX_ADV_SET
+	depends on BT_MESH_RELAY
+	help
+	  Maximum of simultaneous relay message support. Requires controller support
+	  multiple advertising sets.
+
+config BT_MESH_ADV_EXT_GATT_SEPARATE
+	bool "Use a separate extended advertising set for GATT Server Advertising"
+	depends on BT_MESH_GATT_SERVER
+	help
+	  Use a separate extended advertising set for GATT Server Advertising,
+	  otherwise will be used a shared advertising set.
+
+endif # BT_MESH_ADV_EXT
 
 config BT_MESH_ADV_STACK_SIZE
 	int "Mesh advertiser thread stack size"
@@ -716,8 +737,6 @@ config BT_MESH_HEALTH_CLI
 config BT_MESH_SHELL
 	bool "Enable Bluetooth mesh shell"
 	select SHELL
-	depends on BT_MESH_CFG_CLI
-	depends on BT_MESH_HEALTH_CLI
 	help
 	  Activate shell module that provides Bluetooth mesh commands to
 	  the console.

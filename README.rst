@@ -1,3 +1,17 @@
+tmo-zephyr SDK Special Instructions
+***************
+In order to install the tmo-zephyr repo as the main west repository, the manifest file from suhwdev/firmware/tmo-zephyr needs to be used instead of the default in the zephyr github repository. In step 2 of the Zephyr `Getting Started Guide`_ under **Get Zephyr and install Python dependencies** this can be done by replacing:
+
+``west init ~/zephyrproject``
+
+with the following:
+
+``west init -m git@gitlab.com:tmobile/suhwdev/firmware/tmo-zephyr.git ~/zephyrproject``
+
+Everything else remains the same for the `Getting Started Guide`_.
+
+***************
+
 .. raw:: html
 
    <a href="https://www.zephyrproject.org">
@@ -8,9 +22,10 @@
 
    <a href="https://bestpractices.coreinfrastructure.org/projects/74"><img
    src="https://bestpractices.coreinfrastructure.org/projects/74/badge"></a>
-   <a href="https://buildkite.com/zephyr/zephyr">
+   <a
+   href="https://github.com/zephyrproject-rtos/zephyr/actions/workflows/twister.yaml?query=branch%3Amain">
    <img
-   src="https://badge.buildkite.com/f5bd0dc88306cee17c9b38e78d11bb74a6291e3f40e7d13f31.svg?branch=main"></a>
+   src="https://github.com/zephyrproject-rtos/zephyr/actions/workflows/twister.yaml/badge.svg?event=push"></a>
 
 
 The Zephyr Project is a scalable real-time operating system (RTOS) supporting
@@ -62,8 +77,7 @@ Here's a quick summary of resources to help you find your way around:
   `Zephyr Development mailing list`_. The other `Zephyr mailing list
   subgroups`_ have their own archives and sign-up pages.
 * **Nightly CI Build Status**: https://lists.zephyrproject.org/g/builds
-  The builds@lists.zephyrproject.org mailing list archives the CI
-  (buildkite) nightly build results.
+  The builds@lists.zephyrproject.org mailing list archives the CI nightly build results.
 * **Chat**: Real-time chat happens in Zephyr's Discord Server. Use
   this `Discord Invite`_ to register.
 * **Contributing**: see the `Contribution Guide`_

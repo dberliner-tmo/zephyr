@@ -128,7 +128,7 @@ void bt_hci_cmd_state_set_init(struct net_buf *buf,
  */
 #define CMD_BUF_SIZE MAX(BT_BUF_EVT_RX_SIZE, BT_BUF_CMD_TX_SIZE)
 NET_BUF_POOL_FIXED_DEFINE(hci_cmd_pool, CONFIG_BT_BUF_CMD_TX_COUNT,
-			  CMD_BUF_SIZE, NULL);
+			  CMD_BUF_SIZE, 8, NULL);
 
 struct event_handler {
 	uint8_t event;
@@ -299,7 +299,6 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 	k_sem_init(&sync_sem, 0, 1);
 	cmd(buf)->sync = &sync_sem;
 
-	/* Make sure the buffer stays around until the command completes */
 	net_buf_put(&bt_dev.cmd_tx_queue, net_buf_ref(buf));
 
 	err = k_sem_take(&sync_sem, HCI_CMD_TIMEOUT);
@@ -363,7 +362,7 @@ uint8_t bt_get_phy(uint8_t hci_phy)
 	}
 }
 
-#if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_ISO)
+#if defined(CONFIG_BT_CONN_TX)
 static void hci_num_completed_packets(struct net_buf *buf)
 {
 	struct bt_hci_evt_num_completed_packets *evt = (void *)buf->data;
@@ -423,7 +422,7 @@ static void hci_num_completed_packets(struct net_buf *buf)
 		bt_conn_unref(conn);
 	}
 }
-#endif /* CONFIG_BT_CONN || CONFIG_BT_ISO */
+#endif /* CONFIG_BT_CONN_TX */
 
 #if defined(CONFIG_BT_CONN)
 static void hci_acl(struct net_buf *buf)
@@ -2198,7 +2197,7 @@ static const struct event_handler meta_events[] = {
 #endif /* defined(CONFIG_BT_PER_ADV_SYNC) */
 #endif /* defined(CONFIG_BT_EXT_ADV) */
 #if defined(CONFIG_BT_ISO_UNICAST)
-	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED, hci_le_cis_estabilished,
+	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_ESTABLISHED, hci_le_cis_established,
 		      sizeof(struct bt_hci_evt_le_cis_established)),
 	EVENT_HANDLER(BT_HCI_EVT_LE_CIS_REQ, hci_le_cis_req,
 		      sizeof(struct bt_hci_evt_le_cis_req)),
@@ -2226,6 +2225,10 @@ static const struct event_handler meta_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_LE_CONNECTIONLESS_IQ_REPORT, bt_hci_le_df_connectionless_iq_report,
 		      sizeof(struct bt_hci_evt_le_connectionless_iq_report)),
 #endif /* CONFIG_BT_DF_CONNECTIONLESS_CTE_RX */
+#if defined(CONFIG_BT_DF_CONNECTION_CTE_RX)
+	EVENT_HANDLER(BT_HCI_EVT_LE_CONNECTION_IQ_REPORT, bt_hci_le_df_connection_iq_report,
+		      sizeof(struct bt_hci_evt_le_connection_iq_report)),
+#endif /* CONFIG_BT_DF_CONNECTION_CTE_RX */
 };
 
 static void hci_le_meta_event(struct net_buf *buf)
@@ -2965,7 +2968,8 @@ static int le_init(void)
 
 #if IS_ENABLED(CONFIG_BT_DF)
 	if (BT_FEAT_LE_CONNECTIONLESS_CTE_TX(bt_dev.le.features) ||
-	    BT_FEAT_LE_CONNECTIONLESS_CTE_RX(bt_dev.le.features)) {
+	    BT_FEAT_LE_CONNECTIONLESS_CTE_RX(bt_dev.le.features) ||
+	    BT_FEAT_LE_RX_CTE(bt_dev.le.features)) {
 		err = le_df_init();
 		if (err) {
 			return err;
@@ -3292,6 +3296,12 @@ static int hci_init(void)
 		BT_ERR("Non-BR/EDR controller detected");
 		return -EIO;
 	}
+#if defined(CONFIG_BT_CONN)
+	else if (!bt_dev.le.acl_mtu) {
+		BT_ERR("ACL BR/EDR buffers not initialized");
+		return -EIO;
+	}
+#endif
 
 	err = set_event_mask();
 	if (err) {
@@ -3334,11 +3344,11 @@ static const struct event_handler prio_events[] = {
 	EVENT_HANDLER(BT_HCI_EVT_DISCONN_COMPLETE, hci_disconn_complete_prio,
 		      sizeof(struct bt_hci_evt_disconn_complete)),
 #endif /* CONFIG_BT_CONN */
-#if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_ISO)
+#if defined(CONFIG_BT_CONN_TX)
 	EVENT_HANDLER(BT_HCI_EVT_NUM_COMPLETED_PACKETS,
 		      hci_num_completed_packets,
 		      sizeof(struct bt_hci_evt_num_completed_packets)),
-#endif /* CONFIG_BT_CONN || CONFIG_BT_ISO */
+#endif /* CONFIG_BT_CONN_TX */
 };
 
 void hci_event_prio(struct net_buf *buf)
@@ -3565,7 +3575,7 @@ int bt_enable(bt_ready_cb_t cb)
 		if (err) {
 			return err;
 		}
-	} else {
+	} else if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
 		err = bt_set_name(CONFIG_BT_DEVICE_NAME);
 		if (err) {
 			BT_WARN("Failed to set device name (%d)", err);

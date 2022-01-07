@@ -772,8 +772,8 @@ static int i2c_transaction(const struct device *dev)
 static int i2c_it8xxx2_transfer(const struct device *dev, struct i2c_msg *msgs,
 		uint8_t num_msgs, uint16_t addr)
 {
-	struct i2c_it8xxx2_data *data = DEV_DATA(dev);
-	const struct i2c_it8xxx2_config *config = DEV_CFG(dev);
+	struct i2c_it8xxx2_data *data;
+	const struct i2c_it8xxx2_config *config;
 	int res;
 
 	/* Check for NULL pointers */
@@ -785,6 +785,9 @@ static int i2c_it8xxx2_transfer(const struct device *dev, struct i2c_msg *msgs,
 		LOG_ERR("Device message is NULL");
 		return -EINVAL;
 	}
+
+	data = DEV_DATA(dev);
+	config = DEV_CFG(dev);
 
 	/* Lock mutex of i2c controller */
 	k_mutex_lock(&data->mutex, K_FOREVER);
@@ -1062,8 +1065,8 @@ static const struct i2c_driver_api i2c_it8xxx2_driver_api = {
 	\
 	static struct i2c_it8xxx2_data i2c_it8xxx2_data_##idx;	               \
 	\
-	DEVICE_DT_INST_DEFINE(idx,				               \
-			&i2c_it8xxx2_init, NULL,			       \
+	I2C_DEVICE_DT_INST_DEFINE(idx,				               \
+			i2c_it8xxx2_init, NULL,				       \
 			&i2c_it8xxx2_data_##idx,	                       \
 			&i2c_it8xxx2_cfg_##idx, POST_KERNEL,		       \
 			CONFIG_KERNEL_INIT_PRIORITY_DEVICE,                    \

@@ -333,6 +333,12 @@ void net_process_tx_packet(struct net_pkt *pkt)
 
 void net_if_queue_tx(struct net_if *iface, struct net_pkt *pkt)
 {
+	if (!net_pkt_filter_send_ok(pkt)) {
+		/* silently drop the packet */
+		net_pkt_unref(pkt);
+		return;
+	}
+
 	uint8_t prio = net_pkt_priority(pkt);
 	uint8_t tc = net_tx_priority2tc(prio);
 
@@ -2157,7 +2163,7 @@ static struct net_if_ipv6_prefix *ipv6_prefix_find(struct net_if *iface,
 	}
 
 	for (i = 0; i < NET_IF_MAX_IPV6_PREFIX; i++) {
-		if (!ipv6->unicast[i].is_used) {
+		if (!ipv6->prefix[i].is_used) {
 			continue;
 		}
 

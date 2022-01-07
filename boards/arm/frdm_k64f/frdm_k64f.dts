@@ -23,7 +23,7 @@
 		zephyr,console = &uart0;
 		zephyr,shell-uart = &uart0;
 		zephyr,uart-pipe = &uart0;
-		zephyr,can-primary = &flexcan0;
+		zephyr,canbus = &flexcan0;
 	};
 
 	leds {
@@ -241,7 +241,8 @@ zephyr_udc0: &usbotg {
 		     &RMII0_MDC_PTB1>;
 	pinctrl-names = "default";
 	ptp {
-		status = "okay";
+		/* Be aware that PTC16 and PTC17 are also used for uart3 */
+		status = "disabled";
 		pinctrl-0 = <&ENET0_1588_TMR0_PTC16 &ENET0_1588_TMR1_PTC17
 			     &ENET0_1588_TMR2_PTC18>;
 		pinctrl-names = "default";

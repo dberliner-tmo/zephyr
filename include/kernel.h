@@ -21,10 +21,6 @@
 #include <toolchain.h>
 #include <tracing/tracing_macros.h>
 
-#ifdef CONFIG_THREAD_RUNTIME_STATS_USE_TIMING_FUNCTIONS
-#include <timing/timing.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1292,6 +1288,7 @@ struct k_timer {
 	/* user-specific data, also used to support legacy features */
 	void *user_data;
 
+	SYS_PORT_TRACING_TRACKING_FIELD(k_timer)
 };
 
 #define Z_TIMER_INITIALIZER(obj, expiry, stop) \
@@ -1640,6 +1637,27 @@ static inline uint32_t k_cycle_get_32(void)
 }
 
 /**
+ * @brief Read the 64-bit hardware clock.
+ *
+ * This routine returns the current time in 64-bits, as measured by the
+ * system's hardware clock, if available.
+ *
+ * @see CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER
+ *
+ * @return Current hardware clock up-counter (in cycles).
+ */
+static inline uint64_t k_cycle_get_64(void)
+{
+	if (!IS_ENABLED(CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER)) {
+		__ASSERT(0, "64-bit cycle counter not enabled on this platform. "
+			    "See CONFIG_TIMER_HAS_64BIT_CYCLE_COUNTER");
+		return 0;
+	}
+
+	return arch_k_cycle_get_64();
+}
+
+/**
  * @}
  */
 
@@ -1653,6 +1671,8 @@ struct k_queue {
 	_wait_q_t wait_q;
 
 	_POLL_EVENT;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_queue)
 };
 
 #define Z_QUEUE_INITIALIZER(obj) \
@@ -2531,6 +2551,8 @@ struct k_stack {
 	stack_data_t *base, *next, *top;
 
 	uint8_t flags;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_stack)
 };
 
 #define Z_STACK_INITIALIZER(obj, stack_buffer, stack_num_entries) \
@@ -2688,6 +2710,8 @@ struct k_mutex {
 
 	/** Original thread priority */
 	int owner_orig_prio;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_mutex)
 };
 
 /**
@@ -2870,6 +2894,8 @@ struct k_sem {
 	unsigned int limit;
 
 	_POLL_EVENT;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_sem)
 
 };
 
@@ -4311,6 +4337,8 @@ struct k_msgq {
 
 	/** Message queue */
 	uint8_t flags;
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_msgq)
 };
 /**
  * @cond INTERNAL_HIDDEN
@@ -4600,6 +4628,7 @@ struct k_mbox {
 	_wait_q_t rx_msg_queue;
 	struct k_spinlock lock;
 
+	SYS_PORT_TRACING_TRACKING_FIELD(k_mbox)
 };
 /**
  * @cond INTERNAL_HIDDEN
@@ -4739,6 +4768,8 @@ struct k_pipe {
 	} wait_q;			/** Wait queue */
 
 	uint8_t	       flags;		/**< Flags */
+
+	SYS_PORT_TRACING_TRACKING_FIELD(k_pipe)
 };
 
 /**
@@ -4912,6 +4943,7 @@ struct k_mem_slab {
 	uint32_t max_used;
 #endif
 
+	SYS_PORT_TRACING_TRACKING_FIELD(k_mem_slab)
 };
 
 #define Z_MEM_SLAB_INITIALIZER(obj, slab_buffer, slab_block_size, \
@@ -4938,7 +4970,7 @@ struct k_mem_slab {
  */
 
 /**
- * @brief Statically define and initialize a memory slab.
+ * @brief Statically define and initialize a memory slab in a public (non-static) scope.
  *
  * The memory slab's buffer contains @a slab_num_blocks memory blocks
  * that are @a slab_block_size bytes long. The buffer is aligned to a
@@ -4951,6 +4983,10 @@ struct k_mem_slab {
  *
  * @code extern struct k_mem_slab <name>; @endcode
  *
+ * @note This macro cannot be used together with a static keyword.
+ *       If such a use-case is desired, use @ref K_MEM_SLAB_DEFINE_STATIC
+ *       instead.
+ *
  * @param name Name of the memory slab.
  * @param slab_block_size Size of each memory block (in bytes).
  * @param slab_num_blocks Number memory blocks.
@@ -4961,6 +4997,28 @@ struct k_mem_slab {
 	   __aligned(WB_UP(slab_align)) \
 	   _k_mem_slab_buf_##name[(slab_num_blocks) * WB_UP(slab_block_size)]; \
 	STRUCT_SECTION_ITERABLE(k_mem_slab, name) = \
+		Z_MEM_SLAB_INITIALIZER(name, _k_mem_slab_buf_##name, \
+					WB_UP(slab_block_size), slab_num_blocks)
+
+/**
+ * @brief Statically define and initialize a memory slab in a private (static) scope.
+ *
+ * The memory slab's buffer contains @a slab_num_blocks memory blocks
+ * that are @a slab_block_size bytes long. The buffer is aligned to a
+ * @a slab_align -byte boundary. To ensure that each memory block is similarly
+ * aligned to this boundary, @a slab_block_size must also be a multiple of
+ * @a slab_align.
+ *
+ * @param name Name of the memory slab.
+ * @param slab_block_size Size of each memory block (in bytes).
+ * @param slab_num_blocks Number memory blocks.
+ * @param slab_align Alignment of the memory slab's buffer (power of 2).
+ */
+#define K_MEM_SLAB_DEFINE_STATIC(name, slab_block_size, slab_num_blocks, slab_align) \
+	static char __noinit_named(k_mem_slab_buf_##name) \
+	   __aligned(WB_UP(slab_align)) \
+	   _k_mem_slab_buf_##name[(slab_num_blocks) * WB_UP(slab_block_size)]; \
+	static STRUCT_SECTION_ITERABLE(k_mem_slab, name) = \
 		Z_MEM_SLAB_INITIALIZER(name, _k_mem_slab_buf_##name, \
 					WB_UP(slab_block_size), slab_num_blocks)
 
@@ -5827,8 +5885,6 @@ __syscall int k_float_disable(struct k_thread *thread);
  */
 __syscall int k_float_enable(struct k_thread *thread, unsigned int options);
 
-#ifdef CONFIG_THREAD_RUNTIME_STATS
-
 /**
  * @brief Get the runtime statistics of a thread
  *
@@ -5846,8 +5902,6 @@ int k_thread_runtime_stats_get(k_tid_t thread,
  * @return -EINVAL if null pointers, otherwise 0
  */
 int k_thread_runtime_stats_all_get(k_thread_runtime_stats_t *stats);
-
-#endif
 
 #ifdef __cplusplus
 }

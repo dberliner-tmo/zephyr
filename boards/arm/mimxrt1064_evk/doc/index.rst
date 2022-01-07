@@ -114,6 +114,8 @@ features:
 | UART      | on-chip    | serial port-polling;                |
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
+| ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
 | ENET      | on-chip    | ethernet                            |
 +-----------+------------+-------------------------------------+
 | USB       | on-chip    | USB device                          |
@@ -121,6 +123,8 @@ features:
 | CAN       | on-chip    | can                                 |
 +-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
++-----------+------------+-------------------------------------+
+| GPT       | on-chip    | gpt                                 |
 +-----------+------------+-------------------------------------+
 | DMA       | on-chip    | dma                                 |
 +-----------+------------+-------------------------------------+
@@ -263,6 +267,14 @@ The MIMXRT1064 SoC has four pairs of pinmux/gpio controllers.
 +---------------+-----------------+---------------------------+
 | GPIO_SD_B1_11 | FLEXSPIA_DATA03 | QSPI Flash                |
 +---------------+-----------------+---------------------------+
+| GPIO_AD_B1_11 | ADC             | ADC1 Channel 0            |
++---------------+-----------------+---------------------------+
+| GPIO_AD_B1_10 | ADC             | ADC1 Channel 1            |
++---------------+-----------------+---------------------------+
+
+.. note::
+        In order to use the SPI peripheral on this board, resistors R278, R279,
+        R280 and R281 must be populated with zero ohm resistors
 
 .. note::
         In order to use the SPI peripheral on this board, resistors R278, R279,
@@ -271,8 +283,8 @@ The MIMXRT1064 SoC has four pairs of pinmux/gpio controllers.
 System Clock
 ============
 
-The MIMXRT1064 SoC is configured to use the 24 MHz external oscillator on the
-board with the on-chip PLL to generate a 600 MHz core clock.
+The MIMXRT1064 SoC is configured to use the 32 KHz low frequency oscillator on
+the board as a source for the GPT timer to generate a system clock.
 
 Serial Port
 ===========

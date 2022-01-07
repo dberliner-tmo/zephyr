@@ -393,7 +393,7 @@ int bt_mesh_proxy_identity_enable(void)
 	}
 
 	if (bt_mesh_subnet_foreach(node_id_start)) {
-		bt_mesh_adv_update();
+		bt_mesh_adv_gatt_update();
 	}
 
 	return 0;
@@ -455,8 +455,8 @@ static int node_id_adv(struct bt_mesh_subnet *sub, int32_t duration)
 
 	memcpy(proxy_svc_data + 3, tmp + 8, 8);
 
-	err = bt_mesh_adv_start(&fast_adv_param, duration, node_id_ad,
-				ARRAY_SIZE(node_id_ad), NULL, 0);
+	err = bt_mesh_adv_gatt_start(&fast_adv_param, duration, node_id_ad,
+				     ARRAY_SIZE(node_id_ad), NULL, 0);
 	if (err) {
 		BT_WARN("Failed to advertise using Node ID (err %d)", err);
 		return err;
@@ -482,8 +482,8 @@ static int net_id_adv(struct bt_mesh_subnet *sub, int32_t duration)
 
 	memcpy(proxy_svc_data + 3, sub->keys[SUBNET_KEY_TX_IDX(sub)].net_id, 8);
 
-	err = bt_mesh_adv_start(&slow_adv_param, duration, net_id_ad,
-				ARRAY_SIZE(net_id_ad), NULL, 0);
+	err = bt_mesh_adv_gatt_start(&slow_adv_param, duration, net_id_ad,
+				     ARRAY_SIZE(net_id_ad), NULL, 0);
 	if (err) {
 		BT_WARN("Failed to advertise using Network ID (err %d)", err);
 		return err;
@@ -553,6 +553,7 @@ static int gatt_proxy_advertise(struct bt_mesh_subnet *sub)
 	int32_t remaining = SYS_FOREVER_MS;
 	int subnet_count;
 	int err = -EBUSY;
+	bool planned = false;
 
 	BT_DBG("");
 
@@ -585,29 +586,44 @@ static int gatt_proxy_advertise(struct bt_mesh_subnet *sub)
 		}
 	}
 
-	if (sub->node_id == BT_MESH_NODE_IDENTITY_RUNNING) {
-		uint32_t active = k_uptime_get_32() - sub->node_id_start;
+	for (int i = 0; i < subnet_count; i++) {
 
-		if (active < NODE_ID_TIMEOUT) {
-			remaining = NODE_ID_TIMEOUT - active;
-			BT_DBG("Node ID active for %u ms, %d ms remaining",
-			       active, remaining);
-			err = node_id_adv(sub, remaining);
-		} else {
-			bt_mesh_proxy_identity_stop(sub);
-			BT_DBG("Node ID stopped");
+		if (sub->node_id == BT_MESH_NODE_IDENTITY_RUNNING) {
+			uint32_t active = k_uptime_get_32() - sub->node_id_start;
+
+			if (active < NODE_ID_TIMEOUT) {
+				remaining = NODE_ID_TIMEOUT - active;
+				BT_DBG("Node ID active for %u ms, %d ms remaining",
+				       active, remaining);
+				err = node_id_adv(sub, remaining);
+				planned = true;
+			} else {
+				bt_mesh_proxy_identity_stop(sub);
+				BT_DBG("Node ID stopped");
+			}
 		}
+
+		/* Mesh Profile Specification v1.0.1, section 7.2.2.2.1
+		 * A node that does not support the Proxy feature or
+		 * has the GATT Proxy state disabled shall not advertise with Network ID.
+		 */
+		if (sub->node_id == BT_MESH_NODE_IDENTITY_STOPPED &&
+		    bt_mesh_gatt_proxy_get() == BT_MESH_FEATURE_ENABLED) {
+			err = net_id_adv(sub, remaining);
+			planned = true;
+		}
+
+		beacon_sub = bt_mesh_subnet_next(sub);
+
+		if (planned) {
+			BT_DBG("Advertising %d ms for net_idx 0x%04x", remaining, sub->net_idx);
+			return err;
+		}
+
+		sub = beacon_sub;
 	}
 
-	if (sub->node_id == BT_MESH_NODE_IDENTITY_STOPPED) {
-		err = net_id_adv(sub, remaining);
-	}
-
-	BT_DBG("Advertising %d ms for net_idx 0x%04x", remaining, sub->net_idx);
-
-	beacon_sub = bt_mesh_subnet_next(beacon_sub);
-
-	return err;
+	return 0;
 }
 
 static void subnet_evt(struct bt_mesh_subnet *sub, enum bt_mesh_key_evt evt)
@@ -861,7 +877,7 @@ static void gatt_connected(struct bt_conn *conn, uint8_t err)
 
 	/* Try to re-enable advertising in case it's possible */
 	if (conn_count < CONFIG_BT_MAX_CONN) {
-		bt_mesh_adv_update();
+		bt_mesh_adv_gatt_update();
 	}
 }
 
@@ -880,10 +896,9 @@ static void gatt_disconnected(struct bt_conn *conn, uint8_t reason)
 		return;
 	}
 
-	conn_count--;
-
 	client = find_client(conn);
 	if (client->cli) {
+		conn_count--;
 		bt_mesh_proxy_role_cleanup(client->cli);
 		client->cli = NULL;
 	}

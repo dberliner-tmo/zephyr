@@ -116,6 +116,10 @@ features:
 +-----------+------------+-------------------------------------+
 | USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
+| ADC       | on-chip    | adc                                 |
++-----------+------------+-------------------------------------+
+| GPT       | on-chip    | gpt                                 |
++-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
 
@@ -158,6 +162,8 @@ The MIMXRT1050 SoC has five pairs of pinmux/gpio controllers.
 | GPIO_AD_B1_06 | LPUART3_TX      | UART BT HCI               |
 +---------------+-----------------+---------------------------+
 | GPIO_AD_B1_07 | LPUART3_RX      | UART BT HCI               |
++---------------+-----------------+---------------------------+
+| GPIO_AD_B1_11 | ADC             | ADC1 channel 0            |
 +---------------+-----------------+---------------------------+
 | WAKEUP        | GPIO            | SW0                       |
 +---------------+-----------------+---------------------------+
@@ -251,8 +257,8 @@ The MIMXRT1050 SoC has five pairs of pinmux/gpio controllers.
 System Clock
 ============
 
-The MIMXRT1050 SoC is configured to use the 24 MHz external oscillator on the
-board with the on-chip PLL to generate a 600 MHz core clock.
+The MIMXRT1050 SoC is configured to use the 32 KHz low frequency oscillator on
+the board as a source for the GPT timer to generate a system clock.
 
 Serial Port
 ===========

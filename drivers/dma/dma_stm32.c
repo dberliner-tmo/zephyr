@@ -265,8 +265,10 @@ DMA_STM32_EXPORT_API int dma_stm32_configure(const struct device *dev,
 	struct dma_stm32_stream *stream =
 				&dev_config->streams[id - STREAM_OFFSET];
 	DMA_TypeDef *dma = (DMA_TypeDef *)dev_config->base;
-	LL_DMA_InitTypeDef DMA_InitStruct = {0};
+	LL_DMA_InitTypeDef DMA_InitStruct;
 	int ret;
+
+	LL_DMA_StructInit(&DMA_InitStruct);
 
 	/* give channel from index 0 */
 	id = id - STREAM_OFFSET;
@@ -682,7 +684,7 @@ DEVICE_DT_INST_DEFINE(index,						\
 		    &dma_stm32_init,					\
 		    NULL,						\
 		    &dma_stm32_data_##index, &dma_stm32_config_##index,	\
-		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,	\
+		    PRE_KERNEL_1, CONFIG_DMA_INIT_PRIORITY,		\
 		    &dma_funcs)
 
 #ifdef CONFIG_DMA_STM32_SHARED_IRQS

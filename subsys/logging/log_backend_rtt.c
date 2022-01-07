@@ -235,13 +235,13 @@ static int data_out_overwrite_mode(uint8_t *data, size_t length, void *ctx)
 {
 	if (!is_sync_mode()) {
 		RTT_LOCK();
-	}
+		SEGGER_RTT_WriteWithOverwriteNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
+						    data, length);
 
-	SEGGER_RTT_WriteWithOverwriteNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
-					    data, length);
-
-	if (!is_sync_mode()) {
 		RTT_UNLOCK();
+	} else {
+		SEGGER_RTT_WriteWithOverwriteNoLock(CONFIG_LOG_BACKEND_RTT_BUFFER,
+						    data, length);
 	}
 
 	return length;
@@ -319,6 +319,8 @@ static void process(const struct log_backend *const backend,
 		union log_msg2_generic *msg)
 {
 	uint32_t flags = log_backend_std_get_flags();
+
+	flags |= IS_ENABLED(CONFIG_LOG_BACKEND_RTT_SYST_ENABLE) ? LOG_OUTPUT_FLAG_FORMAT_SYST : 0;
 
 	log_output_msg2_process(&log_output_rtt, &msg->log, flags);
 }

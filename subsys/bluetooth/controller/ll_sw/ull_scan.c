@@ -18,6 +18,7 @@
 #include "util/mem.h"
 #include "util/memq.h"
 #include "util/mayfly.h"
+#include "util/dbuf.h"
 
 #include "ticker/ticker.h"
 
@@ -34,11 +35,11 @@
 #include "lll_filter.h"
 
 #include "ull_adv_types.h"
-#include "ull_scan_types.h"
 #include "ull_filter.h"
 
 #include "ull_internal.h"
 #include "ull_adv_internal.h"
+#include "ull_scan_types.h"
 #include "ull_scan_internal.h"
 #include "ull_sched_internal.h"
 
@@ -489,19 +490,15 @@ void ull_scan_done(struct node_rx_event_done *done)
 		return;
 	}
 
-	rx_hdr = (void *)scan->node_rx_scan_term;
-	if (!rx_hdr) {
-		/* Prevent generation if another scan instance already did so.
-		 */
-		return;
-	}
+	/* Prevent duplicate terminate event generation */
+	lll->duration_reload = 0U;
 
 	handle = ull_scan_handle_get(scan);
 	LL_ASSERT(handle < BT_CTLR_SCAN_SET);
 
 #if defined(CONFIG_BT_CTLR_PHY_CODED)
-	/* Reset the singular node rx buffer, so that it does not get used if
-	 * ull_scan_done get called by the other scan instance.
+	/* Prevent duplicate terminate event if ull_scan_done get called by
+	 * the other scan instance.
 	 */
 	struct ll_scan_set *scan_other;
 
@@ -510,9 +507,10 @@ void ull_scan_done(struct node_rx_event_done *done)
 	} else {
 		scan_other = ull_scan_set_get(SCAN_HANDLE_1M);
 	}
-	scan_other->node_rx_scan_term = NULL;
+	scan_other->lll.duration_reload = 0U;
 #endif /* CONFIG_BT_CTLR_PHY_CODED */
 
+	rx_hdr = (void *)scan->node_rx_scan_term;
 	rx_hdr->type = NODE_RX_TYPE_EXT_SCAN_TERMINATE;
 	rx_hdr->handle = handle;
 

@@ -7,6 +7,7 @@
 
 #include <drivers/i2c.h>
 #include <dt-bindings/i2c/i2c.h>
+#include <pm/device.h>
 #include <nrfx_twi.h>
 
 #include <logging/log.h>
@@ -225,8 +226,8 @@ static int init_twi(const struct device *dev)
 }
 
 #ifdef CONFIG_PM_DEVICE
-static int twi_nrfx_pm_control(const struct device *dev,
-			       enum pm_device_action action)
+static int twi_nrfx_pm_action(const struct device *dev,
+			      enum pm_device_action action)
 {
 	int ret = 0;
 
@@ -285,9 +286,10 @@ static int twi_nrfx_pm_control(const struct device *dev,
 			.frequency = I2C_FREQUENCY(idx),		       \
 		}							       \
 	};								       \
-	DEVICE_DT_DEFINE(I2C(idx),					       \
+	PM_DEVICE_DT_DEFINE(I2C(idx), twi_nrfx_pm_action);		       \
+	I2C_DEVICE_DT_DEFINE(I2C(idx),					       \
 		      twi_##idx##_init,					       \
-		      twi_nrfx_pm_control,				       \
+		      PM_DEVICE_DT_REF(I2C(idx)),			       \
 		      &twi_##idx##_data,				       \
 		      &twi_##idx##z_config,				       \
 		      POST_KERNEL,					       \

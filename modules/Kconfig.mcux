@@ -10,6 +10,11 @@ config HAS_MCUX
 
 if HAS_MCUX
 
+config HAS_MCUX_12B1MSPS_SAR
+	bool
+	help
+	  Set if the 12B1MSPS SAR ADC module is present in the SoC.
+
 config HAS_MCUX_ADC12
 	bool
 	help
@@ -130,6 +135,11 @@ config HAS_MCUX_GPT
 	bool
 	help
 	  Set if the general purpose timer (GPT) module is present in the SoC.
+
+config HAS_MCUX_SNVS
+	bool
+	help
+	  Set if the SNVS module is present on the SoC.
 
 config HAS_MCUX_RNG
 	bool
@@ -298,5 +308,10 @@ config HAS_MCUX_CTIMER
 	bool
 	help
 	  Set if the CTIMER module is present in the SoC.
+
+config HAS_MCUX_I2S
+	bool
+	help
+	  Set if the I2S/SAI module is present on the Soc
 
 endif # HAS_MCUX
