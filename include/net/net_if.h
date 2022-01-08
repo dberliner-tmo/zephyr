@@ -672,7 +672,6 @@ static inline bool net_if_is_socket_offloaded(struct net_if *iface)
 #endif
 }
 
-
 /**
  * @brief Get an network interface's link address
  *

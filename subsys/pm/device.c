@@ -6,10 +6,7 @@
 
 #include <device.h>
 #include <pm/device.h>
-<<<<<<< HEAD
-=======
 #include <pm/device_runtime.h>
->>>>>>> tmo-main
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(pm_device, CONFIG_PM_DEVICE_LOG_LEVEL);
@@ -35,21 +32,12 @@ int pm_device_state_set(const struct device *dev,
 	enum pm_device_action action;
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-		return -ENOSYS;
-	}
-
-	if (atomic_test_bit(&pm->flags, PM_DEVICE_FLAG_TRANSITIONING)) {
-		return -EBUSY;
-=======
 	if (pm == NULL) {
 		return -ENOSYS;
 	}
 
 	if (pm_device_state_is_locked(dev)) {
 		return -EPERM;
->>>>>>> tmo-main
 	}
 
 	switch (state) {
@@ -69,21 +57,13 @@ int pm_device_state_set(const struct device *dev,
 
 		action = PM_DEVICE_ACTION_RESUME;
 		break;
-<<<<<<< HEAD
-	case PM_DEVICE_STATE_LOW_POWER:
-=======
 	case PM_DEVICE_STATE_OFF:
->>>>>>> tmo-main
 		if (pm->state == state) {
 			return -EALREADY;
 		}
 
 		action = PM_DEVICE_ACTION_TURN_OFF;
 		break;
-<<<<<<< HEAD
-	case PM_DEVICE_STATE_OFF:
-		if (pm->state == state) {
-=======
 	default:
 		return -ENOTSUP;
 	}
@@ -118,7 +98,6 @@ int pm_device_action_run(const struct device *dev,
 		__fallthrough;
 	case PM_DEVICE_ACTION_SUSPEND:
 		if (pm->state == PM_DEVICE_STATE_SUSPENDED) {
->>>>>>> tmo-main
 			return -EALREADY;
 		} else if (pm->state == PM_DEVICE_STATE_OFF) {
 			return -ENOTSUP;
@@ -159,11 +138,7 @@ int pm_device_state_get(const struct device *dev,
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return -ENOSYS;
 	}
 
@@ -182,11 +157,7 @@ bool pm_device_is_any_busy(void)
 	for (const struct device *dev = devs; dev < (devs + devc); dev++) {
 		struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-		if (pm->action_cb == NULL) {
-=======
 		if (pm == NULL) {
->>>>>>> tmo-main
 			continue;
 		}
 
@@ -202,11 +173,7 @@ bool pm_device_is_busy(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return false;
 	}
 
@@ -217,11 +184,7 @@ void pm_device_busy_set(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return;
 	}
 
@@ -232,11 +195,7 @@ void pm_device_busy_clear(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return;
 	}
 
@@ -247,19 +206,11 @@ bool pm_device_wakeup_enable(struct device *dev, bool enable)
 {
 	atomic_val_t flags, new_flags;
 	struct pm_device *pm = dev->pm;
-<<<<<<< HEAD
-
-	if (pm->action_cb == NULL) {
-		return false;
-	}
-
-=======
 
 	if (pm == NULL) {
 		return false;
 	}
 
->>>>>>> tmo-main
 	flags =	atomic_get(&pm->flags);
 
 	if ((flags & BIT(PM_DEVICE_FLAG_WS_CAPABLE)) == 0U) {
@@ -280,38 +231,23 @@ bool pm_device_wakeup_is_enabled(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return false;
 	}
 
 	return atomic_test_bit(&pm->flags,
-<<<<<<< HEAD
-			       PM_DEVICE_FLAGS_WS_ENABLED);
-=======
 			       PM_DEVICE_FLAG_WS_ENABLED);
->>>>>>> tmo-main
 }
 
 bool pm_device_wakeup_is_capable(const struct device *dev)
 {
 	struct pm_device *pm = dev->pm;
 
-<<<<<<< HEAD
-	if (pm->action_cb == NULL) {
-=======
 	if (pm == NULL) {
->>>>>>> tmo-main
 		return false;
 	}
 
 	return atomic_test_bit(&pm->flags,
-<<<<<<< HEAD
-			       PM_DEVICE_FLAGS_WS_CAPABLE);
-=======
 			       PM_DEVICE_FLAG_WS_CAPABLE);
 }
 
@@ -343,5 +279,4 @@ bool pm_device_state_is_locked(const struct device *dev)
 
 	return atomic_test_bit(&pm->flags,
 			       PM_DEVICE_FLAG_STATE_LOCKED);
->>>>>>> tmo-main
 }

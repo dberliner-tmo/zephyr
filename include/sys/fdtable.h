@@ -123,16 +123,8 @@ static inline int z_fdtable_call_ioctl(const struct fd_op_vtable *vtable, void *
 {
 	va_list args;
 	int res;
-/**
- * fake 2 args
- */
-	int old_req = request;	//remove me
-	request = 3;	//remove me
+
 	va_start(args, request);
-	request = old_req;	//remove me
-	printk("z_fdtable_call_ioctl, request= %ld\n", request);	//remove me
-//	printk("z_fdtable_call_ioctl, phn: %s\n", va_arg(args, char*));
-//	printk("z_fdtable_call_ioctl, msg: %s\n", va_arg(args, char*));
 	res = vtable->ioctl(obj, request, args);
 	va_end(args);
 

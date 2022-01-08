@@ -464,6 +464,7 @@ static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
 		}							\
 	} while (false)
 
+#ifdef CONFIG_WIFI
 static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_scan_result *entry =
@@ -706,7 +707,6 @@ static int cmd_wifi_scan(const struct shell *shell, size_t argc, char *argv[])
 	return 0;
 }
 
-
 SHELL_STATIC_SUBCMD_SET_CREATE(tmo_wifi_commands,
 	SHELL_CMD(connect, NULL,
 		  "<iface> \"<SSID>\"\n<channel number (optional), "
@@ -737,6 +737,8 @@ static int tmo_wifi_shell_init(const struct device *unused)
 }
 
 SYS_INIT(tmo_wifi_shell_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
+#endif
+
 /** */
 
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_tmo,
@@ -744,7 +746,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_tmo,
     SHELL_CMD(sockets, NULL, "list open sockets", cmd_tmo_list_socks),
 	SHELL_CMD(tcp, &tmo_tcp_sub, "Send/recv TCP packets", NULL),
     SHELL_CMD(udp, &tmo_udp_sub, "Send/recv UDP packets", NULL),
+#ifdef CONFIG_WIFI
     SHELL_CMD(wifi, &tmo_wifi_commands, "WiFi Controls", NULL),
+#endif
 	// SHELL_CMD(ping, NULL, "ping [-c count] [-i interval ms] <host>",  cmd_tmo_ping),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );

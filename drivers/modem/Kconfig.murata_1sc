@@ -2,7 +2,7 @@
 
 config MODEM_MURATA_1SC
 	bool "Enable murata modem driver"
-	select MODEM
+#	select MODEM
 	select MODEM_CONTEXT
 	select MODEM_CMD_HANDLER
 	select MODEM_IFACE_UART

@@ -814,12 +814,10 @@ static inline bool device_is_ready(const struct device *dev)
 /*
  * Utility macro to define and initialize the device state.
  *
->>>>>>> tmo-main
  * @param node_id Devicetree node id of the device.
  * @param dev_name Device name.
- * @param pm_action_cb Device PM action callback.
  */
-#define Z_DEVICE_STATE_DEFINE(node_id, dev_name, pm_action_cb)		\
+#define Z_DEVICE_STATE_DEFINE(node_id, dev_name)			\
 	static struct device_state Z_DEVICE_STATE_NAME(dev_name)	\
 	__attribute__((__section__(".z_devstate")));
 
