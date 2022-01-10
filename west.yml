@@ -232,6 +232,12 @@ manifest:
       path: modules/tee/tf-m/psa-arch-tests
       groups:
         - tee
+    - name: wiseconnect
+      path:  modules/hal/silabs_wiseconnect
+      url: git@gitlab.com:tmobile/suhwdev/firmware/zephyr-wiseconnect.git
+      revision: 63520c7006e2dc57c46fc017c9ef304b7ffe76ef
+      groups:
+        - hal
     - name: zscilib
       path: modules/lib/zscilib
       revision: 12bfe3f0a9fcbfe3edab7eabc9678b6c62875d34
