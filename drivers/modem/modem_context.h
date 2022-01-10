@@ -7,6 +7,7 @@
 
 /*
  * Copyright (c) 2019 Foundries.io
+ * Copyright (c) 2021 John Lange <john@y2038.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,9 +27,9 @@ extern "C" {
 #endif
 
 #define MODEM_PIN(name_, pin_, flags_) { \
-	.dev_name = name_, \
-	.pin = pin_, \
-	.init_flags = flags_ \
+		.dev_name = name_,	 \
+		.pin = pin_,		 \
+		.init_flags = flags_	 \
 }
 
 struct modem_iface {
@@ -68,12 +69,12 @@ struct modem_context {
 	char *data_iccid;
 #endif
 #if defined(CONFIG_MODEM_CELL_INFO)
-	int   data_operator;
-	int   data_lac;
-	int   data_cellid;
+	int data_operator;
+	int data_lac;
+	int data_cellid;
 #endif
 	int   *data_rssi;
-	bool  is_automatic_oper;
+	bool is_automatic_oper;
 	/* pin config */
 	struct modem_pin *pins;
 	size_t pins_len;
@@ -84,9 +85,9 @@ struct modem_context {
 	/* command handler config */
 	struct modem_cmd_handler cmd_handler;
 
-        /* SMS functions */
-        send_sms_func send_sms;
-        recv_sms_func recv_sms;
+	/* SMS functions */
+	send_sms_func_t send_sms;
+	recv_sms_func_t recv_sms;
 
 	/* driver data */
 	void *driver_data;

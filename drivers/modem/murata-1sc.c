@@ -122,7 +122,7 @@ struct murata_1sc_data {
         /* SMS message support */
         int sms_index;
         struct sms_in *sms;
-        recv_sms_func recv_sms;
+        recv_sms_func_t recv_sms;
 }; 
 
 /* Modem pins - Power, Reset & others. */
