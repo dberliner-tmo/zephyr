@@ -1,0 +1,15 @@
+/*
+ * Copyright 2021 Dennis Ruffer <daruffer@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#include "test_common.dtsi"
+
+/ {
+	regulator {
+		enable-gpios = <&gpioa 3 GPIO_ACTIVE_HIGH>;
+	};
+	resources {
+		check-gpios = <&gpioa 4 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
+	};
+};

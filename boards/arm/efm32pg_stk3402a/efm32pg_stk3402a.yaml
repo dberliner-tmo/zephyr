@@ -13,7 +13,9 @@ supported:
   - gpio
   - nvs
   - watchdog
+  - counter
 testing:
+  default: true
   ignore_tags:
     - net
     - bluetooth
