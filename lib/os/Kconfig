@@ -51,11 +51,19 @@ config SYS_HEAP_RUNTIME_STATS
 	help
 	  Gather system heap runtime statistics.
 
-config HEAP_LISTENER
-	bool "Enable heap listener"
+config SYS_HEAP_LISTENER
+	bool "Enable sys_heap event notifications"
+	select HEAP_LISTENER
 	help
-	  Enable API for registering and notifying listeners of certain
-	  events related to a heap usage, such as the heap resize.
+	  This allows application to listen for sys_heap events,
+	  such as memory allocation and de-allocation.
+
+config HEAP_LISTENER
+	bool
+	help
+	  Hidden option to enable API for registering and notifying
+	  listeners of certain events related to a heap usage,
+	  such as the heap resize.
 
 choice
 	prompt "Supported heap sizes"
