@@ -711,7 +711,7 @@ static void socket_close(struct modem_socket *sock)
 /* Func: send sms message
  * Desc: Send a sms message
  */
-static int send_sms_msg(void *obj, struct sms_out *sms) 
+static int send_sms_msg(void *obj, const struct sms_out *sms)
 {
 	printk("send sms\n");
 	char buf[sizeof(struct sms_out) + 12] = {0};
@@ -829,11 +829,14 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
 /* Func: recieve sms messages
  * Desc: recieve sms messages 
  */
-static int recv_sms_msg(void *obj, struct sms_in *sms)
+static int recv_sms_msg(void *obj, struct sms_in *sms, k_timeout_t timeout)
 {
 	char buf[64] = {0};
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+        // TODO: use timeout parameter to wait for sms msg
+	ARG_UNUSED(timeout);
 
 	/* Modem command response to sms receive the data. */
 	struct modem_cmd data_cmd[] = {
@@ -1255,7 +1258,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
                 break;
 
 	case SMS_RECV:
-		ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *));
+		ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *), (k_timeout_t)va_arg(args, k_timeout_t));
 	        va_end(args);
                 break;
 
