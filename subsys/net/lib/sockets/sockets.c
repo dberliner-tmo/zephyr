@@ -221,8 +221,7 @@ int z_impl_zsock_socket(int family, int type, int proto)
 
 		if (!sock_family->is_supported(family, type, proto)) {
 			continue;
-		}
-		printk("z-impl-sock, dev_name: %s\n", sock_family->dev_name);
+		}		
 
 		return sock_family->handler(family, type, proto);
 	}
