@@ -27,7 +27,6 @@ LOG_MODULE_REGISTER(net_shell, LOG_LEVEL_DBG);
 #include <net/ppp.h>
 #include <net/net_stats.h>
 #include <sys/printk.h>
-#include <net/socket.h>
 
 #include "route.h"
 #include "icmpv6.h"
@@ -3482,82 +3481,6 @@ static void address_lifetime_cb(struct net_if *iface, void *user_data)
 }
 #endif /* CONFIG_NET_NATIVE_IPV6 */
 
-static int cmd_net_ipv4_sip(const struct shell *shell, size_t argc, char *argv[])
-{
-	struct in_addr myip;
-	bool ret;
-	if (!IS_ENABLED(CONFIG_NET_IPV4)) {
-		return -ENOEXEC;
-	}
-
-	inet_pton(AF_INET, argv[1], &myip);
-	ret = net_if_ipv4_addr_add_by_index(1, &myip, NET_ADDR_MANUAL, 0);
-	__ASSERT(ret, "Failed to set ipv4 address!");
-	return ret;
-}
-
-static int cmd_net_ipv4_sg(const struct shell *shell, size_t argc, char *argv[])
-{
-	struct in_addr gw_addr;
-	bool ret;
-	if (!IS_ENABLED(CONFIG_NET_IPV4)) {
-		return -ENOEXEC;
-	}
-
-	inet_pton(AF_INET, argv[1], &gw_addr);
-	ret = net_if_ipv4_set_gw_by_index(1, &gw_addr);
-	__ASSERT(ret, "Failed to set gateway address!");
-	return ret;
-}
-
-static int cmd_net_ipv4_nmask(const struct shell *shell, size_t argc, char *argv[])
-{
-	struct in_addr nmask;
-	bool ret;
-	if (!IS_ENABLED(CONFIG_NET_IPV4)) {
-		return -ENOEXEC;
-	}
-
-	inet_pton(AF_INET, argv[1], &nmask);
-	ret = net_if_ipv4_set_netmask_by_index(1, &nmask);
-	__ASSERT(ret, "Failed to set gateway address!");
-	return ret;
-}
-
-#include "../../../drivers/modem/modem_context.h"
-struct aggr_ipv4_addr {
-	struct in_addr ip;
-	struct in_addr gw;
-	struct in_addr nmask;
-};
-
-static int cmd_net_ipv4_get_from_mdm(const struct shell *shell, size_t argc, char *argv[])
-{
-	int ret;
-    int sock;
-    struct aggr_ipv4_addr a_ipv4_addr;
-	if (!IS_ENABLED(CONFIG_NET_IPV4)) {
-		return -ENOEXEC;
-	}
-
-	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	ret = fcntl(sock, GET_IPV4_CONF, &a_ipv4_addr);
-	ret = net_if_ipv4_addr_add_by_index(1, &a_ipv4_addr.ip, NET_ADDR_AUTOCONF, 0);
-	ret = net_if_ipv4_set_netmask_by_index(1, &a_ipv4_addr.nmask);
-	ret = net_if_ipv4_set_gw_by_index(1, &a_ipv4_addr.gw);
-
-	return ret;
-}
-
-static int cmd_net_ipv4(const struct shell *shell, size_t argc, char *argv[])
-{
-	ARG_UNUSED(shell);
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-	return 0;
-}
-
-
 static int cmd_net_ipv6(const struct shell *shell, size_t argc, char *argv[])
 {
 #if defined(CONFIG_NET_NATIVE_IPV6)
@@ -4502,7 +4425,6 @@ static int cmd_net_ppp_status(const struct shell *shell, size_t argc,
 #endif
 	return 0;
 }
-
 
 static int cmd_net_route(const struct shell *shell, size_t argc, char *argv[])
 {
@@ -6086,23 +6008,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_udp,
 	SHELL_SUBCMD_SET_END
 );
 
-SHELL_STATIC_SUBCMD_SET_CREATE(net_cmd_ipv4,
-	SHELL_CMD(sip, NULL,
-		  "'cmd_net_ipv4_sip <ipaddr>' set ipv4 ipaddr.",
-		  cmd_net_ipv4_sip),
-	SHELL_CMD(sg, NULL,
-		  "'cmd_net_ipv4_sg <gateway>' set ipv4 gateway.",
-		  cmd_net_ipv4_sg),
-	SHELL_CMD(nmask, NULL,
-		  "'cmd_net_ipv4_nmask <netmask>' set ipv4 netmask.",
-		  cmd_net_ipv4_nmask),
-	SHELL_CMD(get_ipgwmsk, NULL,
-		  "'cmd_net_ipv4_get_from_mdm' get ipv4 config.",
-		  cmd_net_ipv4_get_from_mdm),
-	SHELL_SUBCMD_SET_END
-);
-
-
 SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(allocs, NULL, "Print network memory allocations.",
 		  cmd_net_allocs),
@@ -6121,9 +6026,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(net_commands,
 	SHELL_CMD(iface, &net_cmd_iface,
 		  "Print information about network interfaces.",
 		  cmd_net_iface),
-	SHELL_CMD(ipv4, &net_cmd_ipv4,
-		  "set ipv4 configuration.",
-		  cmd_net_ipv4),
 	SHELL_CMD(ipv6, NULL,
 		  "Print information about IPv6 specific information and "
 		  "configuration.",

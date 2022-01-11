@@ -270,10 +270,6 @@ The MIMXRT1060 SoC has five pairs of pinmux/gpio controllers.
         In order to use the SPI peripheral on this board, resistors R278, R279,
         R280 and R281 must be populated with zero ohm resistors.
 
-.. note::
-        In order to use the SPI peripheral on this board, resistors R278, R279,
-        R280 and R281 must be populated with zero ohm resistors.
-
 System Clock
 ============
 

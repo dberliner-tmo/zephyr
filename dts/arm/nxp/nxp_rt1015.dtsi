@@ -36,7 +36,3 @@
 		/delete-node/ adc@400C8000;
 	};
 };
-
-/* RT1015 only has two LPSPI blocks */
-/delete-node/ &lpspi3;
-/delete-node/ &lpspi4;

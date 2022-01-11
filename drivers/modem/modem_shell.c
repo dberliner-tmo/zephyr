@@ -15,7 +15,6 @@
 
 #include <zephyr.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <device.h>
 #include <shell/shell.h>
