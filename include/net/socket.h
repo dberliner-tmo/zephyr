@@ -954,24 +954,6 @@ static inline int zsock_socket_ext(int family, int type, int proto, struct net_i
 
 #include <syscalls/socket.h>
 
-#if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-/**
- * @brief Create a network socket on a specific socket offload interface
- *
- * @param iface Target interface
- * @return int
- */
-static inline int zsock_socket_ext(int family, int type, int proto, struct net_if *iface)
-{
-  if (iface->if_dev->offloaded && iface->if_dev->socket != NULL){
-    return iface->if_dev->socket(family, type, proto);
-  } else {
-    errno = EINVAL;
-    return -1;
-  }
-}
-#endif
-
 /**
  * @}
  */
