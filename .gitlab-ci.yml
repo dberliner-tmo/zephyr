@@ -93,7 +93,7 @@ compliance:
     - pip3 install west
     - west init -l . || true
     - west manifest --validate
-    - west update -vv
+    - west update -v
     - ls -la
     - git log  --pretty=oneline | head -n 10 || true
     - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_BRANCH}..
@@ -164,7 +164,7 @@ twister:
     # - pip3 install pytest colorama pyyaml ply mock tabulate pyserial psutil anytree
     - west init -l . || true
     - west manifest --validate
-    - west update -vv
+    - west update -v
     - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
 
 git-merge:
