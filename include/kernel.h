@@ -4925,6 +4925,35 @@ __syscall size_t k_pipe_read_avail(struct k_pipe *pipe);
  */
 __syscall size_t k_pipe_write_avail(struct k_pipe *pipe);
 
+/**
+ * @brief Flush the pipe of write data
+ *
+ * This routine flushes the pipe. Flushing the pipe is equivalent to reading
+ * both all the data in the pipe's buffer and all the data waiting to go into
+ * that pipe into a large temporary buffer and discarding the buffer. Any
+ * writers that were previously pended become unpended.
+ *
+ * @param pipe Address of the pipe.
+ *
+ * @return N/A
+ */
+__syscall void k_pipe_flush(struct k_pipe *pipe);
+
+/**
+ * @brief Flush the pipe's internal buffer
+ *
+ * This routine flushes the pipe's internal buffer. This is equivalent to
+ * reading up to N bytes from the pipe (where N is the size of the pipe's
+ * buffer) into a temporary buffer and then discarding that buffer. If there
+ * were writers previously pending, then some may unpend as they try to fill
+ * up the pipe's emptied buffer.
+ *
+ * @param pipe Address of the pipe.
+ *
+ * @return N/A
+ */
+__syscall void k_pipe_buffer_flush(struct k_pipe *pipe);
+
 /** @} */
 
 /**
@@ -5902,6 +5931,50 @@ int k_thread_runtime_stats_get(k_tid_t thread,
  * @return -EINVAL if null pointers, otherwise 0
  */
 int k_thread_runtime_stats_all_get(k_thread_runtime_stats_t *stats);
+
+/**
+ * @brief Enable gathering of runtime statistics for specified thread
+ *
+ * This routine enables the gathering of runtime statistics for the specified
+ * thread.
+ *
+ * @param thread ID of thread
+ * @return -EINVAL if invalid thread ID, otherwise 0
+ */
+extern int k_thread_runtime_stats_enable(k_tid_t thread);
+
+/**
+ * @brief Disable gathering of runtime statistics for specified thread
+ *
+ * This routine disables the gathering of runtime statistics for the specified
+ * thread.
+ *
+ * @param thread ID of thread
+ * @return -EINVAL if invalid thread ID, otherwise 0
+ */
+extern int k_thread_runtime_stats_disable(k_tid_t thread);
+
+/**
+ * @brief Enable gathering of system runtime statistics
+ *
+ * This routine enables the gathering of system runtime statistics. Note that
+ * it does not affect the gathering of similar statistics for individual
+ * threads.
+ *
+ * @return N/A
+ */
+extern void k_sys_runtime_stats_enable(void);
+
+/**
+ * @brief Disable gathering of system runtime statistics
+ *
+ * This routine disables the gathering of system runtime statistics. Note that
+ * it does not affect the gathering of similar statistics for individual
+ * threads.
+ *
+ * @return N/A
+ */
+extern void k_sys_runtime_stats_disable(void);
 
 #ifdef __cplusplus
 }
