@@ -10,6 +10,8 @@
 #include <string.h>
 #include <posix/time.h>
 #include <sys/timeutil.h>
+#include <drivers/counter.h>
+#include <em_rtcc.h>
 
 #define HELP_NONE      "[none]"
 #define HELP_DATE_SET  "[Y-m-d] <H:M:S>"
@@ -138,6 +140,9 @@ static int get_h_m_s(const struct shell *shell, struct tm *tm, char *time_str)
 
 static int cmd_date_set(const struct shell *shell, size_t argc, char **argv)
 {
+	uint32_t time = 0;    ///< RTCC_TIME - Time of Day Register
+	uint32_t date = 0;    ///< RTCC_DATE - Date Register
+	uint32_t year = 0;
 	struct timespec tp;
 	struct tm tm;
 	int ret;
@@ -181,6 +186,24 @@ static int cmd_date_set(const struct shell *shell, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
+	time |= bin2bcd(tm.tm_sec) << _RTCC_TIME_SECU_SHIFT;
+	time |= bin2bcd(tm.tm_min) << _RTCC_TIME_MINU_SHIFT;
+	time |= bin2bcd(tm.tm_hour) << _RTCC_TIME_HOURU_SHIFT;
+	date |= tm.tm_wday << _RTCC_DATE_DAYOW_SHIFT;
+	date |= bin2bcd(tm.tm_mday) << _RTCC_DATE_DAYOMU_SHIFT;
+	date |= bin2bcd(tm.tm_mon) << _RTCC_DATE_MONTHU_SHIFT;
+
+	year = tm.tm_year;
+	if (year >= 100) {
+	    RTCC->RET[0].REG = year / 100;
+		year %= 100;
+	}
+
+	date |= bin2bcd(year) << _RTCC_DATE_YEARU_SHIFT;
+
+	RTCC_TimeSet(time);
+	RTCC_DateSet(date);
+
 	date_print(shell, &tm);
 
 	return 0;
@@ -200,9 +223,52 @@ static int cmd_date_get(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+#if defined(CONFIG_COUNTER_GECKO_RTCC)
+#define TIMER DT_LABEL(DT_NODELABEL(rtcc0))
+#endif
+#if defined(CONFIG_TIME_GECKO_RTCC)
+#define TIMER DT_LABEL(DT_NODELABEL(rtcc0))
+#endif
+
+static int cmd_counter_get(const struct shell *shell, size_t argc, char **argv)
+{
+#ifdef TIMER
+	const struct device *counter_dev;
+	uint32_t ticks;
+	struct tm tm;
+	time_t time;
+	int err;
+
+	counter_dev = device_get_binding(TIMER);
+	if (counter_dev == NULL) {
+		shell_error(shell, "Counter not found");
+		return -EINVAL;
+	}
+
+	err = counter_get_value(counter_dev, &ticks);
+	if (err) {
+		shell_error(shell, "Failed to read counter value (err %d)", err);
+		return -EINVAL;
+	}
+
+#if defined(CONFIG_TIME_GECKO_RTCC)
+	time = (time_t)ticks;
+	gmtime_r(&time, &tm);
+
+	date_print(shell, &tm);
+#else
+	shell_print(shell, "%u", ticks);
+#endif
+#else
+	shell_print(shell, "Counter not defined");
+#endif
+	return 0;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_date,
 	SHELL_CMD(set, NULL, HELP_DATE_SET, cmd_date_set),
 	SHELL_CMD(get, NULL, HELP_NONE, cmd_date_get),
+	SHELL_CMD(counter, NULL, HELP_NONE, cmd_counter_get),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 

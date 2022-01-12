@@ -1,0 +1,8 @@
+common:
+  filter: TOOLCHAIN_HAS_NEWLIB == 1
+sample:
+  name: Maxim DS3231 RTC
+tests:
+  sample.basic.gecko_rtcc:
+    build_only: false
+    platform_allow: efm32pg_stk3402a pets_v2_dev_kit
