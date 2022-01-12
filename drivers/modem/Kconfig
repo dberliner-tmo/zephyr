@@ -139,6 +139,13 @@ config MODEM_CELL_INFO
 	help
 	  Query for numerical operator id, location area code and cell id.
 
+config SMS_TEXT_SIZE
+	int "Modem SMS Text Size"
+	default 168
+	help
+	  This is used for Modem SMS message
+
+
 source "drivers/modem/Kconfig.ublox-sara-r4"
 source "drivers/modem/Kconfig.quectel-bg9x"
 source "drivers/modem/Kconfig.wncm14a2a"
@@ -146,5 +153,7 @@ source "drivers/modem/Kconfig.gsm"
 
 source "drivers/modem/Kconfig.hl7800"
 source "drivers/modem/Kconfig.simcom-sim7080"
+
+source "drivers/modem/Kconfig.murata_1sc"
 
 endif # MODEM

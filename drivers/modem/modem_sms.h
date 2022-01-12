@@ -45,6 +45,7 @@ typedef int (*recv_sms_func_t)(void *obj,       struct sms_in  *sms, k_timeout_t
 enum io_ctl {
 	SMS_SEND,
 	SMS_RECV,
+	GET_IPV4_CONF,
 };
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_MODEM_MODEM_SMS_H_ */

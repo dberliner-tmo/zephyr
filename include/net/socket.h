@@ -930,12 +930,6 @@ struct net_socket_register {
 
 /** @endcond */
 
-#ifdef __cplusplus
-}
-#endif
-
-#include <syscalls/socket.h>
-
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
 /**
  * @brief Create a network socket on a specific socket offload interface
@@ -953,6 +947,12 @@ static inline int zsock_socket_ext(int family, int type, int proto, struct net_i
   }
 }
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#include <syscalls/socket.h>
 
 /**
  * @}

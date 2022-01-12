@@ -211,8 +211,9 @@ static int zsock_socket_internal(int family, int type, int proto)
 int z_impl_zsock_socket(int family, int type, int proto)
 {
 	STRUCT_SECTION_FOREACH(net_socket_register, sock_family) {
+		printk("famly= %d, sock->fam= %d\n", family, sock_family->family);
 		if (sock_family->family != family &&
-		    sock_family->family != AF_UNSPEC) {
+                    sock_family->family != AF_UNSPEC) {
 			continue;
 		}
 
@@ -1298,6 +1299,7 @@ int z_impl_zsock_fcntl(int sock, int cmd, int flags)
 	}
 
 	(void)k_mutex_lock(lock, K_FOREVER);
+	printk("z_impl_zsock_fcntl, cmd = 0x%x, flags = 0x%x\n", cmd, flags);	//remove me
 
 	ret = z_fdtable_call_ioctl((const struct fd_op_vtable *)vtable,
 				   obj, cmd, flags);
