@@ -1,0 +1,36 @@
+# RS9116W WiFi driver options
+
+# Copyright (c) 2022 T-Mobile USA, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+config WIFI_RS9116W
+	bool "RS9116W WiFi driver support"
+	select WISECONNECT
+	select WISECONNECT_WIFI
+	select NET_L2_WIFI_MGMT
+	select WIFI_OFFLOAD
+	select NET_OFFLOAD
+	select NET_SOCKETS
+	imply NET_SOCKETS_OFFLOAD
+	help
+	  Enables WiFi support for the Redpine Signals RS9116W combined
+	  WiFi Bluetooth module utilizing the the WiSeConnect SAPI
+
+if WIFI_RS9116W
+
+config RSI_WIFI_DEBUG
+	bool "WiFi driver debug"
+	default y
+	help
+	  WiFi driver debug
+
+endif # WIFI_RS9116W
+
+if NET_SOCKETS_OFFLOAD && NET_SOCKETS_SOCKOPT_TLS
+
+config RSI_NEED_BAS64
+	bool
+	default y
+	select BASE64
+
+endif
