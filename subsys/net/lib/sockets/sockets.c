@@ -213,7 +213,7 @@ int z_impl_zsock_socket(int family, int type, int proto)
 	STRUCT_SECTION_FOREACH(net_socket_register, sock_family) {
 		printk("famly= %d, sock->fam= %d\n", family, sock_family->family);
 		if (sock_family->family != family &&
-		    family != AF_UNSPEC) {
+                    sock_family->family != AF_UNSPEC) {
 			continue;
 		}
 
@@ -221,7 +221,7 @@ int z_impl_zsock_socket(int family, int type, int proto)
 
 		if (!sock_family->is_supported(family, type, proto)) {
 			continue;
-		}		
+		}
 
 		return sock_family->handler(family, type, proto);
 	}
