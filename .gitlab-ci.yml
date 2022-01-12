@@ -92,6 +92,7 @@ compliance:
     - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
     - pip3 install west
     - west init -l . || true
+    - west manifest --validate
     - west update
     - ls -la
     - git log  --pretty=oneline | head -n 10 || true
@@ -162,6 +163,7 @@ twister:
     # - apt-get install python3 python3-pip cmake -y
     # - pip3 install pytest colorama pyyaml ply mock tabulate pyserial psutil anytree
     - west init -l . || true
+    - west manifest --validate
     - west update
     - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
 
