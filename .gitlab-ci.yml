@@ -145,9 +145,6 @@ compliance:
     ##
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
-    - ls -la ~/.ssh
-    - ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
     - west init -l . || true
     - west manifest --validate
     - west -vvv update
