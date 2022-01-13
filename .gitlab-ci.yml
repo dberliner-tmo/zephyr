@@ -138,7 +138,7 @@ compliance:
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - ls -la ~/.ssh
-    - ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+    - ssh-keyscan gitlab.com
     - chmod 644 ~/.ssh/known_hosts
     - cat ~/.ssh/known_hosts
     - apt update
