@@ -124,7 +124,7 @@ compliance:
     - pip3 install wheel
     - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
     - pip3 install west
-        - 'command -v ssh-agent >/dev/null || ( apk update && apk add openssh-client git )'
+    - 'command -v ssh-agent >/dev/null || ( apk update && apk add openssh-client git )'
 
     ##
     ## Run ssh-agent (inside the build environment)
