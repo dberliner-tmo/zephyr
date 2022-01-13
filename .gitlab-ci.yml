@@ -261,10 +261,8 @@ git-merge:
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - ls -la ~/.ssh
-    - ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
-
-
     ##
     ## Optionally, if you will be using any Git commands, set the user name and
     ## and email.
