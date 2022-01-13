@@ -15,7 +15,7 @@ ssh-key:
     ## Install ssh-agent if not already installed, it is required by Docker.
     ## (change apt-get to yum if you use an RPM-based image)
     ##
-    - 'command -v ssh-agent >/dev/null || ( apk update && apk add openssh-client git )'
+    - 'command -v ssh-agent >/dev/null || ( apt update && apt install openssh-client git )'
 
     ##
     ## Run ssh-agent (inside the build environment)
@@ -116,7 +116,7 @@ compliance:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
   script:
-    - 'command -v ssh-agent >/dev/null || ( apk update && apk add openssh-client git )'
+    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
 
     ##
     ## Run ssh-agent (inside the build environment)
