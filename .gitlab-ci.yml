@@ -10,7 +10,6 @@ variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
 
 ssh-key:
-  stage: .pre
   script:
         ##
     ## Install ssh-agent if not already installed, it is required by Docker.
@@ -123,6 +122,7 @@ compliance:
     - pip3 install wheel
     - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
     - pip3 install west
+    - <<:*ssh-key
     - west init -l . || true
     - west manifest --validate
     - west -vvv update
@@ -194,6 +194,7 @@ twister:
     # - apt update
     # - apt-get install python3 python3-pip cmake -y
     # - pip3 install pytest colorama pyyaml ply mock tabulate pyserial psutil anytree
+    - <<:*ssh-key
     - west init -l . || true
     - west manifest --validate
     - west -vvv update
