@@ -140,6 +140,7 @@ compliance:
     - ls -la ~/.ssh
     - ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
     - chmod 644 ~/.ssh/known_hosts
+    - cat ~/.ssh/known_hosts
     - apt update
     - apt-get install git python3 python3-pip -y
     - pip3 install setuptools
