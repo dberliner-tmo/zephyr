@@ -90,6 +90,8 @@ coding-guidelines-check-warns:
 compliance:
   stage: test
   image: ubuntu:latest
+  extends:
+    - ssh-key
   tags:
     - selfhost-regular
   variables:
@@ -122,7 +124,6 @@ compliance:
     - pip3 install wheel
     - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
     - pip3 install west
-    - <<:*ssh-key
     - west init -l . || true
     - west manifest --validate
     - west -vvv update
@@ -164,6 +165,8 @@ compliance-check-warns:
 twister:
   image: zephyrprojectrtos/ci:v0.18.4
   stage: test
+  extends:
+    - ssh-key
   tags:
     - selfhost-regular
   variables:
@@ -194,7 +197,6 @@ twister:
     # - apt update
     # - apt-get install python3 python3-pip cmake -y
     # - pip3 install pytest colorama pyyaml ply mock tabulate pyserial psutil anytree
-    - <<:*ssh-key
     - west init -l . || true
     - west manifest --validate
     - west -vvv update
