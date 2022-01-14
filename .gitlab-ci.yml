@@ -120,6 +120,8 @@ compliance:
       - Devicetree.txt
       - Kconfig.txt
   script:
+    - apt update
+    - apt install git -y
     - git config --get user.name
     - git config --get user.email
     #- apt update
