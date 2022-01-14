@@ -2,7 +2,7 @@ include:
   - project: 'tmobile/templates'
     file: '/gitlab-ci/.tmo.global.common.gitlab-ci.yml'
 
-stages:          # List of stages for jobs, and their order of execution
+stages:
   - tmo
   - test
 
@@ -11,6 +11,14 @@ variables:
 
 ssh-key:
   image: ubuntu:latest
+  stage: test
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - ~/.ssh
+      - ~/.gitconfig
+  tags:
+    - selfhost-regular
   script:
     - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
 
@@ -90,8 +98,8 @@ compliance:
     - selfhost-regular
   variables:
     ZEPHYR_BASE: ${CI_PROJECT_DIR}
-  extends:
-    ssh-key
+  needs:
+    - ssh-key
   cache:
     key: compliance
     paths:
@@ -198,7 +206,6 @@ git-merge:
   variables:
     MAIN_DEST_BRANCH: tmo-main
     MAIN_SRC_BRANCH: main
-
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
