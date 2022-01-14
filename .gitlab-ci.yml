@@ -21,8 +21,6 @@ coding-guidelines:
   artifacts:
     paths:
       - output.txt
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     - apt update
     - apt-get install python3-pip git wget python2 -y
@@ -44,8 +42,6 @@ coding-guidelines-check-warns:
     - selfhost-regular
   needs:
     - coding-guidelines
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     if [[ -s "output.txt" ]]; then
       errors=$(cat output.txt)
@@ -82,8 +78,6 @@ compliance:
       - pylint.txt
       - Devicetree.txt
       - Kconfig.txt
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
 
@@ -133,8 +127,6 @@ compliance-check-warns:
     - selfhost-regular
   needs: 
     - compliance
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     - ls -la
     - | 
@@ -183,8 +175,6 @@ twister:
         - 3
         - 4
         - 5
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
   script:
     # - apt update
     # - apt-get install python3 python3-pip cmake -y
