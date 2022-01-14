@@ -9,6 +9,37 @@ stages:          # List of stages for jobs, and their order of execution
 variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
 
+ssh-key:
+  stage: .pre
+  script:
+    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
+
+    ##
+    ## Run ssh-agent (inside the build environment)
+    ##
+    - eval $(ssh-agent -s)
+
+    ##
+    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+    ## We're using tr to fix line endings which makes ed25519 keys work
+    ## without extra base64 encoding.
+    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
+    ##
+    - echo "$SSH_PRIVATE_KEY"
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+
+    ##
+    ## Create the SSH directory and give it the right permissions
+    ##
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    - cat ~/.ssh/known_hosts
+    - git config --global user.email "ryan.hagen3@t-mobile.com"
+    - git config --global user.name "Ryan Hagen"
+    - ssh-add -l
+
 coding-guidelines:
   image: ubuntu:20.04
   stage: test
@@ -59,6 +90,8 @@ compliance:
     - selfhost-regular
   variables:
     ZEPHYR_BASE: ${CI_PROJECT_DIR}
+  extends:
+    ssh-key
   cache:
     key: compliance
     paths:
@@ -79,33 +112,6 @@ compliance:
       - Devicetree.txt
       - Kconfig.txt
   script:
-    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
-
-    ##
-    ## Run ssh-agent (inside the build environment)
-    ##
-    - eval $(ssh-agent -s)
-
-    ##
-    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-    ## We're using tr to fix line endings which makes ed25519 keys work
-    ## without extra base64 encoding.
-    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
-    ##
-    - echo "$SSH_PRIVATE_KEY"
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-
-    ##
-    ## Create the SSH directory and give it the right permissions
-    ##
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - cat ~/.ssh/known_hosts
-    - git config --global user.email "ryan.hagen3@t-mobile.com"
-    - git config --global user.name "Ryan Hagen"
-    - ssh-add -l
     - apt update
     - apt-get install git python3 python3-pip -y
     - pip3 install setuptools
