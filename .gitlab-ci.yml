@@ -10,8 +10,6 @@ variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
 
 ssh-key:
-  image: ubuntu:latest
-  stage: .pre
   script:
     - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
 
