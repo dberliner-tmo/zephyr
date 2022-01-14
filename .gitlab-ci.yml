@@ -85,7 +85,7 @@ compliance:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
   script:
-    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client )'
+    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
 
     ##
     ## Run ssh-agent (inside the build environment)
