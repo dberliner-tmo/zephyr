@@ -100,21 +100,21 @@ compliance:
     ZEPHYR_BASE: ${CI_PROJECT_DIR}
   needs:
     - ssh-key
-  
   cache:
-    key: $CI_COMMIT_REF_SLUG
-    paths:
-      - ~/.ssh
-      - ~/.gitconfig
-    key: compliance
-    paths:
-      - compliance.xml
-      - Nits.txt
-      - checkpatch.txt
-      - Identity.txt
-      - pylint.txt
-      - Devicetree.txt
-      - Kconfig.txt
+    - key: $CI_COMMIT_REF_SLUG
+      paths:
+        - ~/.ssh
+      files:
+        - ~/.gitconfig
+    - key: compliance
+      files:
+        - compliance.xml
+        - Nits.txt
+        - checkpatch.txt
+        - Identity.txt
+        - pylint.txt
+        - Devicetree.txt
+        - Kconfig.txt
   artifacts:
     paths:
       - compliance.xml
