@@ -262,7 +262,7 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
         return ret;
     }
 
-    
+
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.gateway, 4);
 #if IS_ENABLED(CONFIG_NET_NATIVE)
     net_if_ipv4_set_gw(rs9116w_dev->net_iface, &addr);
@@ -358,7 +358,7 @@ static void rs9116w_iface_init(struct net_if *iface)
 K_THREAD_STACK_DEFINE(driver_task_stack, 2048);
 struct k_thread driver_task;
 
-void driver_task_entry(void* p1, void* p2, void* p3) 
+void driver_task_entry(void* p1, void* p2, void* p3)
 {
     rsi_wireless_driver_task();
 }
@@ -381,7 +381,7 @@ static int rs9116w_init(const struct device *dev)
 
     // data
     if(!spi_is_ready(&rs9116w_dev->spi)) {
-        LOG_ERR("spi bus %s not ready", rs9116w_dev->spi.bus->name);	
+        LOG_ERR("spi bus %s not ready", rs9116w_dev->spi.bus->name);
         return -ENODEV;
     }
 
@@ -414,12 +414,12 @@ static int rs9116w_init(const struct device *dev)
     status = rsi_device_init(LOAD_NWP_FW);
 
     printk("rs9116w_init: rsi_device_init returned %d\n", status);
-    
+
 #if IS_ENABLED(CONFIG_WISECONNECT_USE_OS_BINDINGS)
     k_thread_create(&driver_task, driver_task_stack,
          K_THREAD_STACK_SIZEOF(driver_task_stack),
          driver_task_entry,
-         NULL, NULL, NULL, 
+         NULL, NULL, NULL,
          K_PRIO_COOP(8), K_INHERIT_PERMS, K_NO_WAIT
          );
 #endif
@@ -469,19 +469,6 @@ static const struct net_wifi_mgmt_offload rs9116w_api = {
     .connect        = rs9116w_mgmt_connect,
     .disconnect     = rs9116w_mgmt_disconnect,
 };
-
-/*
-   NET_DEVICE_OFFLOAD_INIT(
-   rs9116w,
-   CONFIG_WIFI_RS9116W_NAME,
-   rs9116w_init,
-   NULL,
-   &s_rs9116w_dev,
-   &rs9116w_conf,
-   CONFIG_WIFI_INIT_PRIORITY,
-   &rs9116w_api,
-   MAX_PER_PACKET_SIZE);
-   */
 
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(
         0,                          // instance number
