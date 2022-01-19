@@ -150,6 +150,7 @@ twister:
         - 3
         - 4
         - 5
+  retry: 1
   script:
     - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
     - eval $(ssh-agent -s)
