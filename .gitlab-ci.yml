@@ -68,6 +68,7 @@ compliance:
       - pylint.txt
       - Devicetree.txt
       - Kconfig.txt
+    when: on_failure
   script:
     - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
     - eval $(ssh-agent -s)
