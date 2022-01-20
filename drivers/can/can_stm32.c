@@ -125,7 +125,8 @@ static inline void can_stm32_bus_state_change_isr(CAN_TypeDef *can,
 	const can_state_change_callback_t cb = data->state_change_cb;
 	void *state_change_cb_data = data->state_change_cb_data;
 
-	if (!(can->ESR & CAN_ESR_EPVF) && !(can->ESR & CAN_ESR_BOFF)) {
+	if (!(can->ESR & CAN_ESR_EPVF) && !(can->ESR & CAN_ESR_BOFF) &&
+	    !(can->ESR & CAN_ESR_EWGF)) {
 		return;
 	}
 
@@ -136,6 +137,8 @@ static inline void can_stm32_bus_state_change_isr(CAN_TypeDef *can,
 		state = CAN_BUS_OFF;
 	} else if (can->ESR & CAN_ESR_EPVF) {
 		state = CAN_ERROR_PASSIVE;
+	} else if (can->ESR & CAN_ESR_EWGF) {
+		state = CAN_ERROR_WARNING;
 	} else {
 		state = CAN_ERROR_ACTIVE;
 	}
@@ -201,8 +204,8 @@ static void can_stm32_isr(const struct device *dev)
 	const struct can_stm32_config *cfg;
 	CAN_TypeDef *can;
 
-	data = DEV_DATA(dev);
-	cfg = DEV_CFG(dev);
+	data = dev->data;
+	cfg = dev->config;
 	can = cfg->can;
 
 	can_stm32_tx_isr_handler(can, data);
@@ -221,8 +224,8 @@ static void can_stm32_rx_isr(const struct device *dev)
 	const struct can_stm32_config *cfg;
 	CAN_TypeDef *can;
 
-	data = DEV_DATA(dev);
-	cfg = DEV_CFG(dev);
+	data = dev->data;
+	cfg = dev->config;
 	can = cfg->can;
 
 	can_stm32_rx_isr_handler(can, data);
@@ -234,8 +237,8 @@ static void can_stm32_tx_isr(const struct device *dev)
 	const struct can_stm32_config *cfg;
 	CAN_TypeDef *can;
 
-	data = DEV_DATA(dev);
-	cfg = DEV_CFG(dev);
+	data = dev->data;
+	cfg = dev->config;
 	can = cfg->can;
 
 	can_stm32_tx_isr_handler(can, data);
@@ -247,8 +250,8 @@ static void can_stm32_state_change_isr(const struct device *dev)
 	const struct can_stm32_config *cfg;
 	CAN_TypeDef *can;
 
-	data = DEV_DATA(dev);
-	cfg = DEV_CFG(dev);
+	data = dev->data;
+	cfg = dev->config;
 	can = cfg->can;
 
 
@@ -313,9 +316,9 @@ static int can_leave_sleep_mode(CAN_TypeDef *can)
 
 int can_stm32_set_mode(const struct device *dev, enum can_mode mode)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
+	const struct can_stm32_config *cfg = dev->config;
 	CAN_TypeDef *can = cfg->can;
-	struct can_stm32_data *data = DEV_DATA(dev);
+	struct can_stm32_data *data = dev->data;
 	int ret;
 
 	LOG_DBG("Set mode %d", mode);
@@ -359,9 +362,9 @@ int can_stm32_set_timing(const struct device *dev,
 			 const struct can_timing *timing,
 			 const struct can_timing *timing_data)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
+	const struct can_stm32_config *cfg = dev->config;
 	CAN_TypeDef *can = cfg->can;
-	struct can_stm32_data *data = DEV_DATA(dev);
+	struct can_stm32_data *data = dev->data;
 	int ret = -EIO;
 
 	ARG_UNUSED(timing_data);
@@ -397,7 +400,7 @@ done:
 
 int can_stm32_get_core_clock(const struct device *dev, uint32_t *rate)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
+	const struct can_stm32_config *cfg = dev->config;
 	const struct device *clock;
 	int ret;
 
@@ -423,8 +426,8 @@ int can_stm32_get_max_filters(const struct device *dev, enum can_ide id_type)
 
 static int can_stm32_init(const struct device *dev)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
-	struct can_stm32_data *data = DEV_DATA(dev);
+	const struct can_stm32_config *cfg = dev->config;
+	struct can_stm32_data *data = dev->data;
 	CAN_TypeDef *can = cfg->can;
 	struct can_timing timing;
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(can2), okay)
@@ -534,24 +537,24 @@ static void can_stm32_set_state_change_callback(const struct device *dev,
 						can_state_change_callback_t cb,
 						void *user_data)
 {
-	struct can_stm32_data *data = DEV_DATA(dev);
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
+	struct can_stm32_data *data = dev->data;
+	const struct can_stm32_config *cfg = dev->config;
 	CAN_TypeDef *can = cfg->can;
 
 	data->state_change_cb = cb;
 	data->state_change_cb_data = user_data;
 
 	if (cb == NULL) {
-		can->IER &= ~CAN_IER_EPVIE;
+		can->IER &= ~(CAN_IER_BOFIE | CAN_IER_EPVIE | CAN_IER_EWGIE);
 	} else {
-		can->IER |= CAN_IER_EPVIE;
+		can->IER |= CAN_IER_BOFIE | CAN_IER_EPVIE | CAN_IER_EWGIE;
 	}
 }
 
 static enum can_state can_stm32_get_state(const struct device *dev,
 					  struct can_bus_err_cnt *err_cnt)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
+	const struct can_stm32_config *cfg = dev->config;
 	CAN_TypeDef *can = cfg->can;
 
 	if (err_cnt) {
@@ -569,6 +572,10 @@ static enum can_state can_stm32_get_state(const struct device *dev,
 		return CAN_ERROR_PASSIVE;
 	}
 
+	if (can->ESR & CAN_ESR_EWGF) {
+		return CAN_ERROR_WARNING;
+	}
+
 	return CAN_ERROR_ACTIVE;
 
 }
@@ -576,8 +583,8 @@ static enum can_state can_stm32_get_state(const struct device *dev,
 #ifndef CONFIG_CAN_AUTO_BUS_OFF_RECOVERY
 int can_stm32_recover(const struct device *dev, k_timeout_t timeout)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
-	struct can_stm32_data *data = DEV_DATA(dev);
+	const struct can_stm32_config *cfg = dev->config;
+	struct can_stm32_data *data = dev->data;
 	CAN_TypeDef *can = cfg->can;
 	int ret = -EAGAIN;
 	int64_t start_time;
@@ -619,8 +626,8 @@ int can_stm32_send(const struct device *dev, const struct zcan_frame *frame,
 		   k_timeout_t timeout, can_tx_callback_t callback,
 		   void *user_data)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
-	struct can_stm32_data *data = DEV_DATA(dev);
+	const struct can_stm32_config *cfg = dev->config;
+	struct can_stm32_data *data = dev->data;
 	CAN_TypeDef *can = cfg->can;
 	uint32_t transmit_status_register = can->TSR;
 	CAN_TxMailBox_TypeDef *mailbox = NULL;
@@ -1029,8 +1036,8 @@ static inline int can_stm32_add_rx_filter_unlocked(const struct device *dev,
 						   void *cb_arg,
 						   const struct zcan_filter *filter)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
-	struct can_stm32_data *data = DEV_DATA(dev);
+	const struct can_stm32_config *cfg = dev->config;
+	struct can_stm32_data *data = dev->data;
 	CAN_TypeDef *can = cfg->master_can;
 	int filter_index = 0;
 	int filter_id;
@@ -1048,7 +1055,7 @@ int can_stm32_add_rx_filter(const struct device *dev, can_rx_callback_t cb,
 			    void *cb_arg,
 			    const struct zcan_filter *filter)
 {
-	struct can_stm32_data *data = DEV_DATA(dev);
+	struct can_stm32_data *data = dev->data;
 	int filter_id;
 
 	k_mutex_lock(&data->inst_mutex, K_FOREVER);
@@ -1060,8 +1067,8 @@ int can_stm32_add_rx_filter(const struct device *dev, can_rx_callback_t cb,
 
 void can_stm32_remove_rx_filter(const struct device *dev, int filter_id)
 {
-	const struct can_stm32_config *cfg = DEV_CFG(dev);
-	struct can_stm32_data *data = DEV_DATA(dev);
+	const struct can_stm32_config *cfg = dev->config;
+	struct can_stm32_data *data = dev->data;
 	CAN_TypeDef *can = cfg->master_can;
 	int bank_nr;
 	int filter_index;
