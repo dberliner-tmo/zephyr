@@ -11,7 +11,9 @@
 #include <posix/time.h>
 #include <sys/timeutil.h>
 #include <drivers/counter.h>
+#if defined(CONFIG_TIME_GECKO_RTCC)
 #include <em_rtcc.h>
+#endif
 
 #define HELP_NONE      "[none]"
 #define HELP_DATE_SET  "[Y-m-d] <H:M:S>"
@@ -186,6 +188,7 @@ static int cmd_date_set(const struct shell *shell, size_t argc, char **argv)
 		return -EINVAL;
 	}
 
+#if defined(CONFIG_TIME_GECKO_RTCC)
 	time |= bin2bcd(tm.tm_sec) << _RTCC_TIME_SECU_SHIFT;
 	time |= bin2bcd(tm.tm_min) << _RTCC_TIME_MINU_SHIFT;
 	time |= bin2bcd(tm.tm_hour) << _RTCC_TIME_HOURU_SHIFT;
@@ -203,6 +206,7 @@ static int cmd_date_set(const struct shell *shell, size_t argc, char **argv)
 
 	RTCC_TimeSet(time);
 	RTCC_DateSet(date);
+#endif
 
 	date_print(shell, &tm);
 
