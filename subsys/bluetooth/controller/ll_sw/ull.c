@@ -353,15 +353,21 @@ static RXFIFO_DEFINE(done, sizeof(struct node_rx_event_done),
  * Increasing this by times the max. simultaneous connection count will permit
  * simultaneous parallel PHY update or Connection Update procedures amongst
  * active connections.
- * Minimum node rx of 2 that can be reserved happens when local central
- * initiated PHY Update reserves 2 node rx, one for PHY update complete and
- * another for Data Length Update complete notification. Otherwise, a
- * peripheral only needs 1 additional node rx to generate Data Length Update
- * complete when PHY Update completes; node rx for PHY update complete is
- * reserved as the received PHY Update Ind PDU.
+ * Minimum node rx of 2 that can be reserved happens when:
+ * - for legacy LLCPs:
+ *   Local central initiated PHY Update reserves 2 node rx,
+ *   one for PHY update complete and another for Data Length Update complete
+ *   notification. Otherwise, a peripheral only needs 1 additional node rx to
+ *   generate Data Length Update complete when PHY Update completes; node rx for
+ *   PHY update complete is reserved as the received PHY Update Ind PDU.
+ * - for new LLCPs:
+ *   Central and peripheral always use two new nodes for handling completion
+ *   notification one for PHY update complete and another for Data Length Update
+ *   complete.
  */
-#if defined(CONFIG_BT_CENTRAL) && defined(CONFIG_BT_CTLR_PHY) && \
-	defined(CONFIG_BT_CTLR_DATA_LENGTH)
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH) && defined(CONFIG_BT_CTLR_PHY) &&  \
+	(defined(CONFIG_BT_LL_SW_LLCP_LEGACY) && defined(CONFIG_BT_CENTRAL) || \
+	 !defined(CONFIG_BT_LL_SW_LLCP_LEGACY))
 #define LL_PDU_RX_CNT (2 * (CONFIG_BT_CTLR_LLCP_CONN))
 #elif defined(CONFIG_BT_CONN)
 #define LL_PDU_RX_CNT (CONFIG_BT_CTLR_LLCP_CONN)
@@ -1202,9 +1208,9 @@ void ll_rx_dequeue(void)
 	case NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT:
 #endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
 
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
 	/* Ensure that at least one 'case' statement is present for this
 	 * code block.
@@ -1479,7 +1485,7 @@ void ll_rx_mem_release(void **node_rx)
 #endif /* CONFIG_BT_CTLR_SYNC_ISO */
 #endif /* CONFIG_BT_CTLR_SYNC_PERIODIC */
 
-#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 		case NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT:
 		case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
 		{
@@ -1490,7 +1496,7 @@ void ll_rx_mem_release(void **node_rx)
 			ull_df_rx_iq_report_alloc(report_cnt);
 		}
 		break;
-#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX || CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX || CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
 #if defined(CONFIG_BT_CONN) || defined(CONFIG_BT_CTLR_CONN_ISO)
 		case NODE_RX_TYPE_TERMINATE:
@@ -2441,7 +2447,7 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 #endif /* CONFIG_BT_CTLR_ADV_EXT */
 #endif /* CONFIG_BT_OBSERVER */
 
-#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_SCAN_CTE_RX) || defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	case NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT:
 	case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
 	{
@@ -2450,7 +2456,7 @@ static inline int rx_demux_rx(memq_link_t *link, struct node_rx_hdr *rx)
 		ll_rx_sched();
 	}
 	break;
-#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX || CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX || CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
 #if defined(CONFIG_BT_CONN)
 	case NODE_RX_TYPE_CONNECTION:

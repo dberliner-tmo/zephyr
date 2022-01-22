@@ -2878,7 +2878,7 @@ static void le_df_set_conn_cte_tx_params(struct net_buf *buf,
 }
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
 
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 static void le_df_set_conn_cte_rx_params(struct net_buf *buf, struct net_buf **evt)
 {
 	struct bt_hci_cp_le_set_conn_cte_rx_params *cmd = (void *)buf->data;
@@ -2970,7 +2970,7 @@ static void le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct net_b
 		sep->sample_count = samples_cnt;
 	}
 }
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
 static void le_df_set_conn_cte_req_enable(struct net_buf *buf, struct net_buf **evt)
@@ -2983,8 +2983,43 @@ static void le_df_set_conn_cte_req_enable(struct net_buf *buf, struct net_buf **
 	handle_le16 = cmd->handle;
 	handle = sys_le16_to_cpu(handle_le16);
 
-	status = ll_df_set_conn_cte_req_enable(handle, cmd->enable, cmd->cte_request_interval,
+	status = ll_df_set_conn_cte_req_enable(handle, cmd->enable,
+					       sys_le16_to_cpu(cmd->cte_request_interval),
 					       cmd->requested_cte_length, cmd->requested_cte_type);
+	rp = hci_cmd_complete(evt, sizeof(*rp));
+
+	rp->status = status;
+	rp->handle = handle_le16;
+}
+
+static void le_df_cte_req_failed(uint8_t error_code, uint16_t handle, struct net_buf *buf)
+{
+	struct bt_hci_evt_le_cte_req_failed *sep;
+
+	if (!(event_mask & BT_EVT_MASK_LE_META_EVENT) ||
+	    !(le_event_mask & BT_EVT_MASK_LE_CTE_REQUEST_FAILED)) {
+		return;
+	}
+
+	sep = meta_evt(buf, BT_HCI_EVT_LE_CTE_REQUEST_FAILED, sizeof(*sep));
+
+	sep->status = error_code;
+	sep->conn_handle = sys_cpu_to_le16(handle);
+}
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
+
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+static void le_df_set_conn_cte_rsp_enable(struct net_buf *buf, struct net_buf **evt)
+{
+	struct bt_hci_cp_le_conn_cte_rsp_enable *cmd = (void *)buf->data;
+	struct bt_hci_rp_le_conn_cte_rsp_enable *rp;
+	uint16_t handle, handle_le16;
+	uint8_t status;
+
+	handle_le16 = cmd->handle;
+	handle = sys_le16_to_cpu(handle_le16);
+
+	status = ll_df_set_conn_cte_rsp_enable(handle, cmd->enable);
 	rp = hci_cmd_complete(evt, sizeof(*rp));
 
 	rp->status = status;
@@ -4336,16 +4371,21 @@ static int controller_cmd_handle(uint16_t  ocf, struct net_buf *cmd,
 		le_df_set_conn_cte_tx_params(cmd, evt);
 		break;
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_TX */
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	case BT_OCF(BT_HCI_OP_LE_SET_CONN_CTE_RX_PARAMS):
 		le_df_set_conn_cte_rx_params(cmd, evt);
 		break;
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
 	case BT_OCF(BT_HCI_OP_LE_CONN_CTE_REQ_ENABLE):
 		le_df_set_conn_cte_req_enable(cmd, evt);
 		break;
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RSP)
+	case BT_OCF(BT_HCI_OP_LE_CONN_CTE_RSP_ENABLE):
+		le_df_set_conn_cte_rsp_enable(cmd, evt);
+		break;
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RSP */
 #endif /* CONFIG_BT_CTLR_DF */
 
 #if defined(CONFIG_BT_CTLR_DTM_HCI)
@@ -7193,11 +7233,11 @@ static void encode_control(struct node_rx_pdu *node_rx,
 		return;
 #endif /* CONFIG_BT_CTLR_CONN_ISO */
 
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 	case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
 		le_df_connection_iq_report(node_rx, buf);
 		return;
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 #endif /* CONFIG_BT_CONN */
 
 #if defined(CONFIG_BT_CTLR_ADV_INDICATION)
@@ -7325,6 +7365,19 @@ static void le_unknown_rsp(struct pdu_data *pdu_data, uint16_t handle,
 	}
 }
 
+static void le_reject_ext_ind(struct pdu_data *pdu, uint16_t handle, struct net_buf *buf)
+{
+	switch (pdu->llctrl.reject_ext_ind.reject_opcode) {
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
+	case PDU_DATA_LLCTRL_TYPE_CTE_REQ:
+		le_df_cte_req_failed(pdu->llctrl.reject_ext_ind.error_code, handle, buf);
+		break;
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
+	default:
+		BT_WARN("reject opcode: 0x%02x", pdu->llctrl.reject_ext_ind.reject_opcode);
+		break;
+	}
+}
 #if defined(CONFIG_BT_CTLR_CONN_PARAM_REQ)
 static void le_conn_param_req(struct pdu_data *pdu_data, uint16_t handle,
 			      struct net_buf *buf)
@@ -7441,8 +7494,18 @@ static void encode_data_ctrl(struct node_rx_pdu *node_rx,
 		break;
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
+	case PDU_DATA_LLCTRL_TYPE_CTE_REQ:
+		le_df_cte_req_failed(BT_HCI_CTE_REQ_STATUS_RSP_WITHOUT_CTE, handle, buf);
+		break;
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */
+
 	case PDU_DATA_LLCTRL_TYPE_UNKNOWN_RSP:
 		le_unknown_rsp(pdu_data, handle, buf);
+		break;
+
+	case PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND:
+		le_reject_ext_ind(pdu_data, handle, buf);
 		break;
 
 	default:
@@ -7620,9 +7683,9 @@ uint8_t hci_get_class(struct node_rx_pdu *node_rx)
 #if defined(CONFIG_BT_CTLR_CONN_ISO)
 		case NODE_RX_TYPE_CIS_ESTABLISHED:
 #endif /* CONFIG_BT_CTLR_CONN_ISO */
-#if defined(CONFIG_BT_CTRL_DF_CONN_CTE_RX)
+#if defined(CONFIG_BT_CTLR_DF_CONN_CTE_RX)
 		case NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT:
-#endif /* CONFIG_BT_CTRL_DF_CONN_CTE_RX */
+#endif /* CONFIG_BT_CTLR_DF_CONN_CTE_RX */
 			return HCI_CLASS_EVT_REQUIRED;
 
 		case NODE_RX_TYPE_TERMINATE:
