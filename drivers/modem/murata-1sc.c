@@ -416,9 +416,12 @@ MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 #ifdef MDM_SOCKWAIT
 		modem_socket_data_ready(&mdata.socket_config, sock);
 #else
-    	k_sem_give(&sock->sem_data_ready);
+#ifndef NO_WAIT_FOR_DATA_READY
+		k_sem_give(&sock->sem_data_ready);
+#endif
 #endif
 		break;
+	//TODO handle later
 	case 2:	//socket deact
 	case 3:	//socket terminated
 		LOG_WRN("wrong evt of Unsolicit!");
