@@ -23,13 +23,14 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_offload.h>
 #include <net/wifi_mgmt.h>
 
+#include "rs9116w.h"
+
 #include "rsi_common_apis.h"
 #include "rsi_wlan_apis.h"
 #include "rsi_bootup_config.h"
 #include "rsi_wlan.h"
 #include "rsi_wlan_apis.h"
 
-#include "rs9116w.h"
 
 #define RSI_OPERMODE_WLAN_BLE 13
 
@@ -209,6 +210,8 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
      */
     ret = rsi_wlan_connect(params->ssid, rsi_security, rsi_psk);
 
+    wifi_mgmt_raise_connect_result_event(rs9116w_dev->net_iface, ret);
+
     if (ret) {
         return ret;
     }
@@ -264,12 +267,12 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
 
     
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.gateway, 4);
-#if IS_ENABLED(CONFIG_NET_NATIVE)
+#if IS_ENABLED(CONFIG_NET_NATIVE_IPV4)
     net_if_ipv4_set_gw(rs9116w_dev->net_iface, &addr);
 #endif
 
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.netmask, 4);
-#if IS_ENABLED(CONFIG_NET_NATIVE)
+#if IS_ENABLED(CONFIG_NET_NATIVE_IPV4)
     net_if_ipv4_set_netmask(rs9116w_dev->net_iface, &addr);
 #endif
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.ipaddr, 4);
@@ -278,7 +281,7 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
             addr.s4_addr[2], addr.s4_addr[3]);
 
     // net_if_ipv4_addr_rm()?
-#if IS_ENABLED(CONFIG_NET_NATIVE)
+#if IS_ENABLED(CONFIG_NET_NATIVE_IPV4)
     net_if_ipv4_addr_add(rs9116w_dev->net_iface, &addr, NET_ADDR_DHCP, 0);
 #endif
 #endif
@@ -313,7 +316,7 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
             sys_be16_to_cpu(addr6.s6_addr16[4]), sys_be16_to_cpu(addr6.s6_addr16[5]),
             sys_be16_to_cpu(addr6.s6_addr16[6]), sys_be16_to_cpu(addr6.s6_addr16[7])
     );
-#if IS_ENABLED(CONFIG_NET_NATIVE)
+#if IS_ENABLED(CONFIG_NET_NATIVE_IPV6)
     net_if_ipv6_addr_add(rs9116w_dev->net_iface, &addr6, NET_ADDR_DHCP, 0);
 #endif
 
@@ -335,8 +338,11 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
      * 9.1.9 int32_t rsi_wlan_disconnect(void);
      */
     ret = rsi_wlan_disconnect();
-
     // net_if_ipv4_addr_rm(dev->net_iface, &dev->ip);
+    struct rs9116w_device *rs9116w_dev = dev->data;
+    wifi_mgmt_raise_disconnect_result_event(rs9116w_dev->net_iface, ret);
+
+    net_if_down(rs9116w_dev->net_iface);
 
     return ret;
 }

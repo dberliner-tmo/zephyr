@@ -9,9 +9,6 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
-
-#include "rs9116w.h"
-
 #include <zephyr.h>
 #include <kernel.h>
 #include <device.h>
@@ -25,10 +22,11 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include "sockets_internal.h"
 #include "tls_internal.h"
+#include "rs9116w.h"
+
 #include <rsi_wlan_common_config.h>
 #include <rsi_wlan_apis.h>
 #include <rsi_wlan_non_rom.h>
-#include <rsi_socket.h>
 #include <net/net_pkt.h>
 
 /* Dealing with mismatched define values */
@@ -643,7 +641,6 @@ static int rs9116w_getsockopt(void *obj, int level, int optname,
 {
 	/*Unsure if all the sockopts are actuall supported; Documentation is unclear */
 	int sd = OBJ_TO_SD(obj);
-	int retval;
 	//Todo, tls stuff
 	if (IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && level == SOL_TLS) {
 		/* Handle Zephyr's SOL_TLS secure socket options: */
@@ -714,29 +711,27 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 		}
 	}
 
-	if (!retval) {
-		/* Translate to rsi_recvfrom() parameters: */
-		if (fromlen != NULL) {
-			rsi_addr = translate_z_to_rsi_addrlen(*fromlen,
-							    &rsi_addr_in,
-							    &rsi_addr_in6,
-							    &rsi_addrlen);
-			retval = (ssize_t)rsi_recvfrom(sd, buf, len, 0, rsi_addr,
-						      &rsi_addrlen);
-		} else {
-			retval = (ssize_t)rsi_recv(sd, buf, len, 0);
-		}
+	/* Translate to rsi_recvfrom() parameters: */
+	if (fromlen != NULL) {
+		rsi_addr = translate_z_to_rsi_addrlen(*fromlen,
+							&rsi_addr_in,
+							&rsi_addr_in6,
+							&rsi_addrlen);
+		retval = (ssize_t)rsi_recvfrom(sd, buf, len, 0, rsi_addr,
+							&rsi_addrlen);
+	} else {
+		retval = (ssize_t)rsi_recv(sd, buf, len, 0);
+	}
 
-		// handle_recv_flags(sd, flags, FALSE, &nb_enabled); //Todo
-		if (retval >= 0) {
-			if (fromlen != NULL) {
-				/*
-				 * Translate rsi_addr into *addr and set
-				 * *addrlen
-				 */
-				translate_rsi_to_z_addr(rsi_addr, rsi_addrlen,
-						       from, fromlen);
-			}
+	// handle_recv_flags(sd, flags, FALSE, &nb_enabled); //Todo
+	if (retval >= 0) {
+		if (fromlen != NULL) {
+			/*
+				* Translate rsi_addr into *addr and set
+				* *addrlen
+				*/
+			translate_rsi_to_z_addr(rsi_addr, rsi_addrlen,
+							from, fromlen);
 		}
 	}
 
@@ -764,7 +759,7 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 			return -1;
 		}
 
-		retval = rsi_sendto(sd, buf, (uint16_t)len, flags,
+		retval = rsi_sendto(sd, (int8_t*)buf, (uint16_t)len, flags,
 				   rsi_addr, rsi_addrlen);
 	} else {
 		retval = (ssize_t)rsi_send(sd, buf, len, flags);

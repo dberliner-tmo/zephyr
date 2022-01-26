@@ -14,11 +14,10 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <net/net_offload.h>
 #include <net/net_pkt.h>
 
+#include "rs9116w.h"
+
 #include <rsi_wlan_apis.h>
 #include "rsi_wlan.h"
-#include "rsi_socket.h"
-
-#include "rs9116w.h"
 
 #undef s6_addr
 
@@ -68,6 +67,11 @@ static struct rsi_sockaddr *translate_z_to_rsi_addrs(const struct sockaddr *addr
 #define PROTOCOL_TLS_1_1 (BIT(0) | BIT(14))
 #define PROTOCOL_TLS_1_2 (BIT(0) | BIT(15))
 
+#define Z_PF_INET         1          /**< IP protocol family version 4. */
+#define Z_PF_INET6        2          /**< IP protocol family version 6. */
+#define Z_AF_INET        Z_PF_INET     /**< IP protocol family version 4. */
+#define Z_AF_INET6       Z_PF_INET6    /**< IP protocol family version 6. */
+
 /**
  * @brief Small Wrapper Around rsi_socket to improve Zephyr compatability
  * 
@@ -80,10 +84,10 @@ static int rs_socket(int family, int type, int proto)
 
 	/* Map Zephyr socket.h family to WiSeConnect's: */
 	switch (family) {
-	case AF_INET:
+	case Z_AF_INET:
 		family = RS_AF_INET;
 		break;
-	case AF_INET6:
+	case Z_AF_INET6:
 		family = RS_AF_INET6;
 		break;
 	default:
@@ -192,49 +196,6 @@ static int rs9116w_get(sa_family_t family,
 
 /****************************************************************************/
 /**
- * This function is called when the local socket needs to be bound
- * 10.5.3 WiseConnect requires binding the local socket after calling socket
- */
-static int rs9116w_local_bind(struct rs9116w_socket *rs_socket, uint16_t port)
-{
-    struct rsi_sockaddr_in rsi_addr_in;
-    int status;
-
-    printk("In rs9116w_local_bind, port: %d\n", port);
-    if (rs_socket->local_bound)
-    {
-        printk("already locally bound\n");
-        return 0;
-    }
-
-    // Memset client structrue
-    memset(&rsi_addr_in, 0, sizeof(rsi_addr_in));
-
-    // Set family type (
-    rsi_addr_in.sin_family = RS_AF_INET; // 2
-
-    // Set local port number
-    // rsi_addr_in.sin_port = htons(port); // htons() due to bugs in WiseConnect?
-
-    // Bind socket
-    status = rsi_bind(rs_socket->sock_id, (struct rsi_sockaddr *)&rsi_addr_in, sizeof(struct rsi_sockaddr));
-    if (status != 0) {
-        status = rsi_wlan_get_status();
-        // rsi_shutdown(socket->sock_id, 0);
-        printk("Local Bind Failed, Error code : %d\n", status);
-    }
-    else
-    {
-        printk("Local Bind Success\n");
-        rs_socket->local_bound = 1;
-        rs_socket->port = port;
-    }
-
-    return status;
-}
-
-/****************************************************************************/
-/**
  * This function is called when user wants to create a connection
  * to a peer host.
  */
@@ -294,7 +255,7 @@ static int rs9116w_connect(struct net_context *context,
 
     printk("About to call rsi_connect\n");
     int ret = rsi_connect(rs_socket->sock_id, rsi_addr, rsi_addrlen);
-    printk("returned from rsi_connect, ret=%d\n", ret);
+    printk("returned from rsi_connect, ret=%d, errno=%d\n", ret, errno);
 
     return ret;
 }
@@ -429,11 +390,27 @@ static int rs9116w_recv(struct net_context *context,
         LOG_ERR("Cannot allocate rx packet");
         return -ENOMEM;
     }
+
+    if (timeout == 0) {
+        struct rsi_timeval ptv;
+		ptv.tv_sec = 0;
+		ptv.tv_usec = 0;
+		rsi_fd_set rfds;
+		RSI_FD_ZERO(&rfds);
+		RSI_FD_SET(rs_socket->sock_id, &rfds);
+		rsi_select(rs_socket->sock_id + 1, &rfds, NULL, NULL, &ptv, NULL);
+		if (!RSI_FD_ISSET(rs_socket->sock_id, &rfds)){
+			return 0;
+		}
+    }
+
     /* 
      * 10.5.10 int32_t rsi_recv(uint32_t sockID, VOID *rcvBuffer, int32_t bufferLength, int32_t flags);
      */
     rs_socket->pkt_size_in = rsi_recv(rs_socket->sock_id, rs_socket->pkt_data_in, RSI_MAX_PAYLOAD_SIZE, 0);
-
+    if (rs_socket->pkt_size_in == -1) {
+        return -errno;
+    }
     net_pkt_write(pkt, rs_socket->pkt_data_in, rs_socket->pkt_size_in);
     return rs_socket->pkt_size_in;
 }
