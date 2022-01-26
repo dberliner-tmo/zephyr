@@ -24,12 +24,11 @@
 #include "../console/gsm_mux.h"
 #include "modem_sms.h"
 #include "strnstr.h"
-#include <net/tls_credentials.h>
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+#include <net/tls_credentials.h>
 #include <sys/base64.h>
 #include "tls_internal.h"
 #endif
-#include "net_shell.h"
 
 #define NO_WAIT_FOR_DATA_READY
 
@@ -568,7 +567,7 @@ void parse_ipgwmask(char *buf, char *p1, char *p2, char *p3)
 				len = pend - pstr;
 				len = MIN(len, MDM_MASK_LENGTH);
 				strncpy(p3, pstr, len);
-				printf("IP: %s, nmASK: %s, GW: %s\n", p1, p2, p3);
+				printk("IP: %s, nmASK: %s, GW: %s\n", p1, p2, p3);
 			}
 		}
 	}
@@ -1316,7 +1315,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 }
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-#define CERTCMD_WRITE_SIZE	32+16	//assue filename maxlen = 32
+#define CERTCMD_WRITE_SIZE	32+32	//assue filename maxlen = 32
 #define PEM_BUFF_SIZE		6145	//terminate with \" & 0
 /**
  * following struct may not have packed memory if it has something like
@@ -1357,23 +1356,29 @@ static ssize_t send_cert(struct modem_socket *sock,
 
 	snprintk(sptr, sizeof(cert_cmd_buf),
 		 "AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type);
-
+	cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintf
+	//printk("sptr: %s\n", sptr);
     ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
        NULL, 0U, sptr,
-       &mdata.sem_response, K_MSEC(5));
+       &mdata.sem_response, K_SECONDS(5));
 	if (ret < 0) {
-		goto exit;
+		if (ret == -116) {
+			ret = 0;	//fake good ret
+		} else {
+			goto exit;
+		}
 	}
 
 	k_sleep(K_MSEC(20));	//brief brake?
+	snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
+		 "AT%%CERTCFG=\"ADD\",8,,,\"%s\",\"\"", filename);
 
-	snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf),
-		 "AT%%CERTCFG=\"ADD\",8,,,\"%s\"", filename);
-
+	//printk("certcfg: %s\n", cert_cmd_buf.cert_cmd_write);
     ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-       NULL, 0U, sptr,
-       &mdata.sem_response, K_MSEC(5));
+       NULL, 0U, cert_cmd_buf.cert_cmd_write,
+       &mdata.sem_response, K_SECONDS(5));
 	if (ret < 0) {
+		printk("sendmdmcmd,ret = %d\n", ret);
 		goto exit;
 	}
 
@@ -1440,6 +1445,7 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 				char *filename = "echo-apps-cert.pem";
 				retval = send_cert(sock, NULL, 0, cert_cmd_buf.pem_buf, cert_idx, filename);
 				if (retval < 0) {
+					printk("Failed to send cert to modem, ret = %d\n", retval);
 					return retval;
 				}
 			}
