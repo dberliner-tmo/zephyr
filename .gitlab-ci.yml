@@ -8,6 +8,7 @@ stages:
 
 variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
+  TMO_SECRETS_JOB: "False"
 
 coding-guidelines:
   image: ubuntu:20.04
