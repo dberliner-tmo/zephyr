@@ -14,8 +14,15 @@
 
 #include <net/net_if.h>
 
-#include "rsi_wlan_apis.h"
-#include "rsi_socket.h"
+/* Undef macros before redefining to eliminate warnings */
+#undef AF_INET
+#undef AF_INET6
+#undef AF_UNSPEC
+#undef PF_INET
+#undef PF_INET6
+#undef TCP_NODELAY
+#include <rsi_wlan_apis.h>
+#include <rsi_socket.h>
 
 // NOTE: Zephyr defines AF_INET as 1 and AF_INET6 as 2
 #define RS_AF_INET  2
