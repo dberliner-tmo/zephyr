@@ -34,7 +34,7 @@ coding-guidelines:
     - source zephyr-env.sh
     - ls -la
     - git log  --pretty=oneline | head -n 10 || true
-    - ./scripts/ci/guideline_check.py --output output.txt -c origin/${CI_COMMIT_BRANCH}..
+    - ./scripts/ci/guideline_check.py --output output.txt -c origin/${CI_COMMIT_REF_NAME}..
 
 coding-guidelines-check-warns:
   stage: test
