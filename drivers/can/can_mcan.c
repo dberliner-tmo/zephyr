@@ -297,10 +297,14 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 		(can->crel & CAN_MCAN_CREL_DAY) >> CAN_MCAN_CREL_DAY_POS);
 
 #ifndef CONFIG_CAN_STM32FD
+	uint32_t mrba = 0;
+#ifdef CONFIG_CAN_STM32H7
+	mrba = (uint32_t)msg_ram;
+#endif
 #ifdef CONFIG_CAN_MCUX_MCAN
-	uint32_t mrba = (uint32_t)msg_ram & CAN_MCAN_MRBA_BA_MSK;
-
+	mrba = (uint32_t)msg_ram & CAN_MCAN_MRBA_BA_MSK;
 	can->mrba = mrba;
+#endif
 	can->sidfc = (((uint32_t)msg_ram->std_filt - mrba) & CAN_MCAN_SIDFC_FLSSA_MSK) |
 		(ARRAY_SIZE(msg_ram->std_filt) << CAN_MCAN_SIDFC_LSS_POS);
 	can->xidfc = (((uint32_t)msg_ram->ext_filt - mrba) & CAN_MCAN_XIDFC_FLESA_MSK) |
@@ -312,24 +316,8 @@ int can_mcan_init(const struct device *dev, const struct can_mcan_config *cfg,
 	can->rxbc = (((uint32_t)msg_ram->rx_buffer - mrba) & CAN_MCAN_RXBC_RBSA);
 	can->txefc = (((uint32_t)msg_ram->tx_event_fifo - mrba) & CAN_MCAN_TXEFC_EFSA_MSK) |
 		(ARRAY_SIZE(msg_ram->tx_event_fifo) << CAN_MCAN_TXEFC_EFS_POS);
-	can->txbc = (((uint32_t)msg_ram->tx_buffer - mrba) & CAN_MCAN_TXBC_TBSA_MSK) |
-		    (ARRAY_SIZE(msg_ram->tx_buffer) << CAN_MCAN_TXBC_TFQS_POS);
-#else /* CONFIG_CAN_MCUX_MCAN */
-	can->sidfc = ((uint32_t)msg_ram->std_filt & CAN_MCAN_SIDFC_FLSSA_MSK) |
-		     (ARRAY_SIZE(msg_ram->std_filt) << CAN_MCAN_SIDFC_LSS_POS);
-	can->xidfc = ((uint32_t)msg_ram->ext_filt & CAN_MCAN_XIDFC_FLESA_MSK) |
-		     (ARRAY_SIZE(msg_ram->ext_filt) << CAN_MCAN_XIDFC_LSS_POS);
-	can->rxf0c = ((uint32_t)msg_ram->rx_fifo0 & CAN_MCAN_RXF0C_F0SA) |
-		     (ARRAY_SIZE(msg_ram->rx_fifo0) << CAN_MCAN_RXF0C_F0S_POS);
-	can->rxf1c = ((uint32_t)msg_ram->rx_fifo1 & CAN_MCAN_RXF1C_F1SA) |
-		     (ARRAY_SIZE(msg_ram->rx_fifo1) << CAN_MCAN_RXF1C_F1S_POS);
-	can->rxbc = ((uint32_t)msg_ram->rx_buffer & CAN_MCAN_RXBC_RBSA);
-	can->txefc = ((uint32_t)msg_ram->tx_event_fifo & CAN_MCAN_TXEFC_EFSA_MSK) |
-		     (ARRAY_SIZE(msg_ram->tx_event_fifo) <<
-		     CAN_MCAN_TXEFC_EFS_POS);
-	can->txbc = ((uint32_t)msg_ram->tx_buffer & CAN_MCAN_TXBC_TBSA) |
-		    (ARRAY_SIZE(msg_ram->tx_buffer) << CAN_MCAN_TXBC_TFQS_POS);
-#endif /* !CONFIG_CAN_MCUX_MCAN */
+	can->txbc = (((uint32_t)msg_ram->tx_buffer - mrba) & CAN_MCAN_TXBC_TBSA) |
+		(ARRAY_SIZE(msg_ram->tx_buffer) << CAN_MCAN_TXBC_TFQS_POS);
 
 	if (sizeof(msg_ram->tx_buffer[0].data) <= 24) {
 		can->txesc = (sizeof(msg_ram->tx_buffer[0].data) - 8) / 4;
@@ -673,6 +661,10 @@ enum can_state can_mcan_get_state(const struct can_mcan_config *cfg,
 		return CAN_ERROR_PASSIVE;
 	}
 
+	if (can->psr & CAN_MCAN_PSR_EW) {
+		return CAN_ERROR_WARNING;
+	}
+
 	return CAN_ERROR_ACTIVE;
 }
 
@@ -817,7 +809,7 @@ int can_mcan_add_rx_filter_std(struct can_mcan_data *data,
 
 	memcpy32_volatile(&msg_ram->std_filt[filter_id], &filter_element,
 			 sizeof(struct can_mcan_std_filter));
-	CACHE_CLEAN(&msg_ram->std_filt[filter_nr],
+	CACHE_CLEAN(&msg_ram->std_filt[filter_id],
 		    sizeof(struct can_mcan_std_filter));
 
 	k_mutex_unlock(&data->inst_mutex);
@@ -879,7 +871,7 @@ static int can_mcan_add_rx_filter_ext(struct can_mcan_data *data,
 
 	memcpy32_volatile(&msg_ram->ext_filt[filter_id], &filter_element,
 			  sizeof(struct can_mcan_ext_filter));
-	CACHE_CLEAN(&msg_ram->ext_filt[filter_nr],
+	CACHE_CLEAN(&msg_ram->ext_filt[filter_id],
 		    sizeof(struct can_mcan_ext_filter));
 
 	k_mutex_unlock(&data->inst_mutex);

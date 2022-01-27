@@ -534,7 +534,7 @@ static void prepare_conn_cte_rx_enable_cmd_params(struct net_buf *buf, struct bt
 			ant_ids = &df_dummy_switch_pattern[0];
 		}
 
-		dest_ant_ids = net_buf_add(buf, params->num_ant_ids);
+		dest_ant_ids = net_buf_add(buf, cp->switch_pattern_len);
 		(void)memcpy(dest_ant_ids, ant_ids, cp->switch_pattern_len);
 	}
 }
@@ -605,7 +605,6 @@ int hci_df_prepare_connection_iq_report(struct net_buf *buf,
 	evt = net_buf_pull_mem(buf, sizeof(*evt));
 
 	conn = bt_conn_lookup_handle(sys_le16_to_cpu(evt->conn_handle));
-
 	if (!conn) {
 		BT_ERR("Unknown conn handle 0x%04X for iq samples report",
 		       sys_le16_to_cpu(evt->conn_handle));
@@ -622,6 +621,7 @@ int hci_df_prepare_connection_iq_report(struct net_buf *buf,
 		return -EINVAL;
 	}
 
+	report->err = BT_DF_IQ_REPORT_ERR_SUCCESS;
 	report->chan_idx = evt->data_chan_idx;
 	report->rx_phy = evt->rx_phy;
 	report->chan_idx = evt->data_chan_idx;
@@ -669,7 +669,7 @@ static void prepare_conn_cte_req_enable_cmd_params(struct net_buf *buf, const st
 
 	if (enable) {
 		cp->cte_request_interval = params->interval;
-		cp->requested_cte_length = params->cte_length;
+		cp->requested_cte_length = sys_cpu_to_le16(params->cte_length);
 		cp->requested_cte_type = get_hci_cte_type(params->cte_type);
 	}
 }
@@ -682,7 +682,7 @@ static int hci_df_set_conn_cte_req_enable(struct bt_conn *conn, bool enable,
 	struct net_buf *buf, *rsp;
 	int err;
 
-	if (enable && !valid_cte_req_params(conn, params->cte_length, params->cte_type)) {
+	if (enable && !valid_cte_req_params(conn, params->cte_type, params->cte_length)) {
 		return -EINVAL;
 	}
 
@@ -709,6 +709,45 @@ static int hci_df_set_conn_cte_req_enable(struct bt_conn *conn, bool enable,
 	net_buf_unref(rsp);
 
 	return err;
+}
+
+int hci_df_prepare_conn_cte_req_failed(struct net_buf *buf,
+				       struct bt_df_conn_iq_samples_report *report,
+				       struct bt_conn **conn_to_report)
+{
+	struct bt_hci_evt_le_cte_req_failed *evt;
+	struct bt_conn *conn;
+
+	if (buf->len < sizeof(*evt)) {
+		BT_ERR("Unexpected end of buffer");
+		return -EINVAL;
+	}
+
+	evt = net_buf_pull_mem(buf, sizeof(*evt));
+
+	conn = bt_conn_lookup_handle(sys_le16_to_cpu(evt->conn_handle));
+	if (!conn) {
+		BT_ERR("Unknown conn handle 0x%04X for iq samples report",
+		       sys_le16_to_cpu(evt->conn_handle));
+		return -EINVAL;
+	}
+
+	if (!atomic_test_bit(conn->flags, BT_CONN_CTE_REQ_ENABLED)) {
+		BT_ERR("Received conn CTE request notification when CTE REQ disabled");
+		return -EINVAL;
+	}
+
+	(void)memset(report, 0U, sizeof(*report));
+
+	if (evt->status == BT_HCI_CTE_REQ_STATUS_RSP_WITHOUT_CTE) {
+		report->err = BT_DF_IQ_REPORT_ERR_NO_CTE;
+	} else {
+		report->err = BT_DF_IQ_REPORT_ERR_PEER_REJECTED;
+	}
+
+	*conn_to_report = conn;
+
+	return 0;
 }
 #endif /* CONFIG_BT_DF_CONNECTION_CTE_REQ */
 
