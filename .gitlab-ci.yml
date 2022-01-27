@@ -93,7 +93,7 @@ compliance:
     - west -vvv update
     - ls -la
     - git log  --pretty=oneline | head -n 10 || true
-    - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_BRANCH}..
+    - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_REF_NAME}..
     - ls -la
 
 compliance-check-warns:
