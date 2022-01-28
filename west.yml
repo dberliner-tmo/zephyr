@@ -246,6 +246,6 @@ manifest:
     - -ci
 
   self:
-    path: tmo-zephyr
+    path: zephyr
     west-commands: scripts/west-commands.yml
     import: submanifests
