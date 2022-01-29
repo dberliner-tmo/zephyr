@@ -31,7 +31,7 @@ struct ll_scan_set {
 		 * cancelling sync create, hence the volatile keyword.
 		 */
 		struct ll_sync_set *volatile sync;
-	} per_scan;
+	} periodic;
 #endif
 };
 
@@ -44,4 +44,6 @@ struct ll_scan_aux_set {
 
 	struct node_rx_hdr *rx_head;
 	struct node_rx_hdr *rx_last;
+
+	uint16_t data_len;
 };
