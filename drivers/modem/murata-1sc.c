@@ -423,7 +423,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 	//TODO handle later
 	case 2:	//socket deact
 	case 3:	//socket terminated
-		LOG_WRN("wrong evt of Unsolicit!");
+		LOG_WRN("remote disconnet/deactiveted!");
 		//socket_close(sock);	//may not need DELETE, since modem terminated.
 		break;
 	case 4:	//socket accepted
