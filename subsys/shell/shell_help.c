@@ -188,12 +188,6 @@ void z_shell_help_cmd_print(const struct shell *shell,
 	formatted_text_print(shell, cmd->help, field_width, false);
 }
 
-void z_shell_help_subcmd_print_selitem(const struct shell *shell)
-{
-	struct shell_static_entry *parent = &shell->ctx->active_cmd;
-	formatted_text_print(shell, parent->help, 8, true);
-}
-
 bool z_shell_help_request(const char *str)
 {
 	if (!IS_ENABLED(CONFIG_SHELL_HELP_OPT_PARSE)) {

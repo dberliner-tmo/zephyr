@@ -423,7 +423,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 	//TODO handle later
 	case 2:	//socket deact
 	case 3:	//socket terminated
-		LOG_WRN("remote disconnet/deactiveted!");
+		LOG_WRN("wrong evt of Unsolicit!");
 		//socket_close(sock);	//may not need DELETE, since modem terminated.
 		break;
 	case 4:	//socket accepted
@@ -707,7 +707,7 @@ static void socket_close(struct modem_socket *sock)
 	
 	/* Tell the modem to delete the socket. */
 	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"DELETE\",%d", sock->sock_fd);
-	//printk("%s\n", buf);
+	printk("%s\n", buf);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf,
 			     &mdata.sem_response, K_MSEC(0));
@@ -736,7 +736,7 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	}
 
 	snprintk(buf, sizeof(buf), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
-        //printk("\n%s\n", buf);
+        printk("\n%s\n", buf);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
 	if (ret < 0) {
@@ -818,7 +818,7 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
                 else
                     data->rx_buf = net_buf_skip(data->rx_buf, data->rx_buf->len);
 
-                //printk("JML In on_cmd_readsms AFTER net_buf_skip, len:%d, data: '", data->rx_buf->len);
+                printk("JML In on_cmd_readsms AFTER net_buf_skip, len:%d, data: '", data->rx_buf->len);
 
                 for (int i=0;i<data->rx_buf->len;i++)
                     printk("%c", data->rx_buf->data[i]);
@@ -969,11 +969,11 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
             errno = 0;
 
             if (sock_data.recv_read_len == 0) {
-            	printk("WARN: sock-recv no bytes, quit!\n");
+            	printk("sock-recv no bytes, quit!\n");
                 break;
             }
 
-            printk("Rcvd: %d bytes\n", sock_data.recv_read_len);
+            printk("Rcvd: %d, %s\n", sock_data.recv_read_len, sock_data.recv_buf);
 
             /* return length of received data */
             hex_str_to_data(mdata.xlate_buf, (uint8_t *) buf + total, sock_data.recv_read_len);
@@ -1041,9 +1041,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 
 	switch (sock->ip_proto) {
 	case IPPROTO_UDP:
-#if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
-	case IPPROTO_DTLS_1_2:
-#endif
 		snprintf(protocol, sizeof(protocol), "UDP");
 		break;
 	case IPPROTO_TCP:
@@ -1074,6 +1071,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d", 
                  protocol, ip_add, dst_port);
 	
+	printk("\n%s\n", buf);
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     cmd, ARRAY_SIZE(cmd), buf,
@@ -1098,11 +1096,12 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	//printk("store %d into sock: %p\n", mdata.sock_fd, sock);	//remove me
 	sock->sock_fd = mdata.sock_fd;
 
-	if (sock->ip_proto == IPPROTO_TLS_1_2 || sock->ip_proto == IPPROTO_DTLS_1_2) {
+	if (sock->ip_proto == IPPROTO_TLS_1_2) {
 		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"SSLALLOC\",%d,0,8", sock->sock_fd);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				     NULL, 0U, buf,
 				     &mdata.sem_response, K_SECONDS(8));
+		printk("%s\n", buf);
 		if (ret < 0) {
 			LOG_ERR("%s ret: %d", log_strdup(buf), ret);
 			LOG_ERR("Closing the socket!!!");
@@ -1113,6 +1112,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ACTIVATE\",%d", sock->sock_fd);
+	printk("\n%s\n", log_strdup(buf));
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf,
@@ -1134,7 +1134,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	 	goto exit;
 	 }
 
-	//printk("sock conn GOOD!\n");	//remove me
+	printk("sock conn GOOD!\n");	//remove me
 	/* Connected successfully. */
 	sock->is_connected = true;
 	errno = 0;
@@ -1156,6 +1156,7 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 {
 	int ret;
 	struct modem_socket *sock = (struct modem_socket *) obj;
+	//printk("offld-snd2, soket: %p\n", sock);	//remove me
 	/* Ensure that valid parameters are passed. */
 	if (!buf || len <= 0) {
 		errno = EINVAL;
@@ -1297,7 +1298,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 
 	case GET_IPV4_CONF:
 		a_ipv4_addr = va_arg(args, struct aggr_ipv4_addr*);
-		//printk("***** in driver ioctl *****\n");
+		printk("***** in driver ioctl *****\n");
 		get_ipv4_config();
 		ret = inet_pton(AF_INET, mdata.mdm_ip, &a_ipv4_addr->ip);
 		ret = inet_pton(AF_INET, mdata.mdm_gw, &a_ipv4_addr->gw);
@@ -1377,7 +1378,7 @@ static ssize_t send_cert(struct modem_socket *sock,
        NULL, 0U, cert_cmd_buf.cert_cmd_write,
        &mdata.sem_response, K_SECONDS(5));
 	if (ret < 0) {
-		printk("ERROR - sendmdmcmd,ret = %d\n", ret);
+		printk("sendmdmcmd,ret = %d\n", ret);
 		goto exit;
 	}
 
