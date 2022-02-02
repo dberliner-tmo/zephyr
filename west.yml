@@ -213,12 +213,12 @@ manifest:
       groups:
         - crypto
     - name: TraceRecorderSource
-      revision: 36c577727642457b0db7274298a4b96558374832
+      revision: e8ca3b6a83d19b2fc4738a0d9607190436e5e452
       path: modules/debug/TraceRecorder
       groups:
         - debug
     - name: trusted-firmware-m
-      revision: c8134809a9439571c54d36ef39210270dbee8f67
+      revision: 5d32c3e64b3d589548e881eeeeb37d84944c90af
       path: modules/tee/tf-m/trusted-firmware-m
       groups:
         - tee
@@ -228,7 +228,7 @@ manifest:
       groups:
         - tee
     - name: psa-arch-tests
-      revision: 186cba2543dff73d0cda5509d26f02a0b39ee66e
+      revision: 0aab24602cbef30f6422e7ef1066a8473073e586
       path: modules/tee/tf-m/psa-arch-tests
       groups:
         - tee

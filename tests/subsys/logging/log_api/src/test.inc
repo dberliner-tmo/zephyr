@@ -703,10 +703,16 @@ static void log_api_suite_before(void *data)
 	mock_log_backend_check_enable(&backend2);
 }
 
+static void log_api_suite_before_1cpu(void *data)
+{
+	ztest_simple_1cpu_before(data);
+	log_api_suite_before(data);
+}
+
 static void log_api_suite_after(void *data)
 {
-
 	ARG_UNUSED(data);
+
 	/* Disable testing backends after the test. Otherwise test may fail due
 	 * to unexpected log message.
 	 */
@@ -714,26 +720,42 @@ static void log_api_suite_after(void *data)
 	mock_log_backend_check_disable(&backend2);
 }
 
-#define WRAP_TEST(test_name, suffix)                       \
-	ZTEST(UTIL_CAT(test_log_api_, suffix), UTIL_CAT(test_name, UTIL_CAT(_,suffix))) \
-	{                                                  \
-		test_name();                               \
-	}
+static void log_api_suite_after_1cpu(void *data)
+{
+	log_api_suite_after(data);
+	ztest_simple_1cpu_after(data);
+}
 
 #if __cplusplus
 #define TEST_SUFFIX cxx
 #else
 #define TEST_SUFFIX cc
 #endif
-#define TEST_SUITE_NAME UTIL_CAT(test_log_api_, TEST_SUFFIX)
 
-ZTEST_SUITE(TEST_SUITE_NAME, NULL, log_api_suite_setup,
+#define SUFFIXED_NAME(_name) UTIL_CAT(_name, UTIL_CAT(_, TEST_SUFFIX))
+
+#define WRAP_TEST(test_name, suite_name)                   \
+	ZTEST(SUFFIXED_NAME(suite_name), SUFFIXED_NAME(test_name)) \
+	{                                                  \
+		test_name();                               \
+	}
+
+ZTEST_SUITE(SUFFIXED_NAME(test_log_api), NULL, log_api_suite_setup,
 	    log_api_suite_before, log_api_suite_after, log_api_suite_teardown);
-WRAP_TEST(test_log_various_messages, TEST_SUFFIX)
-WRAP_TEST(test_log_backend_runtime_filtering, TEST_SUFFIX)
-WRAP_TEST(test_log_overflow, TEST_SUFFIX)
-WRAP_TEST(test_log_arguments, TEST_SUFFIX)
-WRAP_TEST(test_log_from_declared_module, TEST_SUFFIX)
-WRAP_TEST(test_log_msg_dropped_notification, TEST_SUFFIX)
-WRAP_TEST(test_log_panic, TEST_SUFFIX)
-WRAP_TEST(test_log_printk, TEST_SUFFIX)
+
+/* Suite dedicated for tests that need to run on 1 cpu only. */
+ZTEST_SUITE(SUFFIXED_NAME(test_log_api_1cpu), NULL, log_api_suite_setup,
+	    log_api_suite_before_1cpu, log_api_suite_after_1cpu, log_api_suite_teardown);
+
+WRAP_TEST(test_log_various_messages, test_log_api)
+WRAP_TEST(test_log_backend_runtime_filtering, test_log_api)
+WRAP_TEST(test_log_overflow, test_log_api)
+WRAP_TEST(test_log_arguments, test_log_api)
+WRAP_TEST(test_log_from_declared_module, test_log_api)
+WRAP_TEST(test_log_panic, test_log_api)
+WRAP_TEST(test_log_printk, test_log_api)
+
+/* With multiple cpus you may not get consistent message dropping
+ * as other core may process logs. Executing on 1 cpu only.
+ */
+WRAP_TEST(test_log_msg_dropped_notification, test_log_api_1cpu)
