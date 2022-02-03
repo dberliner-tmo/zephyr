@@ -22,6 +22,7 @@ struct ll_scan_set {
 
 		uint8_t adv_addr_type:1;
 		uint8_t filter_policy:1;
+		uint8_t cancelled:1;
 		uint8_t state:2;
 
 		uint8_t adv_addr[BDADDR_SIZE];
@@ -46,4 +47,8 @@ struct ll_scan_aux_set {
 	struct node_rx_hdr *rx_last;
 
 	uint16_t data_len;
+
+#if defined(CONFIG_BT_CTLR_SYNC_PERIODIC)
+	struct node_rx_hdr *rx_incomplete;
+#endif
 };
