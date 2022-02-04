@@ -388,6 +388,8 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 	struct rsi_timeval tv, *ptv;
 	rsi_fd_set rfds;	 /* Set of read file descriptors */
 	rsi_fd_set wfds;	 /* Set of write file descriptors */
+	rsi_fd_set *prfds = NULL;
+	rsi_fd_set *pwfds = NULL;
 	int i, retval = 0, sd;
 	void *obj;
 
@@ -429,9 +431,11 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 		}
 		if (fds[i].events & ZSOCK_POLLIN) {
 			RSI_FD_SET(sd, &rfds);
+			prfds = &rfds;
 		}
 		if (fds[i].events & ZSOCK_POLLOUT) {
 			RSI_FD_SET(sd, &wfds);
+			pwfds = &wfds;
 		}
 		if (sd > max_sd) {
 			max_sd = sd;
@@ -439,7 +443,7 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 	}
 
 	/* Wait for requested read and write fds to be ready: */
-	retval = rsi_select(max_sd + 1, &rfds, &wfds, NULL, ptv, NULL);
+	retval = rsi_select(max_sd + 1, prfds, pwfds, NULL, ptv, NULL);
 	
 	if (retval > 0) {
 		for (i = 0; i < nfds; i++) {
@@ -657,7 +661,6 @@ static int rs9116w_getsockopt(void *obj, int level, int optname,
 		}
 	} else {
 		/* Can be SOL_SOCKET or TI specific: */
-
 		switch (optname) {
 			/* TCP_NODELAY always set by the NWP, so return True */
 		case Z_SO_BROADCAST:
@@ -676,7 +679,6 @@ static int rs9116w_getsockopt(void *obj, int level, int optname,
 		return rsi_getsockopt(sd, SOL_SOCKET, optname, optval,
 				       *(rsi_socklen_t *)optlen);
 	}
-
 }
 
 
@@ -685,16 +687,23 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 {
 	int sd = OBJ_TO_SD(obj);
 	ssize_t retval;
-	struct rsi_sockaddr *rsi_addr;
+	struct rsi_sockaddr *rsi_addr = NULL;
 	struct rsi_sockaddr_in rsi_addr_in;
 	struct rsi_sockaddr_in6 rsi_addr_in6;
 	rsi_socklen_t rsi_addrlen;
+
+	/* 1k to account for TLS overhead */
+	size_t per_rcv = 1000;
+
+	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
+
 	if (flags & ~ZSOCK_MSG_DONTWAIT){
 		errno = ENOTSUP;
 		return -1;
 	}
-	/* Non-blocking is only able to be set on socket creation
-	 * Also doesn't affect recieve anyways
+	/*
+	 * Non-blocking is only able to be set on socket creation
+	 * (Also doesn't affect recieve anyways)
 	 * Therefore, this is the simplest solution...
 	 */
 	if (flags & ZSOCK_MSG_DONTWAIT) {
@@ -711,25 +720,51 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 		}
 	}
 
+	if (is_udp) {
+		per_rcv = 1460;
+	}
+
+	size_t vlen = MIN(len, per_rcv);
+
 	/* Translate to rsi_recvfrom() parameters: */
 	if (fromlen != NULL) {
 		rsi_addr = translate_z_to_rsi_addrlen(*fromlen,
 							&rsi_addr_in,
 							&rsi_addr_in6,
 							&rsi_addrlen);
-		retval = (ssize_t)rsi_recvfrom(sd, buf, len, 0, rsi_addr,
+		retval = (ssize_t)rsi_recvfrom(sd, buf, vlen, 0, rsi_addr,
 							&rsi_addrlen);
 	} else {
-		retval = (ssize_t)rsi_recv(sd, buf, len, 0);
+		retval = (ssize_t)rsi_recv(sd, buf, vlen, 0);
 	}
 
-	// handle_recv_flags(sd, flags, FALSE, &nb_enabled); //Todo
+	/* 
+	 * Larger recieves are a bit wonky, also occasionally the recieve will not
+	 * get all available data, so to account for both, recieve is tried until
+	 * there is no longer any data available. 
+	 */
+	if (len != retval && !is_udp && retval != -1) {
+		size_t remaining_len = len - retval;
+		size_t offset;
+		ssize_t rv = 0;
+		while (remaining_len && rv >= 0) {
+			offset = len - remaining_len;
+			rv = rs9116w_recvfrom(obj, (uint8_t*)buf + retval, MIN(per_rcv, remaining_len),
+								ZSOCK_MSG_DONTWAIT, from, fromlen);
+			if (rv == -1 && errno == EAGAIN) {
+				errno = 0;
+				break;
+			} else if (rv == -1) {
+				return -1;
+			}
+			retval += rv;
+			remaining_len -= rv;
+		}
+	}
+
 	if (retval >= 0) {
 		if (fromlen != NULL) {
-			/*
-				* Translate rsi_addr into *addr and set
-				* *addrlen
-				*/
+			/* Translate rsi_addr into *addr and set addrlen */
 			translate_rsi_to_z_addr(rsi_addr, rsi_addrlen,
 							from, fromlen);
 		}
@@ -743,11 +778,18 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 				 socklen_t tolen)
 {
 	int sd = OBJ_TO_SD(obj);
-	ssize_t retval;
+	ssize_t retval = 0;
 	struct rsi_sockaddr *rsi_addr;
 	struct rsi_sockaddr_in rsi_addr_in;
 	struct rsi_sockaddr_in6 rsi_addr_in6;
 	rsi_socklen_t rsi_addrlen;
+	size_t per_send = 1000;
+
+	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
+
+	if (is_udp) {
+		per_send = 1460;
+	}
 
 	if (to != NULL) {
 		/* Translate to rsi_sendto() parameters: */
@@ -758,14 +800,64 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 			errno = EINVAL;
 			return -1;
 		}
-
-		retval = rsi_sendto(sd, (int8_t*)buf, (uint16_t)len, flags,
-				   rsi_addr, rsi_addrlen);
+	}
+	if (len < per_send) {
+		if (to != NULL) {
+			retval = rsi_sendto(sd, (int8_t*)buf, len, flags,
+						rsi_addr, rsi_addrlen);
+		} else {
+			retval = rsi_send(sd, (int8_t*)buf, len, flags);
+		}
 	} else {
-		retval = (ssize_t)rsi_send(sd, buf, len, flags);
+		size_t remaining_len = len;
+		size_t offset;
+		while (remaining_len && retval >= 0) {
+			offset = len - remaining_len;
+			if (to != NULL) {
+				retval = rsi_sendto(sd, ((int8_t*)buf) + offset, 
+							MIN(per_send, remaining_len), flags, rsi_addr,
+							rsi_addrlen);
+			} else {
+				retval = rsi_send(sd, ((int8_t*)buf) + offset, 
+							MIN(per_send, remaining_len), flags);
+			}
+			if (retval == -1){
+				break;
+			}
+			remaining_len -= retval;
+		}
 	}
 
 	return retval;
+}
+
+static ssize_t rs9116w_sendmsg(void *obj, const struct msghdr *msg,
+				  int flags)
+{
+	ssize_t sent = 0;
+	int rc;
+
+	LOG_DBG("msg_iovlen:%zd flags:%d", msg->msg_iovlen, flags);
+
+	for (int i = 0; i < msg->msg_iovlen; i++) {
+		const char *buf = msg->msg_iov[i].iov_base;
+		size_t len	= msg->msg_iov[i].iov_len;
+
+		while (len > 0) {
+			rc = rs9116w_sendto(obj, buf, len, flags,
+					    msg->msg_name, msg->msg_namelen);
+			if (rc < 0) {
+				sent = rc;
+				break;
+			} else {
+				sent += rc;
+				buf += rc;
+				len -= rc;
+			}
+		}
+	}
+
+	return (ssize_t) sent;
 }
 
 static int rs9116w_ioctl(void *obj, unsigned int request, va_list args)
@@ -822,6 +914,7 @@ static const struct socket_op_vtable rs9116w_socket_fd_op_vtable = {
 	.listen = rs9116w_listen,
 	.accept = rs9116w_accept,
 	.sendto = rs9116w_sendto,
+	.sendmsg = rs9116w_sendmsg,
 	.recvfrom = rs9116w_recvfrom,
 	.getsockopt = rs9116w_getsockopt,
 	.setsockopt = rs9116w_setsockopt, 
