@@ -274,6 +274,8 @@ Drivers and Sensors
 
 * EEPROM
 
+  * Added support for the EEPROM present in the TMP116 digital temperature
+    sensor.
 
 * Entropy
 
@@ -558,6 +560,8 @@ MCUboot
 Trusted Firmware-m
 ******************
 
+* Updated TF-M to 1.5.0 release, with a handful of additional cherry-picked
+  commits.
 
 Documentation
 *************
