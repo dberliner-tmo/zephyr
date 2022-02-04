@@ -110,8 +110,6 @@ config BT_SMP
   bool "Enable BLE Security Manager Protocol (SMP) features"
   default n
 
-if BT_SMP
-
 config BT_MAX_PAIRED
 	int "Maximum number of paired devices"
 	default 0 if !BT_SMP
@@ -120,6 +118,8 @@ config BT_MAX_PAIRED
 	help
 	  Maximum number of paired Bluetooth devices. The minimum (and
 	  default) number is 1.
+
+if BT_SMP
 
 config BT_BONDABLE
 	bool "Bondable Mode"
