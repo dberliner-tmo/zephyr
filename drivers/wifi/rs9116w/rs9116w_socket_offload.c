@@ -957,8 +957,222 @@ NET_SOCKET_REGISTER(rs9116w, NET_SOCKET_DEFAULT_PRIO, AF_UNSPEC,
 #endif
 
 #include <rsi_nwk.h>
+#include <rsi_utils.h>
+
+#if CONFIG_DNS_RESOLVER_MAX_SERVERS
+#define DNS_SERVER_COUNT CONFIG_DNS_RESOLVER_MAX_SERVERS
+#else
+#define DNS_SERVER_COUNT 1
+#endif
+
+#if IS_ENABLED(CONFIG_DNS_SERVER_IP_ADDRESSES)
+char *dns_servers[] = {
+	CONFIG_DNS_SERVER1,
+	CONFIG_DNS_SERVER2,
+	CONFIG_DNS_SERVER3,
+	CONFIG_DNS_SERVER4,
+	CONFIG_DNS_SERVER5
+};
+#endif
+
+#undef s6_addr32
+/* Adds address info entry to a list */
+static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t port,
+			 struct zsock_addrinfo **res)
+{
+	struct zsock_addrinfo *ai;
+	struct sockaddr *ai_addr;
+	int retval = 0;
+
+	ai = calloc(1, sizeof(struct zsock_addrinfo));
+	if (!ai) {
+		retval = DNS_EAI_MEMORY;
+		goto exit;
+	} else {
+		/* Now, alloc the embedded sockaddr struct: */
+		ai_addr = calloc(1, sizeof(struct sockaddr));
+		if (!ai_addr) {
+			retval = DNS_EAI_MEMORY;
+			free(ai);
+			goto exit;
+		}
+	}
+
+	/* Now, fill in the fields of res (addrinfo struct): */
+	ai->ai_family = (ipv6 ? Z_AF_INET6 : Z_AF_INET);
+	ai->ai_socktype = socktype;
+	ai->ai_protocol = ai->ai_socktype == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP;
+
+	/* Fill sockaddr struct fields based on family: */
+	if (ai->ai_family == Z_AF_INET) {
+		net_sin(ai_addr)->sin_family = ai->ai_family;
+		net_sin(ai_addr)->sin_addr.s_addr = rsi_bytes4R_to_uint32(addr);
+		net_sin(ai_addr)->sin_port = port;
+		ai->ai_addrlen = sizeof(struct sockaddr_in);
+	} else {
+
+		net_sin6(ai_addr)->sin6_family = ai->ai_family;
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[0] =
+			rsi_bytes4R_to_uint32(&addr[0]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[1] =
+			rsi_bytes4R_to_uint32(&addr[4]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[2] =
+			rsi_bytes4R_to_uint32(&addr[8]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[3] =
+			rsi_bytes4R_to_uint32(&addr[12]);
+		net_sin6(ai_addr)->sin6_port = port;
+		ai->ai_addrlen = sizeof(struct sockaddr_in6);
+	}
+	ai->ai_addr = ai_addr;
+	ai->ai_next = *res;
+	*res = ai;
+
+exit:
+	return retval;
+}
+
+static void rs9116w_freeaddrinfo(struct zsock_addrinfo *res)
+{
+	__ASSERT_NO_MSG(res);
+
+	free(res->ai_addr);
+	struct zsock_addrinfo *next = res->ai_next, *tmp = NULL;
+	while (next) {
+		tmp = next;
+		next = next->ai_next;
+		free(tmp);
+	}
+	free(res);
+}
+
+static int rs9116w_getaddrinfo(const char *node, const char *service,
+				  const struct zsock_addrinfo *hints,
+				  struct zsock_addrinfo **res)
+{
+	int32_t retval = -1, retval4 = -1, retval6 = -1;
+	rsi_rsp_dns_query_t qr4, qr6;
+	uint32_t port = 0;
+	uint8_t type = SOCK_STREAM;
+	if (service) {
+		port = strtol(service, NULL, 10);
+		if (port < 1 || port > USHRT_MAX) {
+			return DNS_EAI_SERVICE;
+		}
+	}
+
+	memset(&qr4, 0, sizeof(qr4));
+	memset(&qr6, 0, sizeof(qr6));
+
+	/* Check args: */
+	if (!res) {
+		retval = DNS_EAI_NONAME;
+		goto exit;
+	}
+
+	bool v4 = true, v6 = true;
+	
+	if (hints) {
+		if (hints->ai_family == Z_AF_INET){
+			v6 = false;
+		} else if (hints->ai_family == Z_AF_INET6){
+			v4 = false;
+		}
+		type = hints->ai_socktype;
+	}
+
+#if IS_ENABLED(CONFIG_NET_IPV4)
+	uint8_t *dns4_1 = NULL, *dns4_2 = NULL;
+#endif
+#if IS_ENABLED(CONFIG_NET_IPV6)
+	uint8_t *dns6_1 = NULL, *dns6_2 = NULL;
+#endif
+
+#if IS_ENABLED(CONFIG_DNS_SERVER_IP_ADDRESSES)
+	struct sockaddr v4_addresses[2];
+	struct sockaddr v6_addresses[2];
+	int a4i = 0, a6i = 0;
+	for (int i = 0; i < DNS_SERVER_COUNT; i++) {
+		if (strcmp(dns_servers[i], "")) {
+			char *server = dns_servers[i];
+			struct sockaddr addr;
+			if (net_ipaddr_parse(server, strlen(server), &addr)) {
+				if (addr.sa_family == Z_AF_INET && a4i < 2) {
+					memcpy(&v4_addresses[i], &addr, sizeof(addr));
+					a4i++;
+				} else if (addr.sa_family == Z_AF_INET6 && a6i < 2) {
+					memcpy(&v6_addresses[i], &addr, sizeof(addr));
+					a6i++;
+				}
+			}
+		}
+	}
+	if (a4i > 0) {
+		dns4_1 = &v4_addresses[0];
+		if (a4i > 1) {
+			dns4_2 = &v4_addresses[1];
+		}
+	}
+
+	if (a6i > 0) {
+		dns6_1 = &v6_addresses[0];
+		if (a6i > 1) {
+			dns6_2 = &v6_addresses[1];
+		}
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_NET_IPV4)
+	if (v4) {
+		retval4 = rsi_dns_req(4, (uint8_t*)node, dns4_1, dns4_2, &qr4, sizeof(qr4));
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_NET_IPV6)
+	if (v6) {
+		retval6 = rsi_dns_req(6, node, dns4_1, dns4_2, &qr6, sizeof(qr6));
+	}
+#endif
+
+	if (retval4 < 0 && retval6 < 0) {
+		LOG_ERR("Could not resolve name: %s, retval: %d",
+			    node, retval);
+		retval = DNS_EAI_NONAME;
+		goto exit;
+	}
+
+	*res = NULL;
+	
+	for (int i = 0; i < rsi_bytes2R_to_uint16(qr4.ip_count); i++){
+		retval = set_addr_info(qr4.ip_address[i].ipv4_address, false,
+			type, (uint16_t)port, res);
+		if (retval < 0) {
+			rs9116w_freeaddrinfo(*res);
+			LOG_ERR("Unable to set address info, retval: %d",
+				retval);
+			goto exit;
+		}	
+	}
+	for (int i = 0; i < rsi_bytes2R_to_uint16(qr6.ip_count); i++){
+		retval = set_addr_info(qr6.ip_address[i].ipv6_address, true,
+			type, (uint16_t)port, res);
+		if (retval < 0) {
+			rs9116w_freeaddrinfo(*res);
+			LOG_ERR("Unable to set address info, retval: %d",
+				retval);
+			goto exit;
+		}	
+	}
+exit:
+	return retval;
+}
+
+const struct socket_dns_offload rs9116w_dns_ops = {
+	.getaddrinfo = rs9116w_getaddrinfo,
+	.freeaddrinfo = rs9116w_freeaddrinfo,
+};
 
 int rs9116w_socket_offload_init()
 {
+	socket_offload_dns_register(&rs9116w_dns_ops);
 	return 0;
 }
