@@ -188,6 +188,24 @@ void z_shell_help_cmd_print(const struct shell *shell,
 	formatted_text_print(shell, cmd->help, field_width, false);
 }
 
+void z_shell_help_subcmd_print_selitem(const struct shell *shell)
+{
+#define MAX_CMD_BUFF_SCAN_CNT 32
+	struct shell_static_entry *parent = &shell->ctx->active_cmd;
+	int cnt = 0;
+	char *sptr = shell->ctx->cmd_buff;
+	while (cnt < MAX_CMD_BUFF_SCAN_CNT) {
+		if (sptr[cnt] == 0) {
+			if (sptr[cnt+1] == 0) break;
+			sptr[cnt] = ' ';
+		}
+		cnt++;
+	};
+	cnt += 1;	/* 1 space after cmd_buff */
+	z_shell_fprintf(shell, SHELL_NORMAL, "%s ", sptr);
+	formatted_text_print(shell, parent->help, cnt, false);
+}
+
 bool z_shell_help_request(const char *str)
 {
 	if (!IS_ENABLED(CONFIG_SHELL_HELP_OPT_PARSE)) {

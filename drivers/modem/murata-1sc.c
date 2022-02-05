@@ -310,13 +310,11 @@ static int on_cmd_sockread_common(int socket_fd,
 	int ret;
 
 	if (!len) {
-		LOG_ERR("Invalid length, Aborting!");
 		return -EAGAIN;
 	}
 
 	/* zero length */
 	if (socket_data_length <= 0) {
-		LOG_ERR("Did not recieve message.  Aborting! ");
 		return -EAGAIN;
 	}
 
@@ -955,7 +953,6 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 #endif
             snprintk(sendbuf, sizeof(sendbuf), "AT%%SOCKETDATA=\"RECEIVE\",%u,%u", sock->sock_fd,
                     MIN(MDM_RECV_BUF_SIZE, len - total));
-            //printk("%s\n", sendbuf);
 
             /* Tell the modem to give us data (%SOCKETDATA:socket_id,len,0,data). */
             ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
