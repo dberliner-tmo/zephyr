@@ -42,6 +42,11 @@ Changes in this release
 * Added ``ranges`` and ``dma-ranges`` as invalid property to be used with DT_PROP_LEN()
   along ``reg`` and ``interrupts``.
 
+* The existing :c:func:`crc16` and :c:func:`crc16_ansi` functions have been
+  modified. The former has a new signature. The latter now properly calculates the
+  CRC-16-ANSI checksum. A new function, :c:func:`crc16_reflect`, has been
+  introduced to calculated reflected CRCs.
+
 Removed APIs in this release
 ============================
 
@@ -183,6 +188,7 @@ Boards & SoC Support
 * Added support for these SoC series:
 
   * GigaDevice GD32VF103, GD32F3X0, GD32F403 and GD32F450.
+  * NXP i.MXRT595, i.MX8MQ, i.MX8MP
 
 * Removed support for these SoC series:
 
@@ -201,6 +207,9 @@ Boards & SoC Support
   * GigaDevice GD32F403Z-EVAL
   * GigaDevice GD32F450I-EVAL
   * OLIMEX-STM32-H405
+  * NXP MIMXRT595-EVK
+  * NXP MIMX8MQ-EVK
+  * NXP MIMX8MP-EVK
   * ST Nucleo G031K8
   * ST Nucleo H7A3ZI Q
   * ST STM32G081B Evaluation
@@ -221,6 +230,9 @@ Boards & SoC Support
 * Made these changes in other boards:
 
   * sam_e70_xplained: Added support for CAN-FD driver
+  * mimxrt11xx: Added SOC level power management
+  * mimxrt11xx: Added support for GPT timer as OS timer
+
 
 * Added support for these following shields:
 
@@ -239,6 +251,7 @@ Drivers and Sensors
 * CAN
 
   * Add Atmel SAM Bosch m_can CAN-FD Driver
+  * Added LPCXpresso support for MCAN
 
 * Clock Control
 
@@ -271,6 +284,7 @@ Drivers and Sensors
   * Added support for suspending and resuming transfers
   * Added support for SoCs with DMA between application and embedded
     processors, allows for transfer directions to be identified as such.
+  * mimxrt11xx: Added support for DMA
 
 * EEPROM
 
@@ -290,6 +304,7 @@ Drivers and Sensors
     on stm32h7 series.
   * stm32 (hal based): Added promiscuous mode support
   * stm32 (hal based): Added PTP L2 timestamping support
+  * mimxrt11xx: Added support for 10/100M ENET
 
 * Flash
 
@@ -315,9 +330,13 @@ Drivers and Sensors
 
   * Added driver for GigaDevice GD32 SoCs
   * Added stats functionality to all drivers
+  * Added I2C driver for Renesas R-Car platform
+  * Added support for TCA9548A I2C switch
 
 * I2S
 
+  * mimxrt10xx: Added support for I2S
+  * mimxrt11xx: Added support for I2S
 
 * IEEE 802.15.4
 
@@ -359,6 +378,7 @@ Drivers and Sensors
     to parent timer node.
   * stm32: Implemented PWM capture API
   * Added driver for GigaDevice GD32 SoCs. Only PWM output is supported.
+  * mimxrt1021: Added support for PWM
 
 * Sensor
 
@@ -388,6 +408,7 @@ Drivers and Sensors
 * SPI
 
   * stm32: Implemented Frame format option (TI vs Motorola).
+  * mimxrt11xx: Added support for Flexspi
 
 * Timer
 
@@ -400,6 +421,7 @@ Drivers and Sensors
 * Watchdog
 
   * Added support for stm32u5 series (Independent and Window)
+  * mimxrt1170: Added support for watchdog on CM7
 
 * WiFi
 
