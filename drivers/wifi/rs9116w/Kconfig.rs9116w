@@ -24,6 +24,19 @@ config RSI_WIFI_DEBUG
 	help
 	  WiFi driver debug
 
+config RS9116W_OVERRIDE_DEFAULT_PRIO
+	bool "Override default socket priority"
+	depends on NET_SOCKETS_OFFLOAD
+	default n
+
+if RS9116W_OVERRIDE_DEFAULT_PRIO
+
+config RS9116W_SOCKET_PRIO
+	int "RS9116W Sockets Priority"
+	default 50
+
+endif # RS9116W_OVERRIDE_DEFAULT_PRIO
+
 endif # WIFI_RS9116W
 
 if NET_SOCKETS_OFFLOAD && NET_SOCKETS_SOCKOPT_TLS
