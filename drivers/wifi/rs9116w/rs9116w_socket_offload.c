@@ -949,8 +949,14 @@ int rs9116w_socket_create(int family, int type, int proto)
 	return fd;
 }
 
+#if IS_ENABLED(CONFIG_RS9116W_OVERRIDE_DEFAULT_PRIO)
+#define NET_SOCKET_RS9116_PRIO CONFIG_RS9116W_SOCKET_PRIO
+#else
+#define NET_SOCKET_RS9116_PRIO NET_SOCKET_DEFAULT_PRIO
+#endif
+
 #ifdef CONFIG_NET_SOCKETS_OFFLOAD
-NET_SOCKET_REGISTER(rs9116w, NET_SOCKET_DEFAULT_PRIO, AF_UNSPEC,
+NET_SOCKET_REGISTER(rs9116w, NET_SOCKET_RS9116_PRIO, AF_UNSPEC,
 		    rs9116w_is_supported, rs9116w_socket_create);
 // NET_SOCKET_REGISTER(rs9116w, AF_UNSPEC,
 // 		    rs9116w_is_supported, rs9116w_socket_create);
