@@ -487,6 +487,34 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imei)
 	return 0;
 }
 
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+/* Handler: <IMSI> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
+{
+	size_t out_len = net_buf_linearize(mdata.mdm_imsi,
+					   sizeof(mdata.mdm_imsi) - 1,
+					   data->rx_buf, 0, len);
+	mdata.mdm_imsi[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("IMSI: %s", log_strdup(mdata.mdm_imsi));
+	return 0;
+}
+
+/* Handler: <ICCID> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
+{
+	size_t out_len = net_buf_linearize(mdata.mdm_iccid,
+					   sizeof(mdata.mdm_iccid) - 1,
+					   data->rx_buf, 0, len);
+	mdata.mdm_iccid[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("ICCID: %s", log_strdup(mdata.mdm_iccid));
+	return 0;
+}
+#endif //defined(CONFIG_MODEM_SIM_NUMBERS)
+
 
 void parse_ipgwmask(char *buf, char *p1, char *p2, char *p3);
 #define PDN_QUERY_RESPONSE_LEN 256
@@ -626,27 +654,27 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
 }
 
 /* Handler: <PDNRDP> */
-MODEM_CMD_DEFINE(on_cmd_atcmdinfo_pdnrdp)
-{
-#define PDN_BUF_SZ	256
-	static bool got_pdn_flg = false;
-	char pdn_buf[PDN_BUF_SZ];
-	size_t out_len;
-
-	if (!got_pdn_flg) {
-		got_pdn_flg = true;
-		out_len = net_buf_linearize(pdn_buf,
-						   PDN_BUF_SZ-1,
-						   data->rx_buf, 0, len);
-		pdn_buf[out_len] = '\0';
-		//printk("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
-		parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
-		/* Log the received information. */
-		LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
-	}
-
-    return 0;
-}
+//MODEM_CMD_DEFINE(on_cmd_atcmdinfo_pdnrdp)
+//{
+//#define PDN_BUF_SZ	256
+//	static bool got_pdn_flg = false;
+//	char pdn_buf[PDN_BUF_SZ];
+//	size_t out_len;
+//
+//	if (!got_pdn_flg) {
+//		got_pdn_flg = true;
+//		out_len = net_buf_linearize(pdn_buf,
+//						   PDN_BUF_SZ-1,
+//						   data->rx_buf, 0, len);
+//		pdn_buf[out_len] = '\0';
+//		//printk("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
+//		parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
+//		/* Log the received information. */
+//		LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
+//	}
+//
+//    return 0;
+//}
 
 /* Func: murata_1sc_setup
  * Desc: This function is used to setup the modem from zero. 
@@ -666,7 +694,11 @@ static int murata_1sc_setup(void)
 		SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 		SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
 		SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
-		SETUP_CMD("AT%PDNRDP=1", "%PDNRDP", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
+		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_atcmdinfo_iccid, 0U, " "),
+#endif //(CONFIG_MODEM_SIM_NUMBERS)
+		//SETUP_CMD("AT=CGDCONTRDP", "%CGDCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
 	};
 
 	int ret = 0, counter;
@@ -1266,6 +1298,137 @@ static ssize_t offload_sendmsg(void *obj, const struct msghdr *msg, int flags)
 	return (ssize_t) sent;
 }
 
+typedef enum {
+	imei_e,
+	imsi_e,
+	iccid_e,
+	ssi_e,
+	invalid
+} atcmd_idx_e;
+
+typedef void (*atcmd_cb_t)(atcmd_idx_e e, void *user_data);
+
+typedef struct {
+	char *str;
+	atcmd_idx_e e;
+	atcmd_cb_t fp;
+} _cmd_t;
+
+static void gen_query(atcmd_idx_e idx, void *buf)
+{
+	switch(idx) {
+	case imei_e:
+		strcpy(buf, mdata.mdm_imei);
+		break;
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+	case imsi_e:
+		strcpy(buf, mdata.mdm_imsi);
+		break;
+	case iccid_e:
+		strcpy(buf, mdata.mdm_iccid);
+		break;
+#endif
+	default:
+		printk("not valid request\n");
+		break;
+	}
+}
+
+MODEM_CMD_DEFINE(on_cmd_csq)
+{
+#define MIN_SS	-113
+	char buf[16];
+	char *endp;
+	int ret;
+	size_t out_len = net_buf_linearize(buf,
+					   15,
+					   data->rx_buf, 0, len);
+	buf[out_len] = '\0';
+
+	for (int i = 0; i < 15; i++) {
+		if (buf[i] == ',') {
+			buf[i] = 0;
+			break;
+		}
+	}
+	ret = (int)strtol(buf, &endp, 10);
+	ret = MIN_SS + 2 * ret;
+	/* Log the received information. */
+	LOG_INF("signal strength: %d dBm", ret);
+	return 0;
+}
+
+/**
+ * get signal strength
+ */
+int get_sigstrength(void)
+{
+	char buf[64] = {0};
+	int  ret;
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("%CSQ:", on_cmd_csq, 0U, ""),
+	};
+
+	snprintk(buf, sizeof(buf), "AT%%CSQ");
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+	return ret;
+}
+
+static void dyn_query(atcmd_idx_e idx, void *buf)
+{
+	switch(idx) {
+	int ssi;
+	case ssi_e:
+		ssi = get_sigstrength();
+		break;
+	default:
+		printk("not valid request\n");
+		break;
+	}
+}
+
+/**
+ * using in_out_str as key to query modem at-cmd
+ * response will be in in-out-str
+ * current support string:
+ * 		IMEI, IMSI ...
+ */
+_cmd_t cmd_pool[] = {
+		{"IMEI", imei_e, gen_query},
+		{"IMSI", imsi_e, gen_query},
+		{"ICCID", iccid_e, gen_query},
+		{"SSI", ssi_e, dyn_query},
+		{}
+};
+int get_at_resp(char* io_str)
+{
+	int idx = 0;
+	char *cmdStr;
+	while (cmd_pool[idx].str != NULL) {
+		cmdStr = cmd_pool[idx].str;
+		if (strncmp(io_str, cmdStr, strlen(cmdStr)) == 0)
+			break;
+		++idx;
+	}
+	if (idx < (sizeof(cmd_pool)/sizeof(cmd_pool[0]) - 1)) {
+		_cmd_t cmd_entry = cmd_pool[idx];
+		printk("found cmd in pool, idx = %d\n", idx);
+		cmd_entry.fp(cmd_entry.e, io_str);
+	} else {
+		printk("cmd(%s) not suported\n", io_str);
+		idx = -1;
+	}
+	return idx;
+}
+
 struct aggr_ipv4_addr {	//for testing
 	struct in_addr ip;
 	struct in_addr gw;
@@ -1278,6 +1441,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 {
         int ret;
 		struct aggr_ipv4_addr *a_ipv4_addr;
+		char *cmd_str;
 
         // TBD: cast obj to socket, find the right instance of the murata_1sc_data etc
         // assumming one instance for now
@@ -1301,6 +1465,11 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 		ret = inet_pton(AF_INET, mdata.mdm_gw, &a_ipv4_addr->gw);
 		ret = inet_pton(AF_INET, mdata.mdm_nmask, &a_ipv4_addr->nmask);
 		ret = 0;
+		break;
+	case GET_ATCMD_RESP:
+		cmd_str = (char *)va_arg(args, char *);
+		ret = get_at_resp(cmd_str);
+		//printk("app req: %s\n", cmd_str);
 		break;
 
 	default:
