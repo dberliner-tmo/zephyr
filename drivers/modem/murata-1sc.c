@@ -1002,7 +1002,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
                 break;
             }
 
-            printk("Rcvd: %d, %s\n", sock_data.recv_read_len, sock_data.recv_buf);
+            // printk("Rcvd: %d, %s\n", sock_data.recv_read_len, sock_data.recv_buf);
 
             /* return length of received data */
             hex_str_to_data(mdata.xlate_buf, (uint8_t *) buf + total, sock_data.recv_read_len);
