@@ -22,17 +22,18 @@
 
 struct sms_out {
         char phone[SMS_PHONE_MAX_LEN];
-        char msg  [CONFIG_MODEM_SMS_OUT_MSG_MAX_LEN + 2];
+        char msg  [CONFIG_MODEM_SMS_OUT_MSG_MAX_LEN + 1];
 };
 
 struct sms_in {
         char phone[SMS_PHONE_MAX_LEN];
         char time [SMS_TIME_MAX_LEN];
-        char msg  [CONFIG_MODEM_SMS_IN_MSG_MAX_LEN + 2];
+        char msg  [CONFIG_MODEM_SMS_IN_MSG_MAX_LEN + 1];
+        k_timeout_t timeout;
 };
 
 typedef int (*send_sms_func_t)(void *obj, const struct sms_out *sms);
-typedef int (*recv_sms_func_t)(void *obj,       struct sms_in  *sms, k_timeout_t timeout);
+typedef int (*recv_sms_func_t)(void *obj,       struct sms_in  *sms);
 
 enum io_ctl {
 	SMS_SEND,

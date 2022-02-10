@@ -1,3 +1,5 @@
+
+
 #define DT_DRV_COMPAT murata_1sc
 
 #include <stdio.h>
@@ -125,6 +127,7 @@ struct murata_1sc_data {
 	struct k_sem sem_response;
 	struct k_sem sem_sock_conn;
 	struct k_sem sem_xlate_buf;
+        struct k_sem sem_sms;
 
         /* SMS message support */
         int sms_index;
@@ -388,6 +391,15 @@ MODEM_CMD_DEFINE(on_cmd_error)
 	return 0;
 }
 
+MODEM_CMD_DEFINE(on_cmd_unsol_sms)
+{
+	// printk("got unsolicited sms, argc: %d, evt: %s, sockfd: %s\n", argc, argv[0], argv[1]);	//remove me
+
+        k_sem_give(&mdata.sem_sms);
+
+        return 0;
+}
+
 /* Handler of unsolicit SOCKETEV */
 MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 {
@@ -639,6 +651,7 @@ static const struct modem_cmd response_cmds[] = {
 
 static const struct modem_cmd unsol_cmds[] = {
 	MODEM_CMD("%SOCKETEV:",	   on_cmd_unsol_SEV, 2U, ","),
+        MODEM_CMD("+CMTI:", on_cmd_unsol_sms, 2U, ","),
 };
 
 /* Handler: %SOCKETCMD:<socket_id> OK */
@@ -690,6 +703,8 @@ static int murata_1sc_setup(void)
 		SETUP_CMD_NOHANDLE("ATQ0"),
 		SETUP_CMD_NOHANDLE("ATE0"),
 		SETUP_CMD_NOHANDLE("ATV1"),
+                SETUP_CMD_NOHANDLE("AT%CSDH=1"),
+                SETUP_CMD_NOHANDLE("AT+CNMI=2,1,2,1,0"),
 		SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
 		SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
 		SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
@@ -753,7 +768,6 @@ static void socket_close(struct modem_socket *sock)
  */
 static int send_sms_msg(void *obj, const struct sms_out *sms)
 {
-	printk("send sms\n");
 	char buf[sizeof(struct sms_out) + 12] = {0};
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
@@ -766,7 +780,7 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	}
 
 	snprintk(buf, sizeof(buf), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
-        printk("\n%s\n", buf);
+        // printk("\n%s\n", buf);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
 	if (ret < 0) {
@@ -807,6 +821,7 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
         char *str2;
         char *str3;
 
+        /*
         printk("In on_cmd_readsms\n");
         for (int i=0;i<argc;i++)
             printk("   argv[%i]='%s'\n", i, argv[i]);
@@ -815,17 +830,16 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
         for (int i=0;i<data->rx_buf->len;i++)
             printk("%c", data->rx_buf->data[i]);
         printk("'\n");
+        */
 
         // Find the beginning of the message (first crlf after argv[5])
         str1 = strnstr(data->rx_buf->data, "\r\n", data->rx_buf->len);
-        if (str1)
-        {
+        if (str1) {
             // Find the end of the message (next crlf after str1 + 2)
             str2 = strnstr(str1 + 2, "\r\n", data->rx_buf->len - (size_t) (str1 + 2 - (char *) data->rx_buf->data));
-            if (str2)
-            {
+            if (str2) {
                 *str2 = '\0';
-                printk("SMS msg: '%s'\n", str1 + 2);
+                // printk("SMS msg: '%s'\n", str1 + 2);
 
                 // Prepare the return struct
                 snprintf(sms->phone, sizeof(sms->phone), "%s", argv[2]);
@@ -836,30 +850,35 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
                 // TBD: should we just delete it here
                 mdata.sms_index = atoi(argv[0]);
 
-                // Check for OK at the end of CMGL response
-                // Skip ahead to OK if present
-                // since we need to let the command handler know we're done
-                // If OK is not present, skip ahead the entire message 
-                // since there may be multiple messages which are too
-                // big to fit in the rx buffer
-                str3 = strnstr(str2 + 2, "\r\nOK\r\n", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
-                if (str3)
+                // Check for "\r\n+CMGL:" or "\r\nOK\r\n" at the end of CMGL response
+                // Skip ahead to the found string if present since
+                // we need to let the command handler know we're done.
+                str3 = strnstr(str2 + 2, "\r\n+CMGL:", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
+                if (str3) {
                     data->rx_buf = net_buf_skip(data->rx_buf, (size_t) ((uint8_t *) str3 - data->rx_buf->data));
-                else
-                    data->rx_buf = net_buf_skip(data->rx_buf, data->rx_buf->len);
+                }
+                else {
+                    str3 = strnstr(str2 + 2, "\r\nOK\r\n", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
+                    if (str3) {
+                        data->rx_buf = net_buf_skip(data->rx_buf, (size_t) ((uint8_t *) str3 - data->rx_buf->data));
+                    }
+                }
 
-                printk("JML In on_cmd_readsms AFTER net_buf_skip, len:%d, data: '", data->rx_buf->len);
+                // printk("In on_cmd_readsms AFTER net_buf_skip, len:%d, data: '", data->rx_buf->len);
 
+                /*
                 for (int i=0;i<data->rx_buf->len;i++)
                     printk("%c", data->rx_buf->data[i]);
                 printk("'\n");
+                */
             }
-            else
-                printk("Warning, SMS bad format 2\n");
+            else {
+                // printk("Warning, SMS bad format 2\n");
+                return -EAGAIN;
+            }
         }
-        else
-        {
-                printk("Warning, SMS bad format 1\n");
+        else {
+                // printk("Warning, SMS bad format 1\n");
                 return -EAGAIN;
         }
                 
@@ -869,14 +888,14 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
 /* Func: recieve sms messages
  * Desc: recieve sms messages 
  */
-static int recv_sms_msg(void *obj, struct sms_in *sms, k_timeout_t timeout)
+static int recv_sms_msg(void *obj, struct sms_in *sms)
 {
 	char buf[64] = {0};
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
+        int count = 0;
 
-        // TODO: use timeout parameter to wait for sms msg
-	ARG_UNUSED(timeout);
+        k_sem_reset(&mdata.sem_sms);
 
 	/* Modem command response to sms receive the data. */
 	struct modem_cmd data_cmd[] = {
@@ -888,37 +907,55 @@ static int recv_sms_msg(void *obj, struct sms_in *sms, k_timeout_t timeout)
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf, &mdata.sem_response, K_MSEC(5000));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+            // printk("JML Error 1\n");
+	    LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 	}
 
         // Set pointer to struct which is populated in on_cmd_sockreadsms
         mdata.sms = sms;
 
-	snprintk(buf, sizeof(buf), "AT+CMGL=\"ALL\"");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			     data_cmd, ARRAY_SIZE(data_cmd), buf, &mdata.sem_response, K_MSEC(5000));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), 64);
-	}
-
-        else {
-            if (mdata.sms_index)
-            {
-                printk("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
-
-                // Delete the message from the modem
-                snprintk(buf, sizeof(buf), "AT+CMGD=%d", mdata.sms_index);
-                ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-                                     NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
-                if (ret < 0) {
-                        LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-                }
-
-                ret = mdata.sms_index;
-                mdata.sms_index = 0;
+        while (count <= 1) {
+            snprintk(buf, sizeof(buf), "AT+CMGL=\"ALL\"");
+            ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                                 data_cmd, ARRAY_SIZE(data_cmd), buf, &mdata.sem_response, K_MSEC(5000));
+            if (ret < 0) {
+                // printk("JML Error 2, ret = %d\n", ret);
+                LOG_ERR("%s ret:%d", log_strdup(buf), ret);
             }
+
+            else {
+                if (mdata.sms_index)
+                {
+                    // printk("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
+
+                    // Delete the message from the modem
+                    snprintk(buf, sizeof(buf), "AT+CMGD=%d", mdata.sms_index);
+                    ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                                         NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
+                    if (ret < 0) {
+                        // printk("JML Error 3\n");
+                        LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+                    }
+
+                    ret = mdata.sms_index;
+                    mdata.sms_index = 0;
+                    break;
+                }
+            }
+
+            // if no message was returned, wait for an SMS message for the requested time
+            if (ret == 0 && count == 0) {
+                ret = k_sem_take(&mdata.sem_sms, sms->timeout);
+                if (ret < 0) {
+                    // timed out waiting for semaphore, set ret code to 0 (no msg available)
+                    ret = 0;
+                    break;
+                }
+            }
+            count++;
         }
 
+        // printk("JML returning %d\n", ret);
 	return ret;
 }
 
@@ -1457,7 +1494,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
                 break;
 
 	case SMS_RECV:
-		ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *), (k_timeout_t)va_arg(args, k_timeout_t));
+		ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *));
 	        va_end(args);
                 break;
 
@@ -1730,6 +1767,7 @@ static int murata_1sc_init(const struct device *dev)
 	k_sem_init(&mdata.sem_response,	 0, 1);
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
         k_sem_init(&mdata.sem_xlate_buf, 1, 1);
+        k_sem_init(&mdata.sem_sms,       0, 1);
 
 	/* socket config */
 	mdata.socket_config.sockets = &mdata.sockets[0];

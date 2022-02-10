@@ -276,7 +276,7 @@ static int cmd_modem_sms_send(const struct shell *shell, size_t argc, char *argv
 		ret = ms_ctx->send_sms(ms_ctx, &sms);
 		if (ret == 0) {
 			shell_fprintf(shell, SHELL_NORMAL,
-				      "SMS msg was sent!");
+				      "SMS msg was sent\n");
 		} else {
 			shell_fprintf(shell, SHELL_ERROR,
 				      "error: send_sms returned %d\n", ret);
@@ -291,12 +291,13 @@ static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv
 	struct sms_in sms;
 	int ret = -1;
 
-	if (argc != 2) {
+	if (argc != 3) {
 		shell_fprintf(shell, SHELL_ERROR,
-			      "usage: modem sms recv <modem index>\n");
+			      "usage: modem sms recv <modem index> <wait time (seconds)>\n");
 	}
 	else {
 		int modem_index = atoi(argv[1]);
+                int wait = atoi(argv[2]);
 
 		ms_ctx = ms_context_from_id(modem_index);
 		if (ms_ctx == NULL) {
@@ -311,7 +312,8 @@ static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv
 			return -ENOEXEC;
 		}
 
-		ret = ms_ctx->recv_sms(ms_ctx, &sms, K_NO_WAIT);
+                sms.timeout = K_SECONDS(wait);
+		ret = ms_ctx->recv_sms(ms_ctx, &sms);
 		if (ret < 0) {
 			shell_fprintf(shell, SHELL_ERROR,
 				      "recv_sms returned error %d, errno:%d\n", ret, errno);
