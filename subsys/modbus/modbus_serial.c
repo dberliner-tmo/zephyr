@@ -362,7 +362,14 @@ static void cb_handler_tx(struct modbus_context *ctx)
 				   cfg->uart_buf_ctr);
 		cfg->uart_buf_ctr -= n;
 		cfg->uart_buf_ptr += n;
-	} else {
+		return;
+	}
+
+	/* Must wait till the transmission is complete or
+	 * RS-485 tranceiver could be disabled before all data has
+	 * been transmitted and message will be corrupted.
+	 */
+	if (uart_irq_tx_complete(cfg->dev)) {
 		/* Disable transmission */
 		cfg->uart_buf_ptr = &cfg->uart_buf[0];
 		modbus_serial_tx_off(ctx);
@@ -382,7 +389,7 @@ static void uart_cb_handler(const struct device *dev, void *app_data)
 
 	cfg = ctx->cfg;
 
-	while (uart_irq_update(cfg->dev) && uart_irq_is_pending(cfg->dev)) {
+	if (uart_irq_update(cfg->dev) && uart_irq_is_pending(cfg->dev)) {
 
 		if (uart_irq_rx_ready(cfg->dev)) {
 			cb_handler_rx(ctx);
