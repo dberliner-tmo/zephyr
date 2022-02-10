@@ -1305,7 +1305,7 @@ int z_impl_zsock_fcntl(int sock, int cmd, int flags)
 	}
 
 	(void)k_mutex_lock(lock, K_FOREVER);
-	printk("z_impl_zsock_fcntl, cmd = 0x%x, flags = 0x%x\n", cmd, flags);	//remove me
+	// printk("z_impl_zsock_fcntl, cmd = 0x%x, flags = 0x%x\n", cmd, flags);	//remove me
 
 	ret = z_fdtable_call_ioctl((const struct fd_op_vtable *)vtable,
 				   obj, cmd, flags);
