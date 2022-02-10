@@ -17,6 +17,9 @@ extern "C" {
 void z_shell_help_cmd_print(const struct shell *shell,
 			    const struct shell_static_entry *cmd);
 
+/* Function to print help for a single subcommand */
+void z_shell_help_subcmd_print_selitem(const struct shell *shell);
+
 /* Function is printing subcommands and help string. */
 void z_shell_help_subcmd_print(const struct shell *shell,
 			       const struct shell_static_entry *cmd,
