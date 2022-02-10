@@ -276,7 +276,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
             ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
                NULL, 0U, mdata.xlate_buf,
                &mdata.sem_response, K_MSEC(0));
-            printk("modem_cmd_send returned %d\n", ret);
+            // printk("modem_cmd_send returned %d\n", ret);
 
             if (ret < 0) {
                     goto exit;
@@ -970,7 +970,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
         k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
         while (total < len)
         {
-        	printk("waiting for socket data!  sock: %p, sock->fd %d, req_len = %d, total= %d\n", sock, sock->sock_fd, len, total);	//remove me
+        	// printk("waiting for socket data!  sock: %p, sock->fd %d, req_len = %d, total= %d\n", sock, sock->sock_fd, len, total);	//remove me
 #ifdef MDM_SOCKWAIT
         	modem_socket_wait_data(&mdata.socket_config, sock);	//wait for socketev
 #else
@@ -1013,6 +1013,10 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 
 	/* clear socket data */
 	sock->data = NULL;
+        if (total == 0) {
+            errno = EAGAIN;
+            total = -1;
+        }
 	return total;
 }
 
