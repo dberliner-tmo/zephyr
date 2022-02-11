@@ -83,8 +83,10 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
      */
     printk("Got to rs9116w_mgmt_scan\n");
     ret = rsi_wlan_scan(NULL, 0, &(rs9116w_dev->scan_results), sizeof(rsi_rsp_scan_t));
-    if (ret != 0)
-        return ret;
+    if (ret) {
+        LOG_ERR("rsi_wlan_scan error: %d", ret);
+        return -EIO;
+    }
 
     printk("rsi_wlan_scan returned %d APs\n", rs9116w_dev->scan_results.scan_count[0]);
 
@@ -205,6 +207,10 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
         return -EINVAL;
     }
 
+    if (rsi_wlan_get_state() >=  RSI_WLAN_STATE_CONNECTED) {
+        return -EALREADY;
+    }
+
     /*
      * 9.1.5 int32_t rsi_wlan_connect(int8_t *ssid, rsi_security_mode_t sec_type, void *secret_key)
      */
@@ -213,7 +219,8 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     wifi_mgmt_raise_connect_result_event(rs9116w_dev->net_iface, ret);
 
     if (ret) {
-        return ret;
+        LOG_ERR("rsi_wlan_connect error: %d", ret);
+        return -EIO;
     }
 #if IS_ENABLED(CONFIG_NET_IPV4)
     struct in_addr addr;
@@ -334,6 +341,10 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
 {
     int ret;
 
+    if (rsi_wlan_get_state() <  RSI_WLAN_STATE_CONNECTED) {
+        return -EALREADY;
+    }
+
     /*
      * 9.1.9 int32_t rsi_wlan_disconnect(void);
      */
@@ -343,8 +354,11 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
     wifi_mgmt_raise_disconnect_result_event(rs9116w_dev->net_iface, ret);
 
     net_if_down(rs9116w_dev->net_iface);
-
-    return ret;
+    if (ret) {
+        LOG_ERR("rsi_wlan_disconnect error: %d", ret);
+        return -EIO;
+    }
+    return 0;
 }
 
 // called after device init fcn
