@@ -20,3 +20,7 @@ properties:
     mdm-reset-gpios:
       type: phandle-array
       required: true
+
+    mdm-rst-done-gpios:
+      type: phandle-array
+      required: false
