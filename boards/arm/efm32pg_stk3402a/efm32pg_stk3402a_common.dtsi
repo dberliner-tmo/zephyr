@@ -77,7 +77,7 @@
 };
 
 &rtcc0 {
-	prescaler = <1>;
+	prescaler = <32768>;
 	status = "okay";
 };
 
