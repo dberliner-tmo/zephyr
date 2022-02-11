@@ -129,7 +129,7 @@ void force_rx_evt()
 	k_poll_signal_raise(&int_rx_evt_signal, 1);
 }
 
-#if IS_ENABLED(CONFIG_WISECONNECT_USE_OS_BINDINGS)
+#if IS_ENABLED(CONFIG_WISECONNECT_USE_OS_BINDINGS) && !IS_ENABLED(CONFIG_WIFI_RS9116W)
 K_THREAD_STACK_DEFINE(driver_task_stack, 2048);
 struct k_thread driver_task;
 
@@ -146,10 +146,9 @@ void driver_task_entry(void* p1, void* p2, void* p3)
  */
 int32_t device_init(void)
 {
-	/* TODO: Semaphores (Wifi driver) */
-	int32_t status;
 /* Assuming basic init is already completed if wifi is enabled (for now)*/
 #if !IS_ENABLED(CONFIG_WIFI_RS9116W)
+	int32_t status;
 	status = rsi_driver_init(global_buf, BT_GLOBAL_BUFF_LEN);
 	if ((status < 0) || (status > BT_GLOBAL_BUFF_LEN)) {
 		return status;
@@ -168,13 +167,12 @@ int32_t device_init(void)
 		K_PRIO_COOP(8), K_INHERIT_PERMS, K_NO_WAIT
 		);
 #endif
-#endif
-
 	status = rsi_wireless_init(0, RSI_OPERMODE_WLAN_BLE); // Semaphore 2: Wireless INIT
 	if (status != RSI_SUCCESS) {
 		BT_ERR("\r\nWireless Initialization Failed, Error Code : 0x%X\r\n", status);
 		return status;
 	}
+#endif
 
 	/* Add new callback to raise the event for the RX thread */
 	k_poll_signal_init(&int_rx_evt_signal);
