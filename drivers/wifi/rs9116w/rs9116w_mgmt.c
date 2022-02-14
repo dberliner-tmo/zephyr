@@ -153,6 +153,10 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
         // rssi
         z_result.rssi = r_result->rssi_val;
 
+        // mac/bssid
+        memcpy(z_result.mac, r_result->bssid, 6);
+        z_result.mac_length = 6;
+
         // Inform Zephyr about the AP
         cb(rs9116w_dev->net_iface, 0, &z_result);
     }
