@@ -696,8 +696,9 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 	size_t per_rcv = 1000;
 
 	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
+	bool waitall = false;
 
-	if (flags & ~ZSOCK_MSG_DONTWAIT){
+	if (flags & ~ZSOCK_MSG_DONTWAIT & ~ZSOCK_MSG_WAITALL){
 		errno = ENOTSUP;
 		return -1;
 	}
@@ -718,6 +719,8 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 			errno = EAGAIN;
 			return -1;
 		}
+	} else if (flags & ZSOCK_MSG_WAITALL) {
+		waitall = true;
 	}
 
 	if (is_udp) {
@@ -747,11 +750,11 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 		size_t remaining_len = len - retval;
 		size_t offset;
 		ssize_t rv = 0;
-		while (remaining_len && rv >= 0) {
+		while (remaining_len && (rv >= 0 || waitall)) {
 			offset = len - remaining_len;
 			rv = rs9116w_recvfrom(obj, (uint8_t*)buf + retval, MIN(per_rcv, remaining_len),
-								ZSOCK_MSG_DONTWAIT, from, fromlen);
-			if (rv == -1 && errno == EAGAIN) {
+								waitall ? 0 : ZSOCK_MSG_DONTWAIT, from, fromlen);
+			if (rv == -1 && errno == EAGAIN && !waitall) {
 				errno = 0;
 				break;
 			} else if (rv == -1) {
