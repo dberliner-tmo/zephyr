@@ -110,6 +110,8 @@ struct murata_1sc_data {
 	char mdm_ip[MDM_IP_LENGTH];
 	char mdm_gw[MDM_GW_LENGTH];
 	char mdm_nmask[MDM_MASK_LENGTH];
+	char mdm_phn[MDM_PHN_LENGTH];
+	char mdm_carrier[MDM_CARRIER_LENGTH];
 
 	/* Socket from which we are currently reading data. */
 	int sock_fd;
@@ -605,7 +607,7 @@ void parse_ipgwmask(char *buf, char *p1, char *p2, char *p3)
 				len = pend - pstr;
 				len = MIN(len, MDM_MASK_LENGTH);
 				strncpy(p3, pstr, len);
-				printk("IP: %s, nmASK: %s, GW: %s\n", p1, p2, p3);
+				//printk("IP: %s, nmASK: %s, GW: %s\n", p1, p2, p3);
 			}
 		}
 	}
@@ -666,28 +668,28 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_sockopen)
 	return 0;
 }
 
+static bool got_pdn_flg;
 /* Handler: <PDNRDP> */
-//MODEM_CMD_DEFINE(on_cmd_atcmdinfo_pdnrdp)
-//{
-//#define PDN_BUF_SZ	256
-//	static bool got_pdn_flg = false;
-//	char pdn_buf[PDN_BUF_SZ];
-//	size_t out_len;
-//
-//	if (!got_pdn_flg) {
-//		got_pdn_flg = true;
-//		out_len = net_buf_linearize(pdn_buf,
-//						   PDN_BUF_SZ-1,
-//						   data->rx_buf, 0, len);
-//		pdn_buf[out_len] = '\0';
-//		//printk("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
-//		parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
-//		/* Log the received information. */
-//		LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
-//	}
-//
-//    return 0;
-//}
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_pdnrdp)
+{
+#define PDN_BUF_SZ	256
+	char pdn_buf[PDN_BUF_SZ];
+	size_t out_len;
+
+	if (!got_pdn_flg) {
+		got_pdn_flg = true;
+		out_len = net_buf_linearize(pdn_buf,
+						   PDN_BUF_SZ-1,
+						   data->rx_buf, 0, len);
+		pdn_buf[out_len] = '\0';
+		//printk("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
+		parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_nmask, mdata.mdm_gw);
+		/* Log the received information. */
+		//LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
+	}
+
+    return 0;
+}
 
 /* Func: murata_1sc_setup
  * Desc: This function is used to setup the modem from zero. 
@@ -713,7 +715,7 @@ static int murata_1sc_setup(void)
 		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_atcmdinfo_iccid, 0U, " "),
 #endif //(CONFIG_MODEM_SIM_NUMBERS)
-		//SETUP_CMD("AT=CGDCONTRDP", "%CGDCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
+		SETUP_CMD("AT+CGCONTRDP", "+CGDCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
 	};
 
 	int ret = 0, counter;
@@ -752,7 +754,7 @@ static void socket_close(struct modem_socket *sock)
 	
 	/* Tell the modem to delete the socket. */
 	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"DELETE\",%d", sock->sock_fd);
-	printk("%s\n", buf);
+	//printk("%s\n", buf);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf,
 			     &mdata.sem_response, K_MSEC(0));
@@ -1015,7 +1017,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
         	ret = k_sem_take(&sock->sem_data_ready, K_NO_WAIT);
         	if (ret < 0) {
         		LOG_INF("no more data");
-        		errno = -EWOULDBLOCK;
+        		errno = EWOULDBLOCK;
         		break;
         	}
 #endif
@@ -1026,7 +1028,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
             /* Tell the modem to give us data (%SOCKETDATA:socket_id,len,0,data). */
             ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
                                  data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
-                                 K_SECONDS(5));
+                                 K_SECONDS(1));
             if (ret < 0) {
                     errno = -ret;
                     ret = -1;
@@ -1038,8 +1040,6 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
             	printk("sock-recv no bytes, quit!\n");
                 break;
             }
-
-            // printk("Rcvd: %d, %s\n", sock_data.recv_read_len, sock_data.recv_buf);
 
             /* return length of received data */
             hex_str_to_data(mdata.xlate_buf, (uint8_t *) buf + total, sock_data.recv_read_len);
@@ -1344,6 +1344,9 @@ typedef enum {
 	imsi_e,
 	iccid_e,
 	ssi_e,
+	msisdn_e,
+	connsts_e,
+	ip_e,
 	invalid
 } atcmd_idx_e;
 
@@ -1399,6 +1402,58 @@ MODEM_CMD_DEFINE(on_cmd_csq)
 	return 0;
 }
 
+int get_str_in_quote(char *buf, char *pdest, size_t dest_size)
+{
+	char delim = '"';
+	char *pstart, *pend;
+	int strlen;
+
+	pstart = strchr(buf, delim);
+	if (pstart) {
+		++pstart;
+	} else {
+		return 0;
+	}
+	pend = strchr(pstart, delim);
+	if (pend) {
+		strlen = pend - pstart;
+		strlen = MIN(strlen, dest_size);
+		strncpy(pdest, pstart, strlen);
+	}
+	return strlen;
+}
+MODEM_CMD_DEFINE(on_cmd_cnum)
+{
+	char buf[32];
+	int strlen;
+	size_t out_len = net_buf_linearize(buf,
+					   31,
+					   data->rx_buf, 0, len);
+	buf[out_len] = '\0';
+
+	strlen = get_str_in_quote(buf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
+
+	/* Log the received information. */
+	//LOG_INF("got cnum: %s, str_len = %d", mdata.mdm_phn, strlen);
+	return 0;
+}
+
+MODEM_CMD_DEFINE(on_cmd_cops)
+{
+	char buf[32];
+	int sz;
+	size_t out_len = net_buf_linearize(buf,
+					   31,
+					   data->rx_buf, 0, len);
+	buf[out_len] = '\0';
+
+	sz = get_str_in_quote(buf, mdata.mdm_carrier, sizeof(mdata.mdm_carrier));
+
+	/* Log the received information. */
+	//LOG_INF("got cops: %s, carr_len = %d", mdata.mdm_carrier, sz);
+	return 0;
+}
+
 /**
  * get signal strength
  */
@@ -1423,12 +1478,94 @@ int get_sigstrength(void)
 	return ret;
 }
 
+#define MAX_RESP_SIZE	256
+/**
+ * get phone number
+ */
+int get_cnum(char *rbuf)
+{
+	int ret;
+	char buf[16] = {0};
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("+CNUM:", on_cmd_cnum, 0U, ","),
+	};
+
+	snprintk(buf, sizeof(buf), "AT+CNUM");
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(20));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+	memcpy(rbuf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
+	return ret;
+}
+
+/**
+ * get conn status
+ */
+int get_cops(char *rbuf)
+{
+	int ret;
+	char buf[16] = {0};
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("+COPS:", on_cmd_cops, 0U, ","),
+	};
+
+	snprintk(buf, sizeof(buf), "AT+COPS?");
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(20));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+	snprintk(rbuf, MAX_RESP_SIZE, "%s", mdata.mdm_carrier);
+	return ret;
+}
+
+/**
+ * get ip/mask/gw
+ */
+int get_ip(char *rbuf)
+{
+	int ret;
+	char buf[16] = {0};
+	got_pdn_flg = false;
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("+CGCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ","),
+	};
+
+	snprintk(buf, sizeof(buf), "AT+CGCONTRDP");
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+	//LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
+	snprintk(rbuf, MAX_RESP_SIZE, "IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
+
+	return ret;
+}
+
 static void dyn_query(atcmd_idx_e idx, void *buf)
 {
 	switch(idx) {
-	int ssi;
+	int ssi, sts;
 	case ssi_e:
 		ssi = get_sigstrength();
+		break;
+	case msisdn_e:
+		sts = get_cnum(buf);
+		break;
+	case connsts_e:
+		sts = get_cops(buf);
+		break;
+	case ip_e:
+		sts = get_ip(buf);
 		break;
 	default:
 		printk("not valid request\n");
@@ -1447,6 +1584,9 @@ _cmd_t cmd_pool[] = {
 		{"IMSI", imsi_e, gen_query},
 		{"ICCID", iccid_e, gen_query},
 		{"SSI", ssi_e, dyn_query},
+		{"MSISDN", msisdn_e, dyn_query},
+		{"CONN_STS", connsts_e, dyn_query},
+		{"IP", ip_e, dyn_query},
 		{}
 };
 int get_at_resp(char* io_str)
@@ -1461,7 +1601,7 @@ int get_at_resp(char* io_str)
 	}
 	if (idx < (sizeof(cmd_pool)/sizeof(cmd_pool[0]) - 1)) {
 		_cmd_t cmd_entry = cmd_pool[idx];
-		printk("found cmd in pool, idx = %d\n", idx);
+		//printk("found cmd in pool, idx = %d\n", idx);
 		cmd_entry.fp(cmd_entry.e, io_str);
 	} else {
 		printk("cmd(%s) not suported\n", io_str);

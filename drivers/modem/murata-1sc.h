@@ -33,6 +33,8 @@
 #define MDM_IP_LENGTH             16
 #define MDM_GW_LENGTH             16
 #define MDM_MASK_LENGTH           16
+#define MDM_PHN_LENGTH            16
+#define MDM_CARRIER_LENGTH        16
 
 /** @cond INTERNAL_HIDDEN */
 struct device;
