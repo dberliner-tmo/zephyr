@@ -1406,7 +1406,7 @@ int get_str_in_quote(char *buf, char *pdest, size_t dest_size)
 {
 	char delim = '"';
 	char *pstart, *pend;
-	int strlen;
+	int strlen = 0;
 
 	pstart = strchr(buf, delim);
 	if (pstart) {
