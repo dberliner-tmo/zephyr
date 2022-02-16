@@ -16,7 +16,7 @@ Everything else remains the same for the `Getting Started Guide`_.
 
    <a href="https://www.zephyrproject.org">
      <p align="center">
-       <img src="doc/_static/images/logo-readme.png">
+       <img src="doc/_static/images/logo-readme.svg">
      </p>
    </a>
 
