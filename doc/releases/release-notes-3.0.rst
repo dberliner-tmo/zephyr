@@ -187,6 +187,7 @@ New APIs in this release
 Kernel
 ******
 
+  * Fixed timeout issues when SYSTEM_CLOCK_SLOPPY_IDLE is configured.
 
 Architectures
 *************
@@ -198,6 +199,11 @@ Architectures
 
   * AARCH32
 
+    * Converted inline assembler calls to using CMSIS provided functions for
+      :c:func:`arm_core_mpu_enable` and :c:func:`arm_core_mpu_disable`.
+    * Replaced Kconfig `CONFIG_CPU_CORTEX_R` with `CONFIG_ARMV7_R` to enable
+      differentiation between v7 and v8 Cortex-R.
+    * Updated the Cortex-R syscall behavior to match that of the Cortex-M.
 
   * AARCH64
 
@@ -573,6 +579,7 @@ Networking
 
 * Misc:
 
+  * gptp: clock sync ratio as double, not float
 
 * OpenThread:
 
