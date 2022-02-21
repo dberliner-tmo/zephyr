@@ -302,13 +302,15 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     uint8_t ipv6_mode = RSI_DHCP;
     uint8_t *ipv6_addr = NULL;
 #if defined(CONFIG_NET_CONFIG_MY_IPV6_ADDR)
-    ipv6_mode = RSI_STATIC;
-    if (net_addr_pton(Z_AF_INET6, CONFIG_NET_CONFIG_MY_IPV6_ADDR,
-				  &addr6) < 0) {
-			LOG_ERR("Invalid CONFIG_NET_CONFIG_MY_IPV6_ADDR");
-			return -1;
+    if (strcmp(CONFIG_NET_CONFIG_MY_IPV6_ADDR, "") != 0) {
+        ipv6_mode = RSI_STATIC;
+        if (net_addr_pton(Z_AF_INET6, CONFIG_NET_CONFIG_MY_IPV6_ADDR,
+                    &addr6) < 0) {
+                LOG_ERR("Invalid CONFIG_NET_CONFIG_MY_IPV6_ADDR");
+                return -1;
+        }
+        ipv6_addr = addr6.s6_addr;
     }
-    ipv6_addr = addr6.s6_addr;
 #endif
     rsi_rsp_ipv6_parmas_t rsi_rsp_ipv6_parmas;
     ret = rsi_config_ipaddress(RSI_IP_VERSION_6, ipv6_mode, ipv6_addr, NULL, NULL, (uint8_t *) &rsi_rsp_ipv6_parmas, sizeof(rsi_rsp_ipv6_parmas), 0);

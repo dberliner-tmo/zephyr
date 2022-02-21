@@ -73,6 +73,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #define SD_TO_OBJ(sd) ((void *)(sd + 1))
 #define OBJ_TO_SD(obj) (((int)obj) - 1)
 
+/* Needed since only the first closed recv actually behaves correctly */
+ATOMIC_DEFINE(closed_socks_map, 10);
 
 static int rs9116w_socket(int family, int type, int proto)
 {
@@ -509,8 +511,8 @@ static int map_credentials(int sd, const void *optval, socklen_t optlen)
 				cert_idx_ca++;
 				cert_idx_ca %= 2;
 				break;
-			case TLS_CREDENTIAL_SERVER_CERTIFICATE:
-				cert_type = RSI_SSL_SERVER_CERTIFICATE;
+			case TLS_CREDENTIAL_SERVER_CERTIFICATE: 
+				cert_type = RSI_SSL_CLIENT; //So server cert and client cert are the same in zephyr?
 				cert_idx = cert_idx_crt;
 				cert_idx_crt++;
 				cert_idx_crt %= 2;
@@ -536,12 +538,13 @@ static int map_credentials(int sd, const void *optval, socklen_t optlen)
 				goto exit;
 			}
 			uint32_t ce_val = cert_idx;
+			memset(pem, 0, sizeof(pem));
 			strcpy(pem, header);
 			offset = strlen(header);
 			size_t written;
 			base64_encode(pem + offset, 6144 - offset - strlen(footer), &written, cert->buf, cert->len);
 			memcpy(pem + offset + written, footer, strlen(footer));
-			retval = rsi_wlan_set_certificate_index(cert_type, cert_idx, pem, offset + written + strlen(footer));
+			retval = rsi_wlan_set_certificate_index(cert_type, cert_idx, pem, strlen(pem));
 			if (retval < 0) {
 				break;
 			}
@@ -702,6 +705,11 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 		errno = ENOTSUP;
 		return -1;
 	}
+
+	if (atomic_test_bit(closed_socks_map, sd)) {
+		return 0;
+	}
+
 	/*
 	 * Non-blocking is only able to be set on socket creation
 	 * (Also doesn't affect recieve anyways)
@@ -746,7 +754,7 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 	 * get all available data, so to account for both, recieve is tried until
 	 * there is no longer any data available. 
 	 */
-	if (len != retval && !is_udp && retval != -1) {
+	if (retval && len != retval && !is_udp && retval != -1) {
 		size_t remaining_len = len - retval;
 		size_t offset;
 		ssize_t rv = 0;
@@ -759,6 +767,8 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 				break;
 			} else if (rv == -1) {
 				return -1;
+			} else if (rv == 0) {
+				return retval;
 			}
 			retval += rv;
 			remaining_len -= rv;
@@ -771,6 +781,10 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 			translate_rsi_to_z_addr(rsi_addr, rsi_addrlen,
 							from, fromlen);
 		}
+	}
+
+	if (!retval) {
+		atomic_set_bit(closed_socks_map, sd);
 	}
 
 	return retval;
@@ -939,6 +953,9 @@ int rs9116w_socket_create(int family, int type, int proto)
 	}
 
 	sock = rs9116w_socket(family, type, proto);
+
+	atomic_clear_bit(closed_socks_map, sock);
+
 	LOG_DBG("SOCK CREATE %d", sock);
 	if (sock < 0) {
 		z_free_fd(fd);
@@ -1016,7 +1033,7 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 	if (ai->ai_family == Z_AF_INET) {
 		net_sin(ai_addr)->sin_family = ai->ai_family;
 		net_sin(ai_addr)->sin_addr.s_addr = rsi_bytes4R_to_uint32(addr);
-		net_sin(ai_addr)->sin_port = port;
+		net_sin(ai_addr)->sin_port = htons(port);
 		ai->ai_addrlen = sizeof(struct sockaddr_in);
 	} else {
 
@@ -1029,7 +1046,7 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 			rsi_bytes4R_to_uint32(&addr[8]);
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[3] =
 			rsi_bytes4R_to_uint32(&addr[12]);
-		net_sin6(ai_addr)->sin6_port = port;
+		net_sin6(ai_addr)->sin6_port = htons(port);
 		ai->ai_addrlen = sizeof(struct sockaddr_in6);
 	}
 	ai->ai_addr = ai_addr;
@@ -1043,12 +1060,12 @@ exit:
 static void rs9116w_freeaddrinfo(struct zsock_addrinfo *res)
 {
 	__ASSERT_NO_MSG(res);
-
 	free(res->ai_addr);
 	struct zsock_addrinfo *next = res->ai_next, *tmp = NULL;
 	while (next) {
 		tmp = next;
 		next = next->ai_next;
+		free(tmp->ai_addr);
 		free(tmp);
 	}
 	free(res);
@@ -1142,7 +1159,7 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 	}
 #endif
 
-	if (retval4 < 0 && retval6 < 0) {
+	if (retval4 != 0 && retval6 != 0) {
 		LOG_ERR("Could not resolve name: %s, retval: %d",
 			    node, retval);
 		retval = DNS_EAI_NONAME;
