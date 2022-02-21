@@ -179,6 +179,39 @@ New APIs in this release
     * :c:macro:`DT_INST_ENUM_IDX_OR`
     * :c:macro:`DT_INST_PARENT`
 
+  * New :ref:`devicetree-ranges-property` APIs
+
+  * Removed: ``DT_CHOSEN_ZEPHYR_CANBUS_LABEL``; use
+    ``DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus))`` to get the device instead, and
+    read the name from the device structure if needed.
+
+  * Removed deprecated macros:
+
+    * ``DT_CLOCKS_LABEL_BY_IDX``
+    * ``DT_CLOCKS_LABEL``
+    * ``DT_INST_CLOCKS_LABEL_BY_IDX``
+    * ``DT_INST_CLOCKS_LABEL_BY_NAME``
+    * ``DT_INST_CLOCKS_LABEL``
+    * ``DT_PWMS_LABEL_BY_IDX``
+    * ``DT_PWMS_LABEL_BY_NAME``
+    * ``DT_PWMS_LABEL``
+    * ``DT_INST_PWMS_LABEL_BY_IDX``
+    * ``DT_INST_PWMS_LABEL_BY_NAME``
+    * ``DT_INST_PWMS_LABEL``
+    * ``DT_IO_CHANNELS_LABEL_BY_IDX``
+    * ``DT_IO_CHANNELS_LABEL_BY_NAME``
+    * ``DT_IO_CHANNELS_LABEL``
+    * ``DT_INST_IO_CHANNELS_LABEL_BY_IDX``
+    * ``DT_INST_IO_CHANNELS_LABEL_BY_NAME``
+    * ``DT_INST_IO_CHANNELS_LABEL``
+    * ``DT_DMAS_LABEL_BY_IDX``
+    * ``DT_INST_DMAS_LABEL_BY_IDX``
+    * ``DT_DMAS_LABEL_BY_NAME``
+    * ``DT_INST_DMAS_LABEL_BY_NAME``
+    * ``DT_ENUM_TOKEN``
+    * ``DT_ENUM_UPPER_TOKEN``
+
+
 * CAN
 
   * Added :c:func:`can_get_max_filters` for retrieving the maximum number of RX
@@ -308,6 +341,7 @@ Boards & SoC Support
 * Added support for these SoC series:
 
   * GigaDevice GD32VF103, GD32F3X0, GD32F403 and GD32F450.
+  * Raspberry Pi RP2040
   * NXP i.MXRT595, i.MX8MQ, i.MX8MP
 
 * Removed support for these SoC series:
@@ -330,6 +364,7 @@ Boards & SoC Support
   * NXP MIMXRT595-EVK
   * NXP MIMX8MQ-EVK
   * NXP MIMX8MP-EVK
+  * Raspberry Pi Pico
   * ST Nucleo G031K8
   * ST Nucleo H7A3ZI Q
   * ST STM32G081B Evaluation
