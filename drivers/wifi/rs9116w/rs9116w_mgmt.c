@@ -31,6 +31,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "rsi_wlan.h"
 #include "rsi_wlan_apis.h"
 
+#undef s6_addr
 
 #define RSI_OPERMODE_WLAN_BLE 13
 
@@ -151,7 +152,7 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
         }
 
         // rssi
-        z_result.rssi = r_result->rssi_val;
+        z_result.rssi = -r_result->rssi_val;
 
         // mac/bssid
         memcpy(z_result.mac, r_result->bssid, 6);
@@ -297,7 +298,6 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
 #endif
 #endif
 #if IS_ENABLED(CONFIG_NET_IPV6)
-#undef s6_addr
     struct in6_addr addr6;
     uint8_t ipv6_mode = RSI_DHCP;
     uint8_t *ipv6_addr = NULL;
@@ -362,6 +362,58 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
         LOG_ERR("rsi_wlan_disconnect error: %d", ret);
         return -EIO;
     }
+    return 0;
+}
+
+static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
+{
+    struct rs9116w_device *rs9116w_dev = dev->data;
+    
+    if (!cb) {
+        return -EINVAL;
+    }
+
+    int ret;
+    struct wifi_status_result res;
+    int16_t rssi;
+    rsi_rsp_wireless_info_t winfo;
+
+    ret = rsi_wlan_get(RSI_WLAN_INFO, (uint8_t *)&winfo, sizeof(winfo));
+
+    if (ret) {
+        return -EIO;
+    }
+    
+    if (winfo.wlan_state){
+        ret = rsi_wlan_get(RSI_RSSI, (uint8_t *)&rssi, 2);
+        if (ret) {
+            return -EIO;
+        }
+    } else {
+        rssi = 0;
+    }
+
+    res.rssi = -(int8_t)rssi;
+    res.ap_mode = false; //For now
+    res.connected = winfo.wlan_state;
+    if (res.connected) {
+        res.ssid = winfo.ssid;
+        res.ssid_length = strlen(winfo.ssid);
+        res.channel = winfo.channel_number;
+        res.security = winfo.sec_type ? WIFI_SECURITY_TYPE_PSK : WIFI_SECURITY_TYPE_NONE;
+        // winfo.ipv4_address
+        memcpy(res.ip4.s4_addr, winfo.ipv4_address, 4);
+        memcpy(res.ip6.s6_addr, winfo.ipv6_address, 16);
+    } else {
+        res.ssid = NULL;
+        res.ssid_length = 0;
+        res.channel = 0;
+        res.security = WIFI_SECURITY_TYPE_NONE;
+        res.ip4.s_addr = 0;
+        memset(res.ip6.s6_addr, 0, 16);
+    }
+
+    cb(rs9116w_dev->net_iface, 0, &res);
     return 0;
 }
 
@@ -492,6 +544,7 @@ static const struct net_wifi_mgmt_offload rs9116w_api = {
     .scan           = rs9116w_mgmt_scan,
     .connect        = rs9116w_mgmt_connect,
     .disconnect     = rs9116w_mgmt_disconnect,
+    .status         = rs9116w_mgmt_status,
 };
 
 NET_DEVICE_DT_INST_OFFLOAD_DEFINE(
