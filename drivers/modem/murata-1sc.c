@@ -26,6 +26,7 @@
 #include "../console/gsm_mux.h"
 #include "modem_sms.h"
 #include "strnstr.h"
+#include <net/socket_offload.h>
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 #include <net/tls_credentials.h>
 #include <sys/base64.h>
@@ -33,6 +34,8 @@
 #endif
 
 #define NO_WAIT_FOR_DATA_READY
+
+int get_str_in_quote(char *buf, char *pdest, size_t dest_size);
 
 static size_t data_to_hex_str(const void* input_buf, size_t input_len, char* output_buf, size_t output_len) {
     size_t i;
@@ -435,8 +438,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 	//TODO handle later
 	case 2:	//socket deact
 	case 3:	//socket terminated
-		LOG_WRN("wrong evt of Unsolicit!");
-		//socket_close(sock);	//may not need DELETE, since modem terminated.
+		LOG_WRN("Peer Terminated!");
 		break;
 	case 4:	//socket accepted
 		break;
@@ -631,6 +633,82 @@ int get_ipv4_config(void)
 	snprintk(buf, sizeof(buf), "AT%%PDNRDP=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	}
+	return ret;
+}
+
+typedef struct mdm_dns_resp_s {
+	struct sockaddr_in ipv4;
+	struct sockaddr_in6 ipv6;
+} mdm_dns_resp_t;
+mdm_dns_resp_t mdm_dns_ip;
+
+int parse_dnsresp(char *buf, mdm_dns_resp_t *dns_resp)
+{
+#define IP_STR_LEN 100
+	int len;	//len of the string in ""
+	char ip[IP_STR_LEN];
+	if ('0' == buf[0]) {
+		len = get_str_in_quote(buf, ip, IP_STR_LEN);
+		ip[len] = 0;
+		dns_resp->ipv4.sin_family = AF_INET;
+		inet_pton(AF_INET, ip, &dns_resp->ipv4.sin_addr.s_addr);
+		//printk("dns-ipv4: %s\n", ip);
+	} else if ('1' == buf[0]) {
+		len = get_str_in_quote(buf, ip, IP_STR_LEN);
+		ip[len] = 0;
+		dns_resp->ipv6.sin6_family = AF_INET6;
+		inet_pton(AF_INET6, ip, &dns_resp->ipv6.sin6_addr.s6_addr);
+		//printk("dns-ipv6: %s\n", ip);
+	} else {
+		return -1;
+	}
+	return 0;
+}
+/* Handler: <DNSRSLV> */
+MODEM_CMD_DEFINE(on_cmd_dnsrslv)
+{
+#define DNS_QUERY_RESPONSE_LEN 128
+	char buf[DNS_QUERY_RESPONSE_LEN];
+	int ret = 0;
+	size_t read_cnt;
+	read_cnt = net_buf_linearize(buf,
+					   DNS_QUERY_RESPONSE_LEN - 1,
+					   data->rx_buf, 0, len);
+	if (strnstr(buf, "\r\n", read_cnt)) {
+		LOG_WRN("NOT enough octets!!");
+		ret = -EAGAIN;
+		first_pdn_rcved = false;
+	} else {
+		buf[read_cnt] = 0;
+		parse_dnsresp(buf, &mdm_dns_ip);
+
+		/* Log the received information. */
+		//LOG_INF("GOt DNSRSLV, len = %d, read_cnt = %d", len, read_cnt);
+	}
+	return ret;
+}
+
+/**
+ * get ipv4/6 DNS info from modem
+ * @param: domain name in string
+ */
+int get_dns_ip(const char *dn)
+{
+	char buf[64] = {0};
+	int  ret;
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("%DNSRSLV:", on_cmd_dnsrslv, 0U, ""),
+	};
+
+	snprintk(buf, sizeof(buf), "AT%%DNSRSLV=0,\"%s\"", dn);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(2000));
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 	}
@@ -1339,6 +1417,149 @@ static ssize_t offload_sendmsg(void *obj, const struct msghdr *msg, int flags)
 	return (ssize_t) sent;
 }
 
+
+struct zsock_addrinfo zsai[2];
+struct sockaddr_in6 zai_addr[2];
+static int ai_idx = 0;
+
+static void murata_1sc_freeaddrinfo(struct zsock_addrinfo *res)
+{
+	struct zsock_addrinfo *next = res;
+	while (next) {
+		memset(next, 0, sizeof(struct zsock_addrinfo));
+		if (next->ai_addr) {
+			memset(next->ai_addr, 0, sizeof(struct sockaddr_in6));
+		}
+		//printk("freeaddinfo, node= %p; nxt-ptr: %p\n", next, next->ai_next);
+		next = next->ai_next;
+	}
+	ai_idx = 0;
+}
+
+static inline uint32_t qtupletouint(uint8_t *ia) {return *(uint32_t*)ia;}
+
+static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t port,
+			 struct zsock_addrinfo **res)
+{
+	struct zsock_addrinfo *ai;
+	struct sockaddr *ai_addr;
+	int retval = 0;
+
+	if (ai_idx == 2) {
+		LOG_ERR("too many zsock_addrinfo!");
+		return -1;
+	}
+	ai = &zsai[ai_idx];
+	ai_addr = (struct sockaddr *)&zai_addr[ai_idx];
+	ai_idx++;
+
+	ai->ai_family = (ipv6 ? AF_INET6 : AF_INET);
+	ai->ai_socktype = socktype;
+	ai->ai_protocol = ai->ai_socktype == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP;
+
+	/* Fill sockaddr struct fields based on family: */
+	if (ai->ai_family == AF_INET) {
+		net_sin(ai_addr)->sin_family = ai->ai_family;
+		net_sin(ai_addr)->sin_addr.s_addr = qtupletouint(addr);
+		net_sin(ai_addr)->sin_port = port;
+		ai->ai_addrlen = sizeof(struct sockaddr_in);
+	} else {
+		net_sin6(ai_addr)->sin6_family = ai->ai_family;
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[0] =
+				qtupletouint(&addr[0]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[1] =
+				qtupletouint(&addr[4]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[2] =
+				qtupletouint(&addr[8]);
+		net_sin6(ai_addr)->sin6_addr.s6_addr32[3] =
+				qtupletouint(&addr[12]);
+		net_sin6(ai_addr)->sin6_port = port;
+		ai->ai_addrlen = sizeof(struct sockaddr_in6);
+	}
+	ai->ai_addr = ai_addr;
+	ai->ai_next = *res;
+	*res = ai;
+	return retval;
+}
+
+static int murata_1sc_getaddrinfo(const char *node, const char *service,
+				  const struct zsock_addrinfo *hints,
+				  struct zsock_addrinfo **res)
+{
+	int32_t retval = -1, retval4 = -1, retval6 = -1;
+	uint32_t port = 0;
+	uint8_t type = SOCK_STREAM;
+	if (service) {
+		port = strtol(service, NULL, 10);
+		if (port < 1 || port > USHRT_MAX) {
+			return DNS_EAI_SERVICE;
+		}
+	}
+
+	/* Check args: */
+	if (!res) {
+		retval = DNS_EAI_NONAME;
+		goto exit;
+	}
+
+	bool v4 = true, v6 = true;
+
+	if (hints) {
+		if (hints->ai_family == AF_INET){
+			v6 = false;
+		} else if (hints->ai_family == AF_INET6){
+			v4 = false;
+		}
+		type = hints->ai_socktype;
+	}
+
+#if IS_ENABLED(CONFIG_NET_IPV4)
+	if (v4) {
+		retval4 = get_dns_ip(node);
+	}
+#endif
+
+	if (retval4 < 0 && retval6 < 0) {
+		LOG_ERR("Could not resolve name: %s, retval: %d",
+			    node, retval);
+		retval = DNS_EAI_NONAME;
+		goto exit;
+	}
+
+	*res = NULL;
+
+	retval = set_addr_info((uint8_t *)&mdm_dns_ip.ipv4.sin_addr.s_addr, false, type, (uint16_t)port, res);
+	if (retval < 0) {
+		murata_1sc_freeaddrinfo(*res);
+		LOG_ERR("Unable to set address info, retval: %d",
+			retval);
+		goto exit;
+	}
+	retval = set_addr_info(mdm_dns_ip.ipv6.sin6_addr.s6_addr, true, type, (uint16_t)port, res);
+	if (retval < 0) {
+		murata_1sc_freeaddrinfo(*res);
+		LOG_ERR("Unable to set address info, retval: %d",
+			retval);
+		goto exit;
+	}
+
+exit:
+	return retval;
+}
+
+const struct socket_dns_offload murata_dns_ops = {
+	.getaddrinfo = murata_1sc_getaddrinfo,
+	.freeaddrinfo = murata_1sc_freeaddrinfo,
+};
+
+int murata_socket_offload_init(void)
+{
+	socket_offload_dns_register(&murata_dns_ops);
+	return 0;
+}
+
+
+
 typedef enum {
 	imei_e,
 	imsi_e,
@@ -1425,7 +1646,7 @@ int get_str_in_quote(char *buf, char *pdest, size_t dest_size)
 MODEM_CMD_DEFINE(on_cmd_cnum)
 {
 	char buf[32];
-	int strlen;
+	int strlen = 0;
 	size_t out_len = net_buf_linearize(buf,
 					   31,
 					   data->rx_buf, 0, len);
