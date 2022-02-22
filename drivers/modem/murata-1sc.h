@@ -36,8 +36,11 @@
 #define MDM_PHN_LENGTH            16
 #define MDM_CARRIER_LENGTH        16
 
-/** @cond INTERNAL_HIDDEN */
-struct device;
+/**
+ * this is for tmo_shell to call for overriding the wifi dns_offload
+ */
+int murata_socket_offload_init(void);
+
 
 /* pin settings */
 enum mdm_control_pins {
