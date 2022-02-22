@@ -36,7 +36,7 @@ except ImportError:
 # -- Project --------------------------------------------------------------
 
 project = "Zephyr Project"
-copyright = "2015-2021 Zephyr Project members and individual contributors"
+copyright = "2015-2022 Zephyr Project members and individual contributors"
 author = "The Zephyr Project Contributors"
 
 # parse version from 'VERSION' file
@@ -139,6 +139,7 @@ html_context = {
     "current_version": version,
     "versions": (
         ("latest", "/"),
+        ("3.0.0", "/3.0.0/"),
         ("2.7.0", "/2.7.0/"),
         ("2.6.0", "/2.6.0/"),
         ("2.5.0", "/2.5.0/"),
