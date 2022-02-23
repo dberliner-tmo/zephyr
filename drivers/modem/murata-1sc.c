@@ -1461,7 +1461,7 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 	if (ai->ai_family == AF_INET) {
 		net_sin(ai_addr)->sin_family = ai->ai_family;
 		net_sin(ai_addr)->sin_addr.s_addr = qtupletouint(addr);
-		net_sin(ai_addr)->sin_port = port;
+		net_sin(ai_addr)->sin_port = htons(port);
 		ai->ai_addrlen = sizeof(struct sockaddr_in);
 	} else {
 		net_sin6(ai_addr)->sin6_family = ai->ai_family;
@@ -1473,7 +1473,7 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 				qtupletouint(&addr[8]);
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[3] =
 				qtupletouint(&addr[12]);
-		net_sin6(ai_addr)->sin6_port = port;
+		net_sin6(ai_addr)->sin6_port = htons(port);
 		ai->ai_addrlen = sizeof(struct sockaddr_in6);
 	}
 	ai->ai_addr = ai_addr;
