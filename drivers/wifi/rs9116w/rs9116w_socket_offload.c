@@ -155,7 +155,7 @@ static int rs9116w_socket(int family, int type, int proto)
 			// 	SL_SO_SECMETHOD,
 			// 	&sec_method, sizeof(sec_method));
 			if (retval < 0) {
-				(void)rsi_shutdown(sd,0);
+				(void)rsi_shutdown(sd, 0);
 				errno = EPROTONOSUPPORT;
 				return -1;
 			}
@@ -954,7 +954,9 @@ int rs9116w_socket_create(int family, int type, int proto)
 
 	sock = rs9116w_socket(family, type, proto);
 
-	atomic_clear_bit(closed_socks_map, sock);
+	if (sock >= 0) {
+		atomic_clear_bit(closed_socks_map, sock);
+	}
 
 	LOG_DBG("SOCK CREATE %d", sock);
 	if (sock < 0) {
