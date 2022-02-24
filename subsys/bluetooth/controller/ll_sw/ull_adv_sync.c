@@ -940,11 +940,12 @@ void ull_adv_sync_chm_complete(struct node_rx_hdr *rx)
 
 		ad_len += 1U;
 
-		LL_ASSERT(ad_len < len);
+		LL_ASSERT(ad_len <= len);
 
 		ad += ad_len;
 		len -= ad_len;
 	} while (len);
+	LL_ASSERT(len);
 
 	/* Remove Channel Map Update Indication by moving other AD types that
 	 * are after it.
@@ -1229,6 +1230,12 @@ uint8_t ull_adv_sync_pdu_set_clear(struct lll_adv_sync *lll_sync,
 	/* Add/Retain/Remove ACAD */
 	if (hdr_add_fields & ULL_ADV_PDU_HDR_FIELD_ACAD) {
 		acad_len = *(uint8_t *)hdr_data;
+		/* If zero length ACAD then do not reduce ACAD but return
+		 * return previous ACAD length.
+		 */
+		if (!acad_len) {
+			acad_len = acad_len_prev;
+		}
 		/* return prev ACAD length */
 		*(uint8_t *)hdr_data = acad_len_prev;
 		hdr_data = (uint8_t *)hdr_data + 1;
