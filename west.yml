@@ -26,7 +26,7 @@ manifest:
   # Please add items below based on alphabetical order
   projects:
     - name: canopennode
-      revision: 1052dae561497bef901f931ef75e117c9224aecd
+      revision: 53d3415c14d60f8f4bfca54bfbc5d5a667d7e724
       path: modules/lib/canopennode
     - name: civetweb
       revision: 094aeb41bb93e9199d24d665ee43e9e05d6d7b1c
@@ -73,7 +73,7 @@ manifest:
       groups:
         - hal
     - name: hal_gigadevice
-      revision: 242a7f4be7a3136606c7a65169775f7ef85ad444
+      revision: cc85acbd635f02122c54df11fa55458269ce1bdd
       path: modules/hal/gigadevice
       groups:
         - hal
@@ -195,7 +195,7 @@ manifest:
       revision: cfd050ff38a9d028dc211690b2ec35971128e45e
       path: modules/lib/open-amp
     - name: openthread
-      revision: b7aa7686d3f4e326bd25abc234b209159977c26d
+      revision: 4ae8fe2ef1bfe0a96188d3dfa970f5d63386281b
       path: modules/lib/openthread
     - name: segger
       revision: 3a52ab222133193802d3c3b4d21730b9b1f1d2f6
@@ -203,7 +203,7 @@ manifest:
       groups:
         - debug
     - name: sof
-      revision: 500d77e0ac84ac2c969e0d4b2142cca192e893bc
+      revision: ab715d8e347fcbbc253ec5cae1c5295043821727
       path: modules/audio/sof
     - name: tflite-micro
       revision: 9156d050927012da87079064db59d07f03b8baf6
