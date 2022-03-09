@@ -912,6 +912,11 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
         printk("'\n");
         */
 
+        // Verify that the entire response has arrived
+        str1 = strnstr(data->rx_buf->data, "\r\nOK\r\n", data->rx_buf->len);
+        if (str1 == NULL)
+            return -EAGAIN;
+
         // Find the beginning of the message (first crlf after argv[5])
         str1 = strnstr(data->rx_buf->data, "\r\n", data->rx_buf->len);
         if (str1) {
@@ -930,27 +935,13 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
                 // TBD: should we just delete it here
                 mdata.sms_index = atoi(argv[0]);
 
-                // Check for "\r\n+CMGL:" or "\r\nOK\r\n" at the end of CMGL response
+                // Check for "\r\nOK\r\n" at the end of CMGL response
                 // Skip ahead to the found string if present since
                 // we need to let the command handler know we're done.
-                str3 = strnstr(str2 + 2, "\r\n+CMGL:", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
+                str3 = strnstr(str2 + 2, "\r\nOK\r\n", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
                 if (str3) {
                     data->rx_buf = net_buf_skip(data->rx_buf, (size_t) ((uint8_t *) str3 - data->rx_buf->data));
                 }
-                else {
-                    str3 = strnstr(str2 + 2, "\r\nOK\r\n", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
-                    if (str3) {
-                        data->rx_buf = net_buf_skip(data->rx_buf, (size_t) ((uint8_t *) str3 - data->rx_buf->data));
-                    }
-                }
-
-                // printk("In on_cmd_readsms AFTER net_buf_skip, len:%d, data: '", data->rx_buf->len);
-
-                /*
-                for (int i=0;i<data->rx_buf->len;i++)
-                    printk("%c", data->rx_buf->data[i]);
-                printk("'\n");
-                */
             }
             else {
                 // printk("Warning, SMS bad format 2\n");
