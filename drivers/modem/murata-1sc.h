@@ -37,6 +37,14 @@
 #define MDM_CARRIER_LENGTH        16
 
 /**
+ * We use profileID slot8 for server "echo.hagen.tech" CA
+ * use slot 10 for Amazon Root CA
+ */
+//#define CONFIG_AMAZON_CA_ROOT_SLOT	10
+//#define CONFIG_SNI_SLOT				8
+//#define CONFIG_TLS_SNI_HOSTNAME "echo.hagen.tech"
+
+/**
  * this is for tmo_shell to call for overriding the wifi dns_offload
  */
 int murata_socket_offload_init(void);
