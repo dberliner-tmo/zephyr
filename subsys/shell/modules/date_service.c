@@ -142,9 +142,11 @@ static int get_h_m_s(const struct shell *shell, struct tm *tm, char *time_str)
 
 static int cmd_date_set(const struct shell *shell, size_t argc, char **argv)
 {
+#if defined(CONFIG_TIME_GECKO_RTCC)
 	uint32_t time = 0;    ///< RTCC_TIME - Time of Day Register
 	uint32_t date = 0;    ///< RTCC_DATE - Date Register
 	uint32_t year = 0;
+#endif
 	struct timespec tp;
 	struct tm tm;
 	int ret;
