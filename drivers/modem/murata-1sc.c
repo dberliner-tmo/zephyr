@@ -35,6 +35,53 @@
 
 #define NO_WAIT_FOR_DATA_READY
 
+#define USER_APP_CA_FILE			"lets-encrypt-r3.pem"
+#define USER_APP_CERT_FILE			"echo-apps-cert.pem"
+#define USER_APP_PRIVATEKEY_FILE	"echo-apps-key.pem"
+#define MAX_FILENAME_LEN			32
+#define PUBLIC_ROOT_CA_FILE			"AmazonRootCA1.pem"
+
+static const unsigned char ca_certificate[] = {
+#include "lets-encrypt-r3.der.inc"
+};
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+
+
+#define CERTCMD_WRITE_SIZE	32+MAX_FILENAME_LEN	//assue filename maxlen = 32
+#define PEM_BUFF_SIZE		6145	//terminate with \" & 0
+/**
+ * following struct may not have packed memory if it has something like
+ * int follow by char then int,
+ * since array of uchar plus array of uchar will be packed
+ */
+typedef struct {
+	uint8_t cert_cmd_write[CERTCMD_WRITE_SIZE];
+	uint8_t pem_buf[PEM_BUFF_SIZE];
+} cert_cmd_s;
+static cert_cmd_s cert_cmd_buf = {0};
+
+
+
+struct hostname_s {
+	char host[MAX_FILENAME_LEN + 1];
+	bool sni_valid;
+} servername_desc[MDM_MAX_SOCKETS] = {{{0}, false}};
+
+char sni_hostname[MAX_FILENAME_LEN+1] = {0};
+
+static int find_valid_sni()
+{
+	int i;
+	for (i = 0; i < MDM_MAX_SOCKETS; i++) {
+		if (servername_desc[i].sni_valid) {
+			return i;
+		}
+	}
+	return -1;
+}
+#endif
+
 int get_str_in_quote(char *buf, char *pdest, size_t dest_size);
 
 static size_t data_to_hex_str(const void* input_buf, size_t input_len, char* output_buf, size_t output_len) {
@@ -412,7 +459,7 @@ MODEM_CMD_DEFINE(on_cmd_unsol_SEV)
 	int		sock_fd;
 	int 	evt_id;
 
-	printk("got unsolicit socketev, evt: %s, sockfd: %s\n", argv[0], argv[1]);	//remove me
+	LOG_DBG("got unsolicit socketev, evt: %s, sockfd: %s\n", argv[0], argv[1]);
 	evt_id = ATOI(argv[0], 0, "event_id");
 	sock_fd = ATOI(argv[1], 0, "sock_fd");
 	//TODO - handle optional connected fd
@@ -541,7 +588,7 @@ MODEM_CMD_DEFINE(on_cmd_ipgwmask)
 	char buf[PDN_QUERY_RESPONSE_LEN];
 	int ret = 0;
 	size_t read_cnt;
-	LOG_INF("GOt PDNRDP, len = %d", len);
+	LOG_DBG("GOt PDNRDP, len = %d", len);
 	if (!first_pdn_rcved) {
 		first_pdn_rcved = true;
 		read_cnt = net_buf_linearize(buf,
@@ -707,10 +754,16 @@ int get_dns_ip(const char *dn)
 	};
 
 	snprintk(buf, sizeof(buf), "AT%%DNSRSLV=0,\"%s\"", dn);
+	LOG_INF("%s\n", buf);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(2000));
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	}
+	if (strncmp(dn, CONFIG_TLS_SNI_HOSTNAME, sizeof(CONFIG_TLS_SNI_HOSTNAME)) == 0) {
+		strcpy(sni_hostname, dn);
+	} else {
+		memset(sni_hostname, 0, sizeof(sni_hostname));
 	}
 	return ret;
 }
@@ -769,6 +822,104 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_pdnrdp)
     return 0;
 }
 
+#define CLIENT_CA_CERTIFICATE_TAG	1
+static int offload_setsockopt(void *obj, int level, int optname,
+				 const void *optval, socklen_t optlen);
+sec_tag_t sec_tag_list[] = {
+	CLIENT_CA_CERTIFICATE_TAG,
+};
+
+MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
+{
+	size_t out_len;
+
+	uint8_t *pbuf = mdata.xlate_buf;
+	out_len = net_buf_linearize(pbuf,
+					   127,				//read partial
+					   data->rx_buf, 0, len);
+	pbuf[out_len] = '\0';
+
+	LOG_INF("received file: %s\n", pbuf);
+
+    return 0;
+}
+
+/**
+ * check with modem that filename existed in D:CERTS/USER/
+ * return 0; file exist on modem; -1 not
+ */
+static int check_mdm_store_file(char *filename)
+{
+	int ret = 0;
+	char buf[60] = {0};
+	got_pdn_flg = false;
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+	    MODEM_CMD("%CERTCMD:", on_cmd_atcmd_file_read, 0U, ""),
+	};
+
+	snprintk(buf, sizeof(buf), "AT%%CERTCMD=\"READ\",\"%s\"", filename);
+	LOG_DBG("%s", buf);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+
+	return ret;
+
+}
+
+/**
+ * hard code slot 10 for public CA
+ *
+ */
+static int set_certProfile(void)
+{
+	int ret;
+	snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
+		 "AT%%CERTCFG=\"ADD\",10,\"%s\",\"~\"", PUBLIC_ROOT_CA_FILE);
+
+	LOG_DBG("certcfg: %s\n", cert_cmd_buf.cert_cmd_write);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+	   NULL, 0U, cert_cmd_buf.cert_cmd_write,
+	   &mdata.sem_response, K_SECONDS(5));
+	if (ret < 0) {
+		LOG_ERR("sendmdmcmd,ret = %d\n", ret);
+	}
+	return ret;
+}
+
+/**
+ * misc init after normal mdm init
+ */
+static int post_mdm_init(void)
+{
+	int ret;
+	struct modem_socket sock;
+	ret = check_mdm_store_file(USER_APP_CA_FILE);
+	if (ret != 0) {
+		ret = tls_credential_add(CLIENT_CA_CERTIFICATE_TAG,
+						TLS_CREDENTIAL_CA_CERTIFICATE,
+						ca_certificate,
+						sizeof(ca_certificate));
+		if (ret < 0) {
+			LOG_ERR("<<< Failed to add CA certificate: %d >>>\n", ret);
+			return ret;
+		}
+		ret = offload_setsockopt(&sock, SOL_TLS, TLS_SEC_TAG_LIST, (void *)sec_tag_list, sizeof(sec_tag_list));
+		if (ret < 0) {
+			LOG_ERR("failed to setsockopt in post_mdm_init, ret = %d\n", ret);
+			return ret;
+		}
+	}
+	ret = set_certProfile();
+	if (ret < 0) {
+		LOG_ERR("failed to setsockopt in post_mdm_init, ret = %d\n", ret);
+	}
+	return ret;
+}
 /* Func: murata_1sc_setup
  * Desc: This function is used to setup the modem from zero. 
  */
@@ -808,6 +959,10 @@ static int murata_1sc_setup(void)
 		LOG_ERR("modem_cmd_handler_setup_cmds error");
 	}
 
+	ret = post_mdm_init();
+	if (ret < 0) {
+		LOG_ERR("post modem_cmd_init error");
+	}
 	// modem_pin_write(&mctx, MDM_WAKE_MDM, 0);
 
 	return ret;
@@ -1115,7 +1270,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
             errno = 0;
 
             if (sock_data.recv_read_len == 0) {
-            	printk("sock-recv no bytes, quit!\n");
+            	LOG_DBG("sock-recv no bytes, quit!\n");
                 break;
             }
 
@@ -1167,6 +1322,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	char protocol[5] = {0};
 	char buf[100] = {0};
 	int  ret;
+	int sd = -1;
 
   	struct modem_cmd cmd[] = {
       	MODEM_CMD("ERROR", on_cmd_error, 0, ","),
@@ -1213,13 +1369,28 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	k_sem_reset(&mdata.sem_sock_conn);
 
         // get IP and save to buffer
-        char ip_add[30] = {0};
-        modem_context_sprint_ip_addr(addr, ip_add, sizeof(ip_add));
+    char ip_addr[30] = {0};
+    modem_context_sprint_ip_addr(addr, ip_addr, sizeof(ip_addr));
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+    if (sock->ip_proto == IPPROTO_TLS_1_2) {
+    	sd = strncmp(sni_hostname, CONFIG_TLS_SNI_HOSTNAME, sizeof(CONFIG_TLS_SNI_HOSTNAME));
+    } else {
+    	sd = -1;
+    }
+#else
+    sd = -1;
+#endif
 	/* Formulate the string to allocate socket. */
-	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d", 
-                 protocol, ip_add, dst_port);
+    if (sd != 0) {
+    	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
+                 protocol, ip_addr, dst_port);
+    } else {
+    	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
+                 protocol, sni_hostname, dst_port);
+    }
 	
-	printk("\n%s\n", buf);
+	LOG_DBG("\n%s\n", buf);
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     cmd, ARRAY_SIZE(cmd), buf,
@@ -1245,11 +1416,18 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	sock->sock_fd = mdata.sock_fd;
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"SSLALLOC\",%d,0,8", sock->sock_fd);
+		int profileID;
+		if (sd == 0) {
+			profileID = CONFIG_AMAZON_CA_ROOT_SLOT;
+		} else
+			profileID = CONFIG_SNI_SLOT;
+
+		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"SSLALLOC\",%d,1,%d", sock->sock_fd, profileID);
+
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				     NULL, 0U, buf,
 				     &mdata.sem_response, K_SECONDS(8));
-		printk("%s\n", buf);
+		LOG_DBG("%s\n", buf);
 		if (ret < 0) {
 			LOG_ERR("%s ret: %d", log_strdup(buf), ret);
 			LOG_ERR("Closing the socket!!!");
@@ -1260,7 +1438,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ACTIVATE\",%d", sock->sock_fd);
-	printk("\n%s\n", log_strdup(buf));
+	LOG_DBG("\n%s\n", log_strdup(buf));
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			     NULL, 0U, buf,
@@ -1282,7 +1460,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	 	goto exit;
 	 }
 
-	printk("sock conn GOOD!\n");	//remove me
+	LOG_INF("sock conn GOOD!");	//remove me
 	/* Connected successfully. */
 	sock->is_connected = true;
 	errno = 0;
@@ -1374,6 +1552,12 @@ static int offload_close(void *obj)
 		return 0;
 	}
 
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	int sd = find_valid_sni();
+	if (sd != -1) {
+		servername_desc[sd].sni_valid = false;
+	}
+#endif
 	/* Close the socket only if it is connected. */
 // 	if (sock->is_connected) {
 		socket_close(sock);
@@ -1594,7 +1778,7 @@ static void gen_query(atcmd_idx_e idx, void *buf)
 		break;
 #endif
 	default:
-		printk("not valid request\n");
+		LOG_ERR("not valid request\n");
 		break;
 	}
 }
@@ -1789,7 +1973,7 @@ static void dyn_query(atcmd_idx_e idx, void *buf)
 		sts = get_ip(buf);
 		break;
 	default:
-		printk("not valid request\n");
+		LOG_ERR("not valid request\n");
 		break;
 	}
 }
@@ -1825,7 +2009,7 @@ int get_at_resp(char* io_str)
 		//printk("found cmd in pool, idx = %d\n", idx);
 		cmd_entry.fp(cmd_entry.e, io_str);
 	} else {
-		printk("cmd(%s) not suported\n", io_str);
+		LOG_WRN("cmd(%s) not suported\n", io_str);
 		idx = -1;
 	}
 	return idx;
@@ -1861,7 +2045,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 
 	case GET_IPV4_CONF:
 		a_ipv4_addr = va_arg(args, struct aggr_ipv4_addr*);
-		printk("***** in driver ioctl *****\n");
+		LOG_DBG("***** in driver ioctl *****\n");
 		get_ipv4_config();
 		ret = inet_pton(AF_INET, mdata.mdm_ip, &a_ipv4_addr->ip);
 		ret = inet_pton(AF_INET, mdata.mdm_gw, &a_ipv4_addr->gw);
@@ -1883,19 +2067,14 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 }
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-#define CERTCMD_WRITE_SIZE	32+32	//assue filename maxlen = 32
-#define PEM_BUFF_SIZE		6145	//terminate with \" & 0
 /**
- * following struct may not have packed memory if it has something like
- * int follow by char then int,
- * since array of uchar plus array of uchar will be packed
+ * do not change order
  */
-typedef struct {
-	uint8_t cert_cmd_write[CERTCMD_WRITE_SIZE];
-	uint8_t pem_buf[PEM_BUFF_SIZE];
-} cert_cmd_s;
-static cert_cmd_s cert_cmd_buf = {0};
-
+enum {
+	SSL_CERTIFICATE_TYPE = 0,
+	SSL_PRIVATE_KEY_TYPE,
+	SSL_CA_CERTIFICATE_TYPE,
+};
 
 /* send binary data via the AT commands */
 static ssize_t send_cert(struct modem_socket *sock,
@@ -1905,49 +2084,80 @@ static ssize_t send_cert(struct modem_socket *sock,
 			 int cert_type,
 			 char* filename)
 {
-	int ret;
+	int ret = 0;
+	static int certfile_exist = -1;	//0 means yes
 	int filename_len = strlen(filename);
-	int offset = CERTCMD_WRITE_SIZE - filename_len - 14;	//overhead of "WRITE",,, & 2.5 pairs of "" & 1 digit
+	static char *certfile = NULL;
+	static char *keyfile = NULL;
+	int offset = CERTCMD_WRITE_SIZE - filename_len - 25;	//overhead of "WRITE",,, & 2.5 pairs of "" & 1 digit
 	uint8_t *sptr = &cert_cmd_buf.cert_cmd_write[offset];
-	//int cert_write_len = filename_len + 14 + strlen(cert_data);
-
-	/* TODO support other cert types as well */
-	if (cert_type != 0) {
-		return -EINVAL;
-	}
 
 	if (!sock) {
 		return -EINVAL;
 	}
 
+	/* TODO support other cert types as well */
+	switch(cert_type) {
+	case SSL_CERTIFICATE_TYPE:
+	case SSL_CA_CERTIFICATE_TYPE:
+		certfile = filename;
+		if (SSL_CERTIFICATE_TYPE == cert_type) {
+			certfile_exist = check_mdm_store_file(filename);
+		}
+		break;
+	case SSL_PRIVATE_KEY_TYPE:
+		keyfile = filename;
+		break;
+	default:
+		LOG_WRN("Bad cert_type %d\n", cert_type);
+		goto exit;
+	}
+
 	__ASSERT_NO_MSG(cert_len <= MDM_MAX_CERT_LENGTH);
 
-	snprintk(sptr, sizeof(cert_cmd_buf),
-		 "AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type);
-	cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintf
-	//printk("sptr: %s\n", sptr);
-    ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-       NULL, 0U, sptr,
-       &mdata.sem_response, K_SECONDS(5));
-	if (ret < 0) {
-		if (ret == -116) {
-			ret = 0;	//fake good ret
-		} else {
-			goto exit;
+	if (certfile_exist != 0) {
+		snprintk(sptr, sizeof(cert_cmd_buf),
+			 "AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type%2);
+		cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintf
+		LOG_DBG("sptr: %s\n", sptr);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		   NULL, 0U, sptr,
+		   &mdata.sem_response, K_SECONDS(5));
+		if (ret < 0) {
+			if (ret == -116) {
+				ret = 0;	//fake good ret
+			} else {
+				goto exit;
+			}
 		}
 	}
 
-	k_sleep(K_MSEC(20));	//brief brake?
-	snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
-		 "AT%%CERTCFG=\"ADD\",8,,,\"%s\",\"\"", filename);
+	if (cert_type == SSL_PRIVATE_KEY_TYPE) {
+		k_sleep(K_MSEC(20));	//brief brake?
+		snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
+			 "AT%%CERTCFG=\"ADD\",8,,,\"%s\",\"%s\"", certfile, keyfile);
 
-	//printk("certcfg: %s\n", cert_cmd_buf.cert_cmd_write);
-    ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-       NULL, 0U, cert_cmd_buf.cert_cmd_write,
-       &mdata.sem_response, K_SECONDS(5));
-	if (ret < 0) {
-		printk("sendmdmcmd,ret = %d\n", ret);
-		goto exit;
+		LOG_DBG("certcfg: %s\n", cert_cmd_buf.cert_cmd_write);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		   NULL, 0U, cert_cmd_buf.cert_cmd_write,
+		   &mdata.sem_response, K_SECONDS(5));
+		if (ret < 0) {
+			LOG_ERR("failure, sendmdmcmd,ret = %d\n", ret);
+			goto exit;
+		}
+	} else if (cert_type == SSL_CA_CERTIFICATE_TYPE) {
+		k_sleep(K_MSEC(20));	//brief brake?
+		snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
+			 "AT%%CERTCFG=\"ADD\",8,\"%s\",\".\"", certfile);
+
+		LOG_DBG("certcfg: %s\n", cert_cmd_buf.cert_cmd_write);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		   NULL, 0U, cert_cmd_buf.cert_cmd_write,
+		   &mdata.sem_response, K_SECONDS(5));
+		if (ret < 0) {
+			LOG_ERR("sendmdmcmd,ret = %d\n", ret);
+			goto exit;
+		}
 	}
 
 exit:
@@ -1957,7 +2167,8 @@ exit:
 	return ret;
 }
 
-static uint8_t cert_idx_ca = 0;
+//static uint8_t cert_idx_ca = 0;
+
 
 static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
 {
@@ -1976,6 +2187,7 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 	tags_len = optlen / sizeof(sec_tag_t);
 	/* For each tag, retrieve the credentials value and type: */
 	for (i = 0; i < tags_len; i++) {
+		char *filename = NULL;
 		uint8_t cert_idx;
 		int offset;
 		char *header, *footer;
@@ -1984,16 +2196,25 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 		while (cert != NULL) {
 			/* Map Zephyr cert types to WiSeConnect cert types: */
 			switch (cert->type) {
-			case TLS_CREDENTIAL_CA_CERTIFICATE:
-				cert_type = 0;
+			case TLS_CREDENTIAL_SERVER_CERTIFICATE:
+				cert_type = SSL_CERTIFICATE_TYPE;
 				header = "-----BEGIN CERTIFICATE-----\n";
 				footer = "\n-----END CERTIFICATE-----\"\n";
-				cert_idx = cert_idx_ca;
-				cert_idx_ca++;
-				cert_idx_ca %= 2;
+				filename = USER_APP_CERT_FILE;
 				break;
-			case TLS_CREDENTIAL_SERVER_CERTIFICATE:
 			case TLS_CREDENTIAL_PRIVATE_KEY:
+				cert_type = SSL_PRIVATE_KEY_TYPE;
+				header = "-----BEGIN RSA PRIVATE KEY-----\n";
+				footer = "\n-----END RSA PRIVATE KEY-----\"\n";
+				filename = USER_APP_PRIVATEKEY_FILE;
+				break;
+			case TLS_CREDENTIAL_CA_CERTIFICATE:
+				cert_type = SSL_CA_CERTIFICATE_TYPE;
+				header = "-----BEGIN CERTIFICATE-----\n";
+				footer = "\n-----END CERTIFICATE-----\"\n";
+				cert_idx = 0;
+				filename = USER_APP_CA_FILE;
+				break;
 			case TLS_CREDENTIAL_NONE:
 			case TLS_CREDENTIAL_PSK:
 			case TLS_CREDENTIAL_PSK_ID:
@@ -2009,16 +2230,17 @@ static int map_credentials(struct modem_socket *sock, const void *optval, sockle
 			memcpy(cert_cmd_buf.pem_buf + offset + written, footer, strlen(footer));
 			cert_cmd_buf.pem_buf[offset + written + strlen(footer)] = 0;	//null terminate
 
+			//printk("offset= %d; written = %d\n", offset, written);
+
 			{	//write cert to murata with filename
-				char *filename = "echo-apps-cert.pem";
-				retval = send_cert(sock, NULL, 0, cert_cmd_buf.pem_buf, cert_idx, filename);
+				retval = send_cert(sock, NULL, 0, cert_cmd_buf.pem_buf, cert_type, filename);
 				if (retval < 0) {
-					printk("Failed to send cert to modem, ret = %d\n", retval);
+					LOG_ERR("Failed to send cert to modem, ret = %d\n", retval);
 					return retval;
 				}
 			}
 
-			cert = credential_next_get(tag, cert);
+			cert = credential_next_get(tag, cert);	//should be key
 		}
 	}
 exit:
@@ -2035,8 +2257,8 @@ static int offload_setsockopt(void *obj, int level, int optname,
 				 const void *optval, socklen_t optlen)
 {
 	int retval;
-
-	//Todo, tls stuff
+	int sd;
+	struct modem_socket *sock = (struct modem_socket *) obj;
 	if (IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && level == SOL_TLS) {
 		/* Handle Zephyr's SOL_TLS secure socket options: */
 		switch (optname) {
@@ -2068,9 +2290,11 @@ static int offload_setsockopt(void *obj, int level, int optname,
 			}
 			break;
 		case TLS_HOSTNAME:
-			/**
-			 * not sure how to implement, for now just return 0 for ecno_client
-			 */
+			sd = sock->sock_fd;
+			LOG_DBG("set SNI - name %s with len %d, for sock# %d\n", (char *)optval, optlen, sd);
+			servername_desc[sd].sni_valid = true;
+			servername_desc[sd].host[0] = 0;
+			strncat(servername_desc[sd].host, optval, MIN(optlen, MAX_FILENAME_LEN));
 			retval = 0;
 			break;
 		case TLS_CIPHERSUITE_LIST: //?SO_SSL_V_1_2_ENABLE...
