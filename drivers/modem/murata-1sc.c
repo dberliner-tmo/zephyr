@@ -1590,6 +1590,7 @@ static void gen_query(atcmd_idx_e idx, void *buf)
 	}
 }
 
+static int sigStrength;
 MODEM_CMD_DEFINE(on_cmd_csq)
 {
 #define MIN_SS	-113
@@ -1608,9 +1609,9 @@ MODEM_CMD_DEFINE(on_cmd_csq)
 		}
 	}
 	ret = (int)strtol(buf, &endp, 10);
-	ret = MIN_SS + 2 * ret;
+	sigStrength = MIN_SS + 2 * ret;
 	/* Log the received information. */
-	LOG_INF("signal strength: %d dBm", ret);
+	//LOG_INF("signal strength: %d dBm", ret);
 	return 0;
 }
 
@@ -1666,10 +1667,12 @@ MODEM_CMD_DEFINE(on_cmd_cops)
 	return 0;
 }
 
+
+#define MAX_RESP_SIZE	256
 /**
  * get signal strength
  */
-int get_sigstrength(void)
+int get_sigstrength(char *rbuf)
 {
 	char buf[64] = {0};
 	int  ret;
@@ -1687,10 +1690,10 @@ int get_sigstrength(void)
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		ret = -1;
 	}
+	snprintk(rbuf, MAX_RESP_SIZE, "Signal Strength: %d dBm", sigStrength);
+
 	return ret;
 }
-
-#define MAX_RESP_SIZE	256
 /**
  * get phone number
  */
@@ -1768,7 +1771,7 @@ static void dyn_query(atcmd_idx_e idx, void *buf)
 	switch(idx) {
 	int ssi, sts;
 	case ssi_e:
-		ssi = get_sigstrength();
+		ssi = get_sigstrength(buf);
 		break;
 	case msisdn_e:
 		sts = get_cnum(buf);
