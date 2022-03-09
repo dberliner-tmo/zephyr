@@ -945,6 +945,9 @@ static int murata_1sc_setup(void)
 		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_atcmdinfo_iccid, 0U, " "),
 #endif //(CONFIG_MODEM_SIM_NUMBERS)
 		SETUP_CMD("AT+CGCONTRDP", "+CGDCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
+#if defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
+		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+#endif
 	};
 
 	int ret = 0, counter;
