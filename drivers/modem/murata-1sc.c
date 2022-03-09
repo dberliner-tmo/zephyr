@@ -1174,7 +1174,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	if (sock->is_connected == true) {
 		LOG_ERR("Socket is already connected!! socket_id(%d), socket_fd:%d",
 			sock->id, sock->sock_fd);
-		errno = EISCONN;
+		errno = EINVAL;
 		return -1;
 	}
 
