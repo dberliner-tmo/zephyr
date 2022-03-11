@@ -172,6 +172,7 @@ static void broadcast_source_ep_init(struct bt_audio_ep *ep)
 	ep->iso.qos = &ep->iso_qos;
 	ep->iso.qos->rx = &ep->iso_rx;
 	ep->iso.qos->tx = &ep->iso_tx;
+	ep->dir = BT_AUDIO_SOURCE;
 }
 
 static struct bt_audio_ep *broadcast_source_new_ep(uint8_t index)
@@ -219,7 +220,8 @@ static int bt_audio_broadcast_source_setup_stream(uint8_t index,
 
 	bt_audio_stream_attach(NULL, stream, ep, codec);
 	stream->qos = qos;
-	err = bt_audio_codec_qos_to_iso_qos(stream->iso->qos, qos);
+	stream->iso->qos->rx = NULL;
+	err = bt_audio_codec_qos_to_iso_qos(stream->iso->qos->tx, qos);
 	if (err) {
 		BT_ERR("Unable to convert codec QoS to ISO QoS");
 		return err;
@@ -369,7 +371,7 @@ static void broadcast_source_cleanup(struct bt_audio_broadcast_source *source)
 }
 
 int bt_audio_broadcast_source_create(struct bt_audio_stream *streams,
-				     uint8_t num_stream,
+				     size_t num_stream,
 				     struct bt_codec *codec,
 				     struct bt_codec_qos *qos,
 				     struct bt_audio_broadcast_source **out_source)

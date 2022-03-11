@@ -35,7 +35,7 @@ static sys_slist_t srcs;
  */
 static int unicast_server_config_cb(struct bt_conn *conn,
 				    const struct bt_audio_ep *ep,
-				    uint8_t type,
+				    enum bt_audio_pac_type type,
 				    const struct bt_codec *codec,
 				    struct bt_audio_stream **stream,
 				    struct bt_codec_qos_pref *const pref)
@@ -63,7 +63,7 @@ static int unicast_server_config_cb(struct bt_conn *conn,
 		}
 
 		*stream = cap->ops->config(conn, (struct bt_audio_ep *)ep,
-					   cap, (struct bt_codec *)codec);
+					   type, cap, (struct bt_codec *)codec);
 
 		if (*stream == NULL) {
 			return -ENOMEM;
@@ -156,8 +156,8 @@ static int unicast_server_qos_cb(struct bt_audio_stream *stream,
 }
 
 static int unicast_server_enable_cb(struct bt_audio_stream *stream,
-				    uint8_t meta_count,
-				    const struct bt_codec_data *meta)
+				    const struct bt_codec_data *meta,
+				    size_t meta_count)
 {
 	struct bt_audio_capability *cap = stream->user_data;
 
@@ -165,8 +165,8 @@ static int unicast_server_enable_cb(struct bt_audio_stream *stream,
 		return -EACCES;
 	}
 
-	return cap->ops->enable(stream, meta_count,
-					(struct bt_codec_data *)meta);
+	return cap->ops->enable(stream, (struct bt_codec_data *)meta,
+				meta_count);
 }
 
 static int unicast_server_start_cb(struct bt_audio_stream *stream)
@@ -181,8 +181,8 @@ static int unicast_server_start_cb(struct bt_audio_stream *stream)
 }
 
 static int unicast_server_metadata_cb(struct bt_audio_stream *stream,
-				      uint8_t meta_count,
-				      const struct bt_codec_data *meta)
+				      const struct bt_codec_data *meta,
+				      size_t meta_count)
 {
 	struct bt_audio_capability *cap = stream->user_data;
 
@@ -190,8 +190,8 @@ static int unicast_server_metadata_cb(struct bt_audio_stream *stream,
 		return -EACCES;
 	}
 
-	return cap->ops->metadata(stream, meta_count,
-					  (struct bt_codec_data *)meta);
+	return cap->ops->metadata(stream, (struct bt_codec_data *)meta,
+				  meta_count);
 }
 
 static int unicast_server_disable_cb(struct bt_audio_stream *stream)

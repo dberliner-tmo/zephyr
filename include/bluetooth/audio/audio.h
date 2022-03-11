@@ -206,11 +206,11 @@ struct bt_codec {
 	/** Codec Company Vendor ID */
 	uint16_t vid;
 	/** Codec Specific Data count */
-	uint8_t  data_count;
+	size_t   data_count;
 	/** Codec Specific Data */
 	struct bt_codec_data data[CONFIG_BT_CODEC_MAX_DATA_COUNT];
 	/** Codec Specific Metadata count */
-	uint8_t  meta_count;
+	size_t   meta_count;
 	/** Codec Specific Metadata */
 	struct bt_codec_data meta[CONFIG_BT_CODEC_MAX_METADATA_COUNT];
 };
@@ -222,7 +222,7 @@ struct bt_audio_base_bis_data {
 	 *
 	 *  Only valid if the data_count of struct bt_codec in the subgroup is 0
 	 */
-	uint8_t  data_count;
+	size_t   data_count;
 	/** Codec Specific Data
 	 *
 	 *  Only valid if the data_count of struct bt_codec in the subgroup is 0
@@ -232,7 +232,7 @@ struct bt_audio_base_bis_data {
 
 struct bt_audio_base_subgroup {
 	/* Number of BIS in the subgroup */
-	uint8_t bis_count;
+	size_t bis_count;
 	/** Codec information for the subgroup
 	 *
 	 *  If the data_count of the codec is 0, then codec specific data may be
@@ -245,15 +245,20 @@ struct bt_audio_base_subgroup {
 
 struct bt_audio_base {
 	/* Number of subgroups in the BASE */
-	uint8_t subgroup_count;
+	size_t subgroup_count;
 	/* Array of subgroups in the BASE */
 	struct bt_audio_base_subgroup subgroups[BROADCAST_SUBGROUP_CNT];
+};
+
+/** @brief Audio Capability type */
+enum bt_audio_pac_type {
+	BT_AUDIO_SINK = 0x01,
+	BT_AUDIO_SOURCE = 0x02,
 };
 
 /** @def BT_CODEC_QOS
  *  @brief Helper to declare elements of bt_codec_qos
  *
- *  @param _dir direction
  *  @param _interval SDU interval (usec)
  *  @param _framing Framing
  *  @param _phy Target PHY
@@ -262,10 +267,9 @@ struct bt_audio_base {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS(_dir, _interval, _framing, _phy, _sdu, _rtn, _latency, \
+#define BT_CODEC_QOS(_interval, _framing, _phy, _sdu, _rtn, _latency, \
 		     _pd) \
 	{ \
-		.dir = _dir, \
 		.interval = _interval, \
 		.framing = _framing, \
 		.phy = _phy, \
@@ -274,13 +278,6 @@ struct bt_audio_base {
 		.latency = _latency, \
 		.pd = _pd, \
 	}
-
-/** @brief Audio QoS direction */
-enum {
-	BT_CODEC_QOS_IN,
-	BT_CODEC_QOS_OUT,
-	BT_CODEC_QOS_INOUT
-};
 
 /** @brief Codec QoS Framing */
 enum {
@@ -295,7 +292,7 @@ enum {
 	BT_CODEC_QOS_CODED = BIT(2),
 };
 
-/** @def BT_CODEC_QOS_IN_UNFRAMED
+/** @def BT_CODEC_QOS_UNFRAMED
  *  @brief Helper to declare Input Unframed bt_codec_qos
  *
  *  @param _interval SDU interval (usec)
@@ -304,36 +301,11 @@ enum {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS_IN_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_IN, _interval, BT_CODEC_QOS_UNFRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
+#define BT_CODEC_QOS_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd) \
+	BT_CODEC_QOS(_interval, BT_CODEC_QOS_UNFRAMED, BT_CODEC_QOS_2M, _sdu, \
+		     _rtn, _latency, _pd)
 
-/** @def BT_CODEC_QOS_OUT_UNFRAMED
- *  @brief Helper to declare Output Unframed bt_code *
- *  @param _interval SDU interval (usec)
- *  @param _sdu Maximum SDU Size
- *  @param _rtn Retransmission number
- *  @param _latency Maximum Transport Latency (msec)
- *  @param _pd Presentation Delay (usec)
- */
-#define BT_CODEC_QOS_OUT_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_OUT, _interval, BT_CODEC_QOS_UNFRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
-
-/** @def BT_CODEC_QOS_INOUT_UNFRAMED
- *  @brief Helper to declare Input/Output Unframed bt_codec_qos
- *
- *  @param _interval SDU interval (usec)
- *  @param _sdu Maximum SDU Size
- *  @param _rtn Retransmission number
- *  @param _latency Maximum Transport Latency (msec)
- *  @param _pd Presentation Delay (usec)
- */
-#define BT_CODEC_QOS_INOUT_UNFRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_INOUT, _interval, BT_CODEC_QOS_UNFRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
-
-/** @def BT_CODEC_QOS_IN_FRAMED
+/** @def BT_CODEC_QOS_FRAMED
  *  @brief Helper to declare Input Framed bt_codec_qos
  *
  *  @param _interval SDU interval (usec)
@@ -342,45 +314,12 @@ enum {
  *  @param _latency Maximum Transport Latency (msec)
  *  @param _pd Presentation Delay (usec)
  */
-#define BT_CODEC_QOS_IN_FRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_IN, _interval, BT_CODEC_QOS_FRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
-
-/** @def BT_CODEC_QOS_OUT_FRAMED
- *  @brief Helper to declare Output Framed bt_codec_qos
- *
- *  @param _interval SDU interval (usec)
- *  @param _sdu Maximum SDU Size
- *  @param _rtn Retransmission number
- *  @param _latency Maximum Transport Latency (msec)
- *  @param _pd Presentation Delay (usec)
- */
-#define BT_CODEC_QOS_OUT_FRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_OUT, _interval, BT_CODEC_QOS_FRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
-
-/** @def BT_CODEC_QOS_INOUT_FRAMED
- *  @brief Helper to declare Output Framed bt_codec_qos
- *
- *  @param _interval SDU interval (usec)
- *  @param _sdu Maximum SDU Size
- *  @param _rtn Retransmission number
- *  @param _latency Maximum Transport Latency (msec)
- *  @param _pd Presentation Delay (usec)
- */
-#define BT_CODEC_QOS_INOUT_FRAMED(_interval, _sdu, _rtn, _latency, _pd) \
-	BT_CODEC_QOS(BT_CODEC_QOS_INOUT, _interval, BT_CODEC_QOS_FRAMED, \
-		     BT_CODEC_QOS_2M, _sdu, _rtn, _latency, _pd)
+#define BT_CODEC_QOS_FRAMED(_interval, _sdu, _rtn, _latency, _pd) \
+	BT_CODEC_QOS(_interval, BT_CODEC_QOS_FRAMED, BT_CODEC_QOS_2M, _sdu, \
+		     _rtn, _latency, _pd)
 
 /** @brief Codec QoS structure. */
 struct bt_codec_qos {
-	/** QoS direction
-	 *
-	 *  This shall be set to BT_CODEC_QOS_OUT for broadcast sources, and
-	 *  shall be set to BT_CODEC_QOS_IN for broadcast sinks.
-	 */
-	uint8_t  dir;
-
 	/** QoS PHY */
 	uint8_t  phy;
 
@@ -485,402 +424,402 @@ struct bt_audio_lc3_preset {
 #define BT_AUDIO_LC3_UNICAST_PRESET_8_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(26u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(26u, 2u, 8u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_8_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(30u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(30u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_16_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(30u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(30u, 2u, 8u, 40000u) \
 	)
 
 /** Mandatory to support as both unicast client and server */
 #define BT_AUDIO_LC3_UNICAST_PRESET_16_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(40u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(40u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_24_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(45u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(45u, 2u, 8u, 40000u) \
 	)
 
 /** Mandatory to support as unicast server */
 #define BT_AUDIO_LC3_UNICAST_PRESET_24_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(60u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(60u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_32_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(60u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(60u, 2u, 8u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_32_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(80u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(80u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_441_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_1, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 8163u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(8163u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 97u, 5u, 24u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_441_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_2, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 10884u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(10884u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 130u, 5u, 31u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_1, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(75u, 5u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(75u, 5u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_2, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(100u, 5u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(100u, 5u, 20u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_3_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_3, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(90u, 5u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(90u, 5u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_4_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_4, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(120u, 5u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(120u, 5u, 20u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_5_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_5, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(117u, 5u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(117u, 5u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_6_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_6, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(155u, 5u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(155u, 5u, 20u, 40000u) \
 	)
 
 /* Following presets are for unicast high reliability audio data */
 #define BT_AUDIO_LC3_UNICAST_PRESET_8_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(26u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(26u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_8_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(30u, 13u, 95u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(30u, 13u, 95u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_16_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(30u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(30u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_16_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(40u, 13u, 95u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(40u, 13u, 95u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_24_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(45u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(45u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_24_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(60u, 13u, 95u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(60u, 13u, 95u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_32_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(60u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(60u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_32_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(80u, 13u, 95u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(80u, 13u, 95u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_441_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_1, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 8163u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(8163u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 97u, 13u, 80u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_441_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_2, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 10884u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(10884u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 130u, 13u, 85u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_1, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(75u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(75u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_2, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(100u, 13u, 95u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(100u, 13u, 95u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_3_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_3, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(90u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(90u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_4_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_4, \
-	BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(120u, 13u, 100u, 40000u) \
+	BT_CODEC_LC3_QOS_10_UNFRAMED(120u, 13u, 100u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_5_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_5, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(117u, 13u, 75u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(117u, 13u, 75u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_UNICAST_PRESET_48_6_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_6, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(155u, 13u, 100u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(155u, 13u, 100u, 40000u) \
 	)
 
 /* LC3 Broadcast presets defined by table 6.4 in the BAP v1.0 specification */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_8_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(26u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(26u, 2u, 8u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_8_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(30u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(30u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_16_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(30u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(30u, 2u, 8u, 40000u) \
 	)
 
 /** Mandatory to support as both broadcast source and sink */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_16_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(40u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(40u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_24_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(45u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(45u, 2u, 8u, 40000u) \
 	)
 
 /** Mandatory to support as broadcast sink */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_24_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(60u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(60u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_32_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(60u, 2u, 8u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(60u, 2u, 8u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_32_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(80u, 2u, 10u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(80u, 2u, 10u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_441_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_1, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 8163u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(8163u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 97u, 4u, 24u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_441_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_2, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 10884u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(10884u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 130u, 4u, 31u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_1_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_1, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(75u, 4u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(75u, 4u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_2_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_2, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(100u, 4u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(100u, 4u, 20u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_3_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_3, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(90u, 4u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(90u, 4u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_4_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_4, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(120u, 4u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(120u, 4u, 20u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_5_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_5, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(117u, 4u, 15u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(117u, 4u, 15u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_6_1 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_6, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(155u, 4u, 20u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(155u, 4u, 20u, 40000u) \
 	)
 
 /* Following presets are for broadcast high reliability audio data */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_8_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(26u, 4u, 45u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(26u, 4u, 45u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_8_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_8_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(30u, 4u, 60u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(30u, 4u, 60u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_16_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(30u, 4u, 45u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(30u, 4u, 45u, 40000u) \
 	)
 
 /** Mandatory to support as both broadcast source and sink */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_16_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_16_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(40u, 4u, 60u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(40u, 4u, 60u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_24_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(45u, 4u, 45u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(45u, 4u, 45u, 40000u) \
 	)
 
 /** Mandatory to support as broadcast sink */
 #define BT_AUDIO_LC3_BROADCAST_PRESET_24_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_24_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(60u, 4u, 60u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(60u, 4u, 60u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_32_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_1, \
-		BT_CODEC_LC3_QOS_7_5_INOUT_UNFRAMED(60u, 4u, 45u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(60u, 4u, 45u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_32_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_32_2, \
-		BT_CODEC_LC3_QOS_10_INOUT_UNFRAMED(80u, 4u, 60u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(80u, 4u, 60u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_441_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_1, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 8163u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(8163u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 97u, 4u, 54u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_441_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_441_2, \
-		BT_CODEC_QOS(BT_CODEC_QOS_OUT, 10884u, BT_CODEC_QOS_FRAMED, \
+		BT_CODEC_QOS(10884u, BT_CODEC_QOS_FRAMED, \
 			     BT_CODEC_QOS_2M, 130u, 4u, 60u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_1_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_1, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(75u, 4u, 50u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(75u, 4u, 50u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_2_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_2, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(100u, 4u, 65u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(100u, 4u, 65u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_3_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_3, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(90u, 4u, 50u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(90u, 4u, 50u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_4_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_4, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(120u, 4u, 65u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(120u, 4u, 65u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_5_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_5, \
-		BT_CODEC_LC3_QOS_7_5_OUT_UNFRAMED(117u, 4u, 50u, 40000u) \
+		BT_CODEC_LC3_QOS_7_5_UNFRAMED(117u, 4u, 50u, 40000u) \
 	)
 
 #define BT_AUDIO_LC3_BROADCAST_PRESET_48_6_2 \
 	BT_AUDIO_LC3_PRESET( \
 		BT_CODEC_LC3_CONFIG_48_6, \
-		BT_CODEC_LC3_QOS_10_OUT_UNFRAMED(155u, 4u, 65u, 40000u) \
+		BT_CODEC_LC3_QOS_10_UNFRAMED(155u, 4u, 65u, 40000u) \
 	)
 
 /** @brief Audio stream structure.
@@ -939,7 +878,7 @@ struct bt_audio_unicast_server_cb {
 	 */
 	int (*config)(struct bt_conn *conn,
 		      const struct bt_audio_ep *ep,
-		      uint8_t type,
+		      enum bt_audio_pac_type type,
 		      const struct bt_codec *codec,
 		      struct bt_audio_stream **stream,
 		      struct bt_codec_qos_pref *const pref);
@@ -982,13 +921,14 @@ struct bt_audio_unicast_server_cb {
 	 *  be enabled to stream.
 	 *
 	 *  @param stream      Stream object being enabled.
-	 *  @param meta_count  Number of metadata entries
 	 *  @param meta        Metadata entries
+	 *  @param meta_count  Number of metadata entries
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
 	 */
-	int (*enable)(struct bt_audio_stream *stream, uint8_t meta_count,
-		      const struct bt_codec_data *meta);
+	int (*enable)(struct bt_audio_stream *stream,
+		      const struct bt_codec_data *meta,
+		      size_t meta_count);
 
 	/** @brief Stream Start request callback
 	 *
@@ -1007,13 +947,14 @@ struct bt_audio_unicast_server_cb {
 	 *  update its metadata.
 	 *
 	 *  @param stream       Stream object.
-	 *  @param meta_count   Number of metadata entries
 	 *  @param meta         Metadata entries
+	 *  @param meta_count   Number of metadata entries
 	 *
 	 *  @return 0 in case of success or negative value in case of error.
 	 */
-	int (*metadata)(struct bt_audio_stream *stream, uint8_t meta_count,
-			const struct bt_codec_data *meta);
+	int (*metadata)(struct bt_audio_stream *stream,
+			const struct bt_codec_data *meta,
+			size_t meta_count);
 
 	/** @brief Stream Disable request callback
 	 *
@@ -1251,12 +1192,6 @@ struct bt_audio_stream_ops {
 #endif /* CONFIG_BT_AUDIO_UNICAST || CONFIG_BT_AUDIO_BROADCAST_SINK */
 };
 
-/** @brief Audio Capability type */
-enum bt_audio_pac_type {
-	BT_AUDIO_SINK = 0x01,
-	BT_AUDIO_SOURCE = 0x02,
-};
-
 /** @brief Register Audio callbacks for a stream.
  *
  *  Register Audio callbacks for a stream.
@@ -1399,7 +1334,8 @@ int bt_audio_stream_qos(struct bt_conn *conn,
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_audio_stream_enable(struct bt_audio_stream *stream,
-			   uint8_t meta_count, struct bt_codec_data *meta);
+			   struct bt_codec_data *meta,
+			   size_t meta_count);
 
 /** @brief Change Audio Stream Metadata
  *
@@ -1412,7 +1348,8 @@ int bt_audio_stream_enable(struct bt_audio_stream *stream,
  *  @return 0 in case of success or negative value in case of error.
  */
 int bt_audio_stream_metadata(struct bt_audio_stream *stream,
-			     uint8_t meta_count, struct bt_codec_data *meta);
+			     struct bt_codec_data *meta,
+			     size_t meta_count);
 
 /** @brief Disable Audio Stream
  *
@@ -1500,8 +1437,47 @@ int bt_audio_stream_send(struct bt_audio_stream *stream, struct net_buf *buf);
  *  @return Zero on success or (negative) error code otherwise.
  */
 int bt_audio_unicast_group_create(struct bt_audio_stream *streams,
-				  uint8_t num_stream,
+				  size_t num_stream,
 				  struct bt_audio_unicast_group **unicast_group);
+
+/** @brief Add streams to a unicast group as a unicast client
+ *
+ *  This function can be used to add additional streams to a
+ *  bt_audio_unicast_group.
+ *
+ *  This can be called at any time before any of the streams in the
+ *  group has been started (see bt_audio_stream_ops.started()).
+ *  This can also be called after the streams have been stopped
+ *  (see bt_audio_stream_ops.stopped()).
+ *
+ *  @param unicast_group  Pointer to the unicast group
+ *  @param streams        Array of stream objects being added to the group.
+ *  @param num_stream     Number of streams in @p streams.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_audio_unicast_group_add_streams(struct bt_audio_unicast_group *unicast_group,
+				       struct bt_audio_stream *streams,
+				       size_t num_stream);
+
+/** @brief Remove streams from a unicast group as a unicast client
+ *
+ *  This function can be used to remove streams from a bt_audio_unicast_group.
+ *
+ *  This can be called at any time before any of the streams in the
+ *  group has been started (see bt_audio_stream_ops.started()).
+ *  This can also be called after the streams have been stopped
+ *  (see bt_audio_stream_ops.stopped()).
+ *
+ *  @param unicast_group  Pointer to the unicast group
+ *  @param streams        Array of stream objects removed from the group.
+ *  @param num_stream     Number of streams in @p streams.
+ *
+ *  @return 0 in case of success or negative value in case of error.
+ */
+int bt_audio_unicast_group_remove_streams(struct bt_audio_unicast_group *unicast_group,
+					  struct bt_audio_stream *streams,
+					  size_t num_stream);
 
 /** @brief Delete audio unicast group.
  *
@@ -1536,7 +1512,7 @@ int bt_audio_unicast_group_delete(struct bt_audio_unicast_group *unicast_group);
  *  @return Zero on success or (negative) error code otherwise.
  */
 int bt_audio_broadcast_source_create(struct bt_audio_stream *streams,
-				     uint8_t num_stream,
+				     size_t num_stream,
 				     struct bt_codec *codec,
 				     struct bt_codec_qos *qos,
 				     struct bt_audio_broadcast_source **source);

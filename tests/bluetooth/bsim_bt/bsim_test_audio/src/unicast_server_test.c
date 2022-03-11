@@ -34,10 +34,12 @@ CREATE_FLAG(flag_stream_configured);
 
 static struct bt_audio_stream *lc3_config(struct bt_conn *conn,
 					struct bt_audio_ep *ep,
+					enum bt_audio_pac_type type,
 					struct bt_audio_capability *cap,
 					struct bt_codec *codec)
 {
-	printk("ASE Codec Config: conn %p ep %p cap %p\n", conn, ep, cap);
+	printk("ASE Codec Config: conn %p ep %p type %u, cap %p\n",
+	       conn, ep, type, cap);
 
 	print_codec(codec);
 
@@ -77,10 +79,11 @@ static int lc3_qos(struct bt_audio_stream *stream, struct bt_codec_qos *qos)
 	return 0;
 }
 
-static int lc3_enable(struct bt_audio_stream *stream, uint8_t meta_count,
-		      struct bt_codec_data *meta)
+static int lc3_enable(struct bt_audio_stream *stream,
+		      struct bt_codec_data *meta,
+		      size_t meta_count)
 {
-	printk("Enable: stream %p meta_count %u\n", stream, meta_count);
+	printk("Enable: stream %p meta_count %zu\n", stream, meta_count);
 
 	return 0;
 }
@@ -92,10 +95,11 @@ static int lc3_start(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static int lc3_metadata(struct bt_audio_stream *stream, uint8_t meta_count,
-			struct bt_codec_data *meta)
+static int lc3_metadata(struct bt_audio_stream *stream,
+			struct bt_codec_data *meta,
+			size_t meta_count)
 {
-	printk("Metadata: stream %p meta_count %u\n", stream, meta_count);
+	printk("Metadata: stream %p meta_count %zu\n", stream, meta_count);
 
 	return 0;
 }
