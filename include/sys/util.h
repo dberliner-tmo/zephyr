@@ -221,6 +221,20 @@ extern "C" {
 #endif
 
 /**
+ * @brief Checks if a value is within range.
+ *
+ * @note @p val is evaluated twice.
+ *
+ * @param val Value to be checked.
+ * @param min Lower bound (inclusive).
+ * @param max Upper bound (inclusive).
+ *
+ * @retval true If value is within range
+ * @retval false If the value is not within range
+ */
+#define IN_RANGE(val, min, max) ((val) >= (min) && (val) <= (max))
+
+/**
  * @brief Is @p x a power of two?
  * @param x value to check
  * @return true if @p x is a power of two, false otherwise
@@ -441,6 +455,31 @@ char *utf8_lcpy(char *dst, const char *src, size_t n);
 #define KHZ(x) ((x) * 1000)
 /** @brief Number of Hz in @p x MHz */
 #define MHZ(x) (KHZ(x) * 1000)
+
+/**
+ * @brief Wait for an expression to return true with a timeout
+ *
+ * Spin on an expression with a timeout and optional delay between iterations
+ *
+ * Commonly needed when waiting on hardware to complete an asynchronous
+ * request to read/write/initialize/reset, but useful for any expression.
+ *
+ * @param expr Truth expression upon which to poll, e.g.: XYZREG & XYZREG_EN
+ * @param timeout Timeout to wait for in microseconds, e.g.: 1000 (1ms)
+ * @param delay_stmt Delay statement to perform each poll iteration
+ *                   e.g.: NULL, k_yield(), k_msleep(1) or k_busy_wait(1)
+ *
+ * @retval expr As a boolean return, if false then it has timed out.
+ */
+#define wait_for(expr, timeout, delay_stmt)                                                        \
+	({                                                                                         \
+		uint32_t cycle_count = (sys_clock_hw_cycles_per_sec() / USEC_PER_SEC) * (timeout); \
+		uint32_t start = k_cycle_get_32();                                                 \
+		while (!(expr) && (cycle_count > (k_cycle_get_32() - start))) {                    \
+			delay_stmt;                                                                \
+		}                                                                                  \
+		(expr);                                                                            \
+	})
 
 /**
  * @}
