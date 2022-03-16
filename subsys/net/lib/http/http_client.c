@@ -264,10 +264,14 @@ static int on_body(struct http_parser *parser, const char *at, size_t length)
 		req->internal.response.http_cb->on_body(parser, at, length);
 	}
 
-	/* Reset the body_start pointer for each fragment. */
-	if (!req->internal.response.body_start) {
-		req->internal.response.body_start = (uint8_t *)at;
+	/* Reset the body_frag_start pointer for each fragment. */
+	if (!req->internal.response.body_frag_start) {
+		req->internal.response.body_frag_start = (uint8_t *)at;
 	}
+
+	/* Calculate the length of the body contained in the recv_buf */
+	req->internal.response.body_frag_len = req->internal.response.data_len -
+		(req->internal.response.body_frag_start - req->internal.response.recv_buf);
 
 	return 0;
 }
@@ -406,7 +410,7 @@ static int http_wait_data(int sock, struct http_request *req)
 				req->internal.response.processed = 0;
 				req->internal.response.data_len = 0;
 				req->internal.response.content_length = 0;
-				req->internal.response.body_start = NULL;
+				req->internal.response.body_frag_start = NULL;
 				memset(req->internal.response.http_status, 0,
 				       HTTP_STATUS_STR_SIZE);
 
@@ -463,7 +467,8 @@ static int http_wait_data(int sock, struct http_request *req)
 
 				/* Re-use the result buffer and start to fill it again */
 				req->internal.response.data_len = 0;
-				req->internal.response.body_start = NULL;
+				req->internal.response.body_frag_start = NULL;
+				req->internal.response.body_frag_len = 0;
 			}
 		}
 

@@ -274,6 +274,7 @@
 /drivers/gpio/*rcar*                      @aaillet
 /drivers/gpio/*esp32*                     @glaubermaroto
 /drivers/gpio/*rpi_pico*                  @yonsch
+/drivers/gpio/*xlnx_ps*                   @ibirnbaum
 /drivers/hwinfo/                          @alexanderwachter
 /drivers/i2c/i2c_common.c                 @sjg20
 /drivers/i2c/i2c_emul.c                   @sjg20
@@ -519,6 +520,7 @@
 /include/drivers/*/*litex*                @mateusz-holenko @kgugala @pgielda
 /include/drivers/adc.h                    @anangl
 /include/drivers/can.h                    @alexanderwachter @henrikbrixandersen
+/include/drivers/can/                     @alexanderwachter @henrikbrixandersen
 /include/drivers/counter.h                @nordic-krch
 /include/drivers/dac.h                    @martinjaeger
 /include/drivers/espi.h                   @albertofloyd @franciscomunoz @sjvasanth1
@@ -568,6 +570,7 @@
 /include/debug/gdbstub.h                  @ceolin
 /include/device.h                         @tbursztyka @nashif
 /include/devicetree.h                     @galak
+/include/devicetree/can.h                 @henrikbrixandersen
 /include/dt-bindings/clock/kinetis_mcg.h  @henrikbrixandersen
 /include/dt-bindings/clock/kinetis_scg.h  @henrikbrixandersen
 /include/dt-bindings/ethernet/xlnx_gem.h  @ibirnbaum
@@ -597,6 +600,7 @@
 /include/drivers/ptp_clock.h              @tbursztyka
 /include/shared_irq.h                     @dcpleung @nashif @andyross
 /include/shell/                           @jakub-uC @nordic-krch
+/include/shell/shell_mqtt.h               @ycsin
 /include/sw_isr_table.h                   @dcpleung @nashif @andyross
 /include/sys_clock.h                      @dcpleung @nashif @andyross
 /include/sys/sys_io.h                     @dcpleung @nashif @andyross
@@ -747,6 +751,7 @@ scripts/gen_image_info.py                 @tejlmand
 /subsys/random/                           @dleach02
 /subsys/settings/                         @nvlsianpu
 /subsys/shell/                            @jakub-uC @nordic-krch
+/subsys/shell/backends/shell_mqtt.c       @ycsin
 /subsys/stats/                            @nvlsianpu
 /subsys/storage/                          @nvlsianpu
 /subsys/task_wdt/                         @martinjaeger

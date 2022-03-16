@@ -10,6 +10,8 @@
 #include <drivers/flash.h>
 #include <init.h>
 #include <pm/device.h>
+#include <drivers/pinctrl.h>
+#include <soc.h>
 #include <string.h>
 #include <logging/log.h>
 LOG_MODULE_REGISTER(qspi_nor, CONFIG_FLASH_LOG_LEVEL);
@@ -51,6 +53,10 @@ struct qspi_nor_config {
 
 	/* JEDEC id from devicetree */
 	uint8_t id[SPI_NOR_MAX_ID_LEN];
+
+#ifdef CONFIG_PINCTRL
+	const struct pinctrl_dev_config *pcfg;
+#endif
 };
 
 /* Status register bits */
@@ -179,6 +185,10 @@ struct qspi_cmd {
 
 static int qspi_nor_write_protection_set(const struct device *dev,
 					 bool write_protect);
+
+#ifdef CONFIG_PM_DEVICE
+static int exit_dpd(const struct device *const dev);
+#endif
 
 /**
  * @brief Test whether offset is aligned.
@@ -379,8 +389,10 @@ static void anomaly_122_uninit(const struct device *dev)
 			}
 		}
 
+#ifndef CONFIG_PINCTRL
 		nrf_gpio_cfg_output(QSPI_PROP_AT(csn_pins, 0));
 		nrf_gpio_pin_set(QSPI_PROP_AT(csn_pins, 0));
+#endif
 
 		nrfx_qspi_uninit();
 		qspi_initialized = false;
@@ -577,6 +589,19 @@ static int qspi_nrfx_configure(const struct device *dev)
 #if DT_INST_NODE_HAS_PROP(0, rx_delay)
 	if (!nrf53_errata_121()) {
 		nrf_qspi_iftiming_set(NRF_QSPI, DT_INST_PROP(0, rx_delay));
+	}
+#endif
+
+#ifdef CONFIG_PM_DEVICE
+	/* It may happen that after the flash chip was previously put into
+	 * the DPD mode, the system was reset but the flash chip was not.
+	 * Consequently, the flash chip can be in the DPD mode at this point.
+	 * Some flash chips will just exit the DPD mode on the first CS pulse,
+	 * but some need to receive the dedicated command to do it, so send it.
+	 */
+	ret = exit_dpd(dev);
+	if (ret < 0) {
+		return ret;
 	}
 #endif
 
@@ -1053,6 +1078,15 @@ static int qspi_nor_init(const struct device *dev)
 	nrf_clock_hfclk192m_div_set(NRF_CLOCK, NRF_CLOCK_HFCLK_DIV_4);
 #endif
 
+#ifdef CONFIG_PINCTRL
+	const struct qspi_nor_config *dev_config = dev->config;
+	int ret = pinctrl_apply_state(dev_config->pcfg, PINCTRL_STATE_DEFAULT);
+
+	if (ret < 0) {
+		return ret;
+	}
+#endif
+
 	IRQ_CONNECT(DT_IRQN(QSPI_NODE), DT_IRQ(QSPI_NODE, priority),
 		    nrfx_isr, nrfx_qspi_irq_handler, 0);
 	return qspi_nor_configure(dev);
@@ -1187,9 +1221,23 @@ static int qspi_nor_pm_action(const struct device *dev,
 		}
 
 		nrfx_qspi_uninit();
+#ifdef CONFIG_PINCTRL
+		ret = pinctrl_apply_state(dev_config->pcfg,
+					  PINCTRL_STATE_SLEEP);
+		if (ret < 0) {
+			return ret;
+		}
+#endif
 		break;
 
 	case PM_DEVICE_ACTION_RESUME:
+#ifdef CONFIG_PINCTRL
+		ret = pinctrl_apply_state(dev_config->pcfg,
+					  PINCTRL_STATE_DEFAULT);
+		if (ret < 0) {
+			return ret;
+		}
+#endif
 		err = nrfx_qspi_init(&dev_config->nrfx_cfg,
 				     qspi_handler,
 				     dev_data);
@@ -1258,7 +1306,16 @@ static struct qspi_nor_data qspi_nor_dev_data = {
 #endif /* CONFIG_MULTITHREADING */
 };
 
+NRF_DT_ENSURE_PINS_ASSIGNED(QSPI_NODE, sck_pin);
+
+IF_ENABLED(CONFIG_PINCTRL, (PINCTRL_DT_DEFINE(QSPI_NODE)));
+
 static const struct qspi_nor_config qspi_nor_dev_config = {
+#ifdef CONFIG_PINCTRL
+	.nrfx_cfg.skip_gpio_cfg = true,
+	.nrfx_cfg.skip_psel_cfg = true,
+	.pcfg = PINCTRL_DT_DEV_CONFIG_GET(QSPI_NODE),
+#else
 	.nrfx_cfg.pins = {
 		.sck_pin = DT_PROP(QSPI_NODE, sck_pin),
 		.csn_pin = QSPI_PROP_AT(csn_pins, 0),
@@ -1272,6 +1329,7 @@ static const struct qspi_nor_config qspi_nor_dev_config = {
 		.io3_pin = NRF_QSPI_PIN_NOT_CONNECTED,
 #endif
 	},
+#endif /* CONFIG_PINCTRL */
 	.nrfx_cfg.prot_if = {
 		.readoc = COND_CODE_1(DT_INST_NODE_HAS_PROP(0, readoc),
 			(_CONCAT(NRF_QSPI_READOC_,
