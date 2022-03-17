@@ -1337,6 +1337,7 @@ POSIX API layer:
         - pfalcon
         - enjiamai
         - KangJianX
+        - cfriedt
     files:
         - include/posix/
         - lib/posix/
@@ -1900,3 +1901,13 @@ ZTest:
         - tests/unit/util/
     labels:
         - "area: Testsuite"
+
+Random:
+    status: orphaned
+    collaborators:
+         - ceolin
+    files:
+        - subsys/random/
+        - include/random/
+    labels:
+        - "area: Random"
