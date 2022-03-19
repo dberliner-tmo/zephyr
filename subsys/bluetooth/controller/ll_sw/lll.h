@@ -199,7 +199,7 @@ struct ull_hdr {
 	/* TODO: The intention is to use the greater of the
 	 *       ticks_prepare_to_start or ticks_active_to_start as the prepare
 	 *       offset. At the prepare tick generate a software interrupt
-	 *       servicable by application as the per role configurable advance
+	 *       serviceable by application as the per role configurable advance
 	 *       radio event notification, usable for data acquisitions.
 	 *       ticks_preempt_to_start is the per role dynamic preempt offset,
 	 *       which shall be based on role's preparation CPU usage
@@ -303,6 +303,7 @@ enum node_rx_type {
 	NODE_RX_TYPE_MESH_REPORT,
 	NODE_RX_TYPE_SYNC_IQ_SAMPLE_REPORT,
 	NODE_RX_TYPE_CONN_IQ_SAMPLE_REPORT,
+	NODE_RX_TYPE_DTM_IQ_SAMPLE_REPORT,
 
 #if defined(CONFIG_BT_CTLR_USER_EXT)
 	/* No entries shall be added after the NODE_RX_TYPE_USER_START/END */

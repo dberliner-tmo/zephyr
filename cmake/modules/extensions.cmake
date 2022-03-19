@@ -500,13 +500,11 @@ function(zephyr_library_compile_options item)
   string(MD5 uniqueness ${item})
   set(lib_name options_interface_lib_${uniqueness})
 
-  if (TARGET ${lib_name})
-    # ${item} already added, ignoring duplicate just like CMake does
-    return()
+  if (NOT TARGET ${lib_name})
+    # Create the unique target only if it doesn't exist.
+    add_library(           ${lib_name} INTERFACE)
+    target_compile_options(${lib_name} INTERFACE ${item} ${ARGN})
   endif()
-
-  add_library(           ${lib_name} INTERFACE)
-  target_compile_options(${lib_name} INTERFACE ${item} ${ARGN})
 
   target_link_libraries(${ZEPHYR_CURRENT_LIBRARY} PRIVATE ${lib_name})
 endfunction()
@@ -2620,7 +2618,7 @@ function(dt_node_exists var)
   cmake_parse_arguments(DT_NODE "" "${req_single_args}" "" ${ARGN})
 
   if(${ARGV0} IN_LIST req_single_args)
-    message(FATAL_ERROR "dt_node_existsl(${ARGV0} ...) missing return parameter.")
+    message(FATAL_ERROR "dt_node_exists(${ARGV0} ...) missing return parameter.")
   endif()
 
   foreach(arg ${req_single_args})
