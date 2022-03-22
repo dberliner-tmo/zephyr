@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig MODEM_MURATA_1SC
-        bool "Enable murata-1sc modem driver"
+        bool "Murata-1sc modem driver"
         select MODEM_CONTEXT
         select MODEM_CMD_HANDLER
         select MODEM_IFACE_UART
@@ -62,22 +62,24 @@ config MODEM_MURATA_1SC_INIT_PRIORITY
           Do not mess with it unless you know what you are doing.
           Note that the priority needs to be lower than the net stack
           so that it can start before the networking sub-system.
+
 config AMAZON_CA_ROOT_SLOT
         int "Amazon Root CA slot"
         default 10
         help
-         This is cert profile ID for Amazon Root CA.
+          This is cert profile ID for Amazon Root CA.
+
 config SNI_SLOT
         int "customer server's CA slot"
         default 8
         help
-         This is cert profile ID for customer server that requires SNI extension.
+          This is cert profile ID for customer server that requires SNI extension.
          
 config TLS_SNI_HOSTNAME
         string "URI for customer server"
         default "echo.hagen.tech"
         help
-         This is URI for customer server that requires SNI extension.
+          This is URI for customer server that requires SNI extension.
          
 config MODEM_DEMO_LOW_POWERMODE
         bool "Yes or No for Demo Modem Low Power"
