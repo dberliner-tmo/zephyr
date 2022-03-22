@@ -28,7 +28,7 @@ config BT_MAX_CONN
 	  supported.
 
 config BT_WHITELIST
-	  bool "Enable whitelist support"
+	  bool "Whitelist support"
 	  help
       This option enables the whitelist API. This takes advantage of the
       whitelisting feature of a BLE controller.
@@ -70,7 +70,7 @@ config BT_DEVICE_NAME
 if BT_CONN
 
 config RSI_BLE_SHELL
-  bool "Enable bluetooth shell commands for the RS9116"
+  bool "Bluetooth shell commands for the RS9116"
   depends on SHELL
   default n
 
@@ -107,7 +107,7 @@ config RSI_BT_EVENT_QUEUE_SIZE
     Number of slots for BLE request events
 
 config BT_SMP
-  bool "Enable BLE Security Manager Protocol (SMP) features"
+  bool "BLE Security Manager Protocol (SMP) features"
   default n
 
 config BT_MAX_PAIRED
