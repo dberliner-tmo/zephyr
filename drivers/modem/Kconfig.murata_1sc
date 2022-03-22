@@ -85,4 +85,11 @@ config MODEM_DEMO_LOW_POWERMODE
         bool "Yes or No for Demo Modem Low Power"
         help
           This is to demo that Modem stay in inactive mode for low power usage
+
+config MODEM_ON_DELAY
+        int "wait period (in ms) before turn on modem"
+        default 1000
+        help
+          This value is for murata-1sc driver to wait before turn cfun=1
+
 endif  #MODEM_MURATA_1SC
