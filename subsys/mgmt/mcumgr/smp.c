@@ -11,6 +11,19 @@
 #include "mgmt/mcumgr/buf.h"
 #include "smp/smp.h"
 #include "mgmt/mcumgr/smp.h"
+#include "smp_reassembly.h"
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(mcumgr_smp, CONFIG_MCUMGR_SMP_LOG_LEVEL);
+
+/* To be able to unit test some callers some functions need to be
+ * demoted to allow overriding them.
+ */
+#ifdef CONFIG_ZTEST
+#define WEAK __weak
+#else
+#define WEAK
+#endif
 
 static const struct mgmt_streamer_cfg zephyr_smp_cbor_cfg;
 
@@ -290,11 +303,15 @@ zephyr_smp_transport_init(struct zephyr_smp_transport *zst,
 		.zst_ud_free = ud_free_func,
 	};
 
+#ifdef CONFIG_MCUMGR_SMP_REASSEMBLY
+	zephyr_smp_reassembly_init(zst);
+#endif
+
 	k_work_init(&zst->zst_work, zephyr_smp_handle_reqs);
 	k_fifo_init(&zst->zst_fifo);
 }
 
-void
+WEAK void
 zephyr_smp_rx_req(struct zephyr_smp_transport *zst, struct net_buf *nb)
 {
 	net_buf_put(&zst->zst_fifo, nb);

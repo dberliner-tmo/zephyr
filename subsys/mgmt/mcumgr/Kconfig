@@ -363,6 +363,13 @@ endif
 
 endmenu
 
+config MCUMGR_SMP_REASSEMBLY_BT
+	bool "Reassemble packets in Bluetooth SMP transport"
+	select MCUMGR_SMP_REASSEMBLY
+	help
+	  When enabled, the SMP BT transport will buffer and reassemble received
+	  packet fragments before passing it for further processing.
+
 config MCUMGR_SMP_BT
 	bool "Bluetooth mcumgr SMP transport"
 	select BT
@@ -571,6 +578,11 @@ config MCUMGR_SMP_UDP_MTU
 
 endif # MCUMGR_SMP_UDP
 
+config MCUMGR_SMP_REASSEMBLY
+	bool
+	help
+	  Enable structures and functions needed for packet reassembly by SMP backend.
+
 config MCUMGR_BUF_COUNT
 	int "Number of mcumgr buffers"
 	default 2 if MCUMGR_SMP_UDP
@@ -601,4 +613,9 @@ config MCUMGR_BUF_USER_DATA_SIZE
 	  Different mcumgr transports impose different requirements for this
 	  setting. A value of 4 is sufficient for UART, shell, and bluetooth.
 	  For UDP, the userdata must be large enough to hold a IPv4/IPv6 address.
+
+module = MCUMGR_SMP
+module-str = mcumgr_smp
+source "subsys/logging/Kconfig.template.log_config"
+
 endif # MCUMGR
