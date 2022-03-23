@@ -578,6 +578,104 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 }
 #endif //defined(CONFIG_MODEM_SIM_NUMBERS)
 
+/* Handler: <GETCFG Bands info> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getbands)
+{
+#define MAX_BANDS_STR_SZ	63
+	char bandstr[MAX_BANDS_STR_SZ+1];
+	size_t out_len = net_buf_linearize(bandstr,
+					   sizeof(bandstr) - 1,
+					   data->rx_buf, 0, len);
+	bandstr[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("BANDS - %s", log_strdup(bandstr));
+	return 0;
+}
+
+/* Handler: <GETCGDCONT> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getcgdcont)
+{
+#define MAX_CGDRESP_STR_SZ	63
+	char cgdcont_resp_str[MAX_CGDRESP_STR_SZ+1];
+	size_t out_len = net_buf_linearize(cgdcont_resp_str,
+					   sizeof(cgdcont_resp_str) - 1,
+					   data->rx_buf, 0, len);
+	cgdcont_resp_str[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("CGDCONT: %s", log_strdup(cgdcont_resp_str));
+	return 0;
+}
+
+/* Handler: <STATUS USIM> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_usim)
+{
+#define MAX_USIM_STR_SZ	63
+	char status_usim[MAX_USIM_STR_SZ+1];
+	size_t out_len = net_buf_linearize(status_usim,
+					   sizeof(status_usim) - 1,
+					   data->rx_buf, 0, len);
+	status_usim[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("USIM: %s", log_strdup(status_usim));
+	return 0;
+}
+
+/* Handler: <GETACFG> */
+static bool needtoset_autoconn_to_false = false;
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getacfg)
+{
+#define MAX_AUTOCONN_STR_SZ	15
+	char autoconnmode_str[MAX_AUTOCONN_STR_SZ+1];
+	size_t out_len = net_buf_linearize(autoconnmode_str,
+					   sizeof(autoconnmode_str) - 1,
+					   data->rx_buf, 0, len);
+	autoconnmode_str[out_len] = '\0';
+
+	/* Log the received information. */
+	if (strcmp(autoconnmode_str, "true") == 0) {
+		//set_autoconn_off();
+		needtoset_autoconn_to_false = true;
+		LOG_INF("autoconfig is true, will set to false");
+	} else {
+		LOG_INF("Auto Conn Mode: %s", log_strdup(autoconnmode_str));
+	}
+	return 0;
+}
+
+#ifdef VERIFY_INIT_MODEM_STATE
+/* Handler: <CFUN> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cfun)
+{
+#define MAX_CFUN_STR_SZ	15
+	char cfun_resp_str[MAX_CFUN_STR_SZ+1];
+	size_t out_len = net_buf_linearize(cfun_resp_str,
+					   sizeof(cfun_resp_str) - 1,
+					   data->rx_buf, 0, len);
+	cfun_resp_str[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("CFUN: %s", log_strdup(cfun_resp_str));
+	return 0;
+}
+
+/* Handler: <CEREG> */
+MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
+{
+#define MAX_CEREG_STR_SZ	15
+	char cereg_resp_str[MAX_CEREG_STR_SZ+1];
+	size_t out_len = net_buf_linearize(cereg_resp_str,
+					   sizeof(cereg_resp_str) - 1,
+					   data->rx_buf, 0, len);
+	cereg_resp_str[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_INF("CEREG: %s", log_strdup(cereg_resp_str));
+	return 0;
+}
+#endif
 
 void parse_ipgwmask(char *buf, char *p1, char *p2, char *p3);
 #define PDN_QUERY_RESPONSE_LEN 256
@@ -662,6 +760,46 @@ void parse_ipgwmask(char *buf, char *p1, char *p2, char *p3)
 	}
 }
 
+int set_autoconn_off(void)
+{
+	char buf[64] = {0};
+	int  ret;
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	snprintk(buf, sizeof(buf), "AT%%SETACFG=modem_apps.Mode.AutoConnectMode,\"false\"");
+	printk("%s\n", buf);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0, buf, &mdata.sem_response, K_MSEC(200));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	} else
+		LOG_INF("set autoconn to false!");
+	return ret;
+}
+
+int set_cfun_cops(void)
+{
+	char buf[64] = {0};
+	int  ret;
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	snprintk(buf, sizeof(buf), "AT+CFUN=1");
+	LOG_DBG("%s\n",buf);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0, buf, &mdata.sem_response, K_MSEC(3000));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	}
+	k_sleep(K_MSEC(1000));	//this is art, makes it more reliable
+	snprintk(buf, sizeof(buf), "AT+COPS=1,0,\"T-Mobile\"");
+	LOG_DBG("%s\n", buf);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			     NULL, 0, buf, &mdata.sem_response, K_MSEC(8000));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	}
+	return ret;
+}
 /**
  * get ipv4 config info from modem
  */
@@ -944,10 +1082,17 @@ static int murata_1sc_setup(void)
 		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
 		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_atcmdinfo_iccid, 0U, " "),
 #endif //(CONFIG_MODEM_SIM_NUMBERS)
+        SETUP_CMD("AT%GETACFG=modem_apps.Mode.AutoConnectMode", "", on_cmd_atcmdinfo_getacfg, 0U, ""),
+        SETUP_CMD("AT%GETCFG=\"BAND\"", "Bands:", on_cmd_atcmdinfo_getbands, 0U, ""),
+        SETUP_CMD("AT+CGDCONT?", "+CGDCONT:", on_cmd_atcmdinfo_getcgdcont, 0U, ""),
+        SETUP_CMD("AT%STATUS=\"USIM\"", "USIM:", on_cmd_atcmdinfo_usim, 0U, ""),
+#ifdef VERIFY_INIT_MODEM_STATE
+		SETUP_CMD("AT+CFUN?", "+CFUN:", on_cmd_atcmdinfo_cfun, 0U, ""),
+		SETUP_CMD("AT+CEREG?", "+CEREG:", on_cmd_atcmdinfo_cereg, 0U, ""),
 		SETUP_CMD("AT+CGCONTRDP", "+CGDCONTRDP:", on_cmd_atcmdinfo_pdnrdp, 0U, ""),
-#if defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
-		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
 #endif
+		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+
 	};
 
 	int ret = 0, counter;
@@ -966,6 +1111,16 @@ static int murata_1sc_setup(void)
 	if (ret < 0) {
 		LOG_ERR("post modem_cmd_init error");
 	}
+
+
+	if (needtoset_autoconn_to_false) {
+		set_autoconn_off();
+	}
+
+#if !defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
+	k_sleep(K_MSEC(CONFIG_MODEM_ON_DELAY));
+	set_cfun_cops();
+#endif
 	// modem_pin_write(&mctx, MDM_WAKE_MDM, 0);
 
 	return ret;
@@ -2425,7 +2580,6 @@ static int murata_1sc_init(const struct device *dev)
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 
 	murata_1sc_setup();
-
   	return 0;
 }
 
