@@ -135,8 +135,7 @@ zephyr_smp_reset_buf(void *buf, void *arg)
 }
 
 static int
-zephyr_smp_write_at(struct cbor_encoder_writer *writer, size_t offset,
-		    const void *data, size_t len, void *arg)
+zephyr_smp_write_hdr(struct cbor_encoder_writer *writer, const struct mgmt_hdr *hdr)
 {
 	struct cbor_nb_writer *czw;
 	struct net_buf *nb;
@@ -144,19 +143,7 @@ zephyr_smp_write_at(struct cbor_encoder_writer *writer, size_t offset,
 	czw = (struct cbor_nb_writer *)writer;
 	nb = czw->nb;
 
-	if (offset > nb->len) {
-		return MGMT_ERR_EINVAL;
-	}
-
-	if ((offset + len) > (nb->size - net_buf_headroom(nb))) {
-		return MGMT_ERR_EINVAL;
-	}
-
-	memcpy(nb->data + offset, data, len);
-	if (nb->len < offset + len) {
-		nb->len = offset + len;
-		writer->bytes_written = nb->len;
-	}
+	memcpy(nb->data, hdr, sizeof(*hdr));
 
 	return 0;
 }
@@ -214,8 +201,7 @@ zephyr_smp_tx_rsp(struct smp_streamer *ns, void *rsp, void *arg)
 }
 
 static int
-zephyr_smp_init_reader(struct cbor_decoder_reader *reader, void *buf,
-		       void *arg)
+zephyr_smp_init_reader(struct cbor_decoder_reader *reader, void *buf)
 {
 	struct cbor_nb_reader *czr;
 
@@ -226,8 +212,7 @@ zephyr_smp_init_reader(struct cbor_decoder_reader *reader, void *buf,
 }
 
 static int
-zephyr_smp_init_writer(struct cbor_encoder_writer *writer, void *buf,
-		       void *arg)
+zephyr_smp_init_writer(struct cbor_encoder_writer *writer, void *buf)
 {
 	struct cbor_nb_writer *czw;
 
@@ -283,7 +268,7 @@ static const struct mgmt_streamer_cfg zephyr_smp_cbor_cfg = {
 	.alloc_rsp = zephyr_smp_alloc_rsp,
 	.trim_front = zephyr_smp_trim_front,
 	.reset_buf = zephyr_smp_reset_buf,
-	.write_at = zephyr_smp_write_at,
+	.write_hdr = zephyr_smp_write_hdr,
 	.init_reader = zephyr_smp_init_reader,
 	.init_writer = zephyr_smp_init_writer,
 	.free_buf = zephyr_smp_free_buf,

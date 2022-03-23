@@ -32,12 +32,12 @@ manifest:
       revision: 094aeb41bb93e9199d24d665ee43e9e05d6d7b1c
       path: modules/lib/civetweb
     - name: cmsis
-      revision: b0612c97c1401feeb4160add6462c3627fe90fc7
+      revision: ed63b704bbfaceb71220557b658304c5ea3d5b88
       path: modules/hal/cmsis
       groups:
         - hal
     - name: edtt
-      revision: 1fc2e6f7d2a01a01074456f2ef2ccf1f3df7fac1
+      revision: 1ea61a390d2bfcf3b2ecdba8f8b0b98dfdffbd11
       path: tools/edtt
       groups:
         - tools
@@ -173,7 +173,7 @@ manifest:
       groups:
         - crypto
     - name: mcuboot
-      revision: 89936c338e46f43cb177a8b928cd80b90f3ace8f
+      revision: 7b9e4eecaa2547ba34cd40a13530f10dd70c92ca
       path: bootloader/mcuboot
     - name: mipi-sys-t
       path: modules/debug/mipi-sys-t
