@@ -1,0 +1,26 @@
+- scenarios:
+    - sample.basic.gecko_rtcc
+    - sample.drivers.led.led_pwm
+    - drivers.counter
+  platforms:
+    - tmo_hwg_dev_kit
+    - tmo_dev_edge
+  comment: "Not ready to run these tests yet"
+
+- scenarios:
+    - kernel.memory_slabs.api
+    - kernel.workqueue
+    - kernel.common
+    - portability.cmsis_rtos_v2
+    - libraries.encoding.jwt
+    - sample.kernel.philosopher
+    - sample.kernel.metairq_dispatch
+    - libraries.libc.minimal.mem_alloc
+    - libraries.cmsis_dsp.transform.cf64
+    - libraries.cmsis_dsp.transform.cf64.fpu
+    - logging.add.async
+    - benchmark.data_structures
+  platforms:
+    - tmo_hwg_dev_kit
+    - tmo_dev_edge
+  comment: "These tests do not pass at 9600 baud"
