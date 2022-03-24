@@ -578,11 +578,12 @@ class BinaryHandler(Handler):
             command = [self.binary]
 
         run_valgrind = False
-        if self.valgrind and shutil.which("valgrind"):
+        if self.valgrind:
             command = ["valgrind", "--error-exitcode=2",
                        "--leak-check=full",
                        "--suppressions=" + ZEPHYR_BASE + "/scripts/valgrind.supp",
-                       "--log-file=" + self.build_dir + "/valgrind.log"
+                       "--log-file=" + self.build_dir + "/valgrind.log",
+                       "--track-origins=yes",
                        ] + command
             run_valgrind = True
 
@@ -632,13 +633,14 @@ class BinaryHandler(Handler):
         self.instance.results = harness.tests
 
         if not self.terminated and self.returncode != 0:
-            # When a process is killed, the default handler returns 128 + SIGTERM
-            # so in that case the return code itself is not meaningful
-            self.set_state("failed", handler_time)
-            self.instance.reason = "Failed"
-        elif run_valgrind and self.returncode == 2:
-            self.set_state("failed", handler_time)
-            self.instance.reason = "Valgrind error"
+            if run_valgrind and self.returncode == 2:
+                self.set_state("failed", handler_time)
+                self.instance.reason = "Valgrind error"
+            else:
+                # When a process is killed, the default handler returns 128 + SIGTERM
+                # so in that case the return code itself is not meaningful
+                self.set_state("failed", handler_time)
+                self.instance.reason = "Failed"
         elif harness.state:
             self.set_state(harness.state, handler_time)
             if harness.state == "failed":

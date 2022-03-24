@@ -36,9 +36,9 @@ zephyr_library_sources_ifdef(CONFIG_BT_MCC mcc.c)
 
 zephyr_library_sources_ifdef(CONFIG_BT_MCS mcs.c)
 
-zephyr_library_sources_ifdef(CONFIG_BT_MCS mpl.c)
+zephyr_library_sources_ifdef(CONFIG_BT_MPL mpl.c)
 
-zephyr_library_sources_ifdef(CONFIG_BT_MCS media_proxy.c)
+zephyr_library_sources_ifdef(CONFIG_MCTL media_proxy.c)
 
 zephyr_library_sources_ifdef(CONFIG_BT_ASCS ascs.c)
 zephyr_library_sources_ifdef(CONFIG_BT_PACS pacs.c)

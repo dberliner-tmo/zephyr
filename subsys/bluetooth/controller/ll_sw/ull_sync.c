@@ -250,8 +250,16 @@ uint8_t ll_sync_create(uint8_t options, uint8_t sid, uint8_t adv_addr_type,
 
 	/* Enable scanner to create sync */
 	scan->periodic.sync = sync;
+
+#if defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
+	scan->lll.is_sync = 1U;
+#endif /* CONFIG_BT_CTLR_FILTER_ACCEPT_LIST */
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		scan_coded->periodic.sync = sync;
+
+#if defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
+		scan_coded->lll.is_sync = 1U;
+#endif /* CONFIG_BT_CTLR_FILTER_ACCEPT_LIST */
 	}
 
 	return 0;
@@ -713,10 +721,12 @@ void ull_sync_setup(struct ll_scan_set *scan, struct ll_scan_aux_set *aux,
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_XTAL_US);
 	sync->ull.ticks_preempt_to_start =
 		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_PREEMPT_MIN_US);
-	sync->ull.ticks_slot = HAL_TICKER_US_TO_TICKS(
-			EVENT_OVERHEAD_START_US + ready_delay_us +
-			PDU_AC_MAX_US(PDU_AC_EXT_PAYLOAD_SIZE_MAX, lll->phy) +
-			EVENT_OVERHEAD_END_US);
+	sync->ull.ticks_slot =
+		HAL_TICKER_US_TO_TICKS(EVENT_OVERHEAD_START_US +
+				       ready_delay_us +
+				       PDU_AC_MAX_US(PDU_AC_EXT_PAYLOAD_SIZE_MAX,
+						     lll->phy) +
+				       EVENT_OVERHEAD_END_US);
 
 	ticks_slot_offset = MAX(sync->ull.ticks_active_to_start,
 				sync->ull.ticks_prepare_to_start);
@@ -747,18 +757,26 @@ void ull_sync_setup_reset(struct ll_scan_set *scan)
 {
 	/* Remove the sync context from being associated with scan contexts */
 	scan->periodic.sync = NULL;
+
+#if defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
+	scan->lll.is_sync = 0U;
+#endif /* CONFIG_BT_CTLR_FILTER_ACCEPT_LIST */
+
 	if (IS_ENABLED(CONFIG_BT_CTLR_PHY_CODED)) {
 		struct ll_scan_set *scan_1m;
 
 		scan_1m = ull_scan_set_get(SCAN_HANDLE_1M);
 		if (scan == scan_1m) {
-			struct ll_scan_set *scan_coded;
-
-			scan_coded = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
-			scan_coded->periodic.sync = NULL;
+			scan = ull_scan_set_get(SCAN_HANDLE_PHY_CODED);
 		} else {
-			scan_1m->periodic.sync = NULL;
+			scan = scan_1m;
 		}
+
+		scan->periodic.sync = NULL;
+
+#if defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
+		scan->lll.is_sync = 0U;
+#endif /* CONFIG_BT_CTLR_FILTER_ACCEPT_LIST */
 	}
 }
 
