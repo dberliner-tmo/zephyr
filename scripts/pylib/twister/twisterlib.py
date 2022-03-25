@@ -1719,7 +1719,7 @@ class TestCase(DisablePyTestCollectionMixin):
         self.toolchain_exclude = None
         self.toolchain_allow = None
         self.tc_filter = None
-        self.timeout = 60
+        self.timeout = 300
         self.harness = ""
         self.harness_config = {}
         self.build_only = True
