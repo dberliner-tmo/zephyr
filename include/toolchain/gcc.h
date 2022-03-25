@@ -591,10 +591,18 @@ do {                                                                    \
 		1UL << (63U - __builtin_clzl(x) + 1U) : \
 		1UL << (63U - __builtin_clzl(x)))
 #else
-#define Z_POW2_CEIL(x) ((1UL << (31U - __builtin_clzl(x))) < x ?  \
-		1UL << (31U - __builtin_clzl(x) + 1U) : \
-		1UL << (31U - __builtin_clzl(x)))
+#define Z_POW2_CEIL(x) ((1UL << (31U - __builtin_clz(x))) < x ?  \
+		1UL << (31U - __builtin_clz(x) + 1U) : \
+		1UL << (31U - __builtin_clz(x)))
 #endif
+
+/**
+ * @brief Check whether or not a value is a power of 2
+ *
+ * @param x The value to check
+ * @return true if x is a power of 2, false otherwise
+ */
+#define Z_IS_POW2(x) (((x) != 0) && (((x) & ((x)-1)) == 0))
 
 #endif /* !_LINKER */
 #endif /* ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_ */

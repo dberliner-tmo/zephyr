@@ -25,17 +25,34 @@
 	leds {
 		compatible = "gpio-leds";
 		led0: led_0 {
-			gpios = <&gpio0 24 0>;
+			gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
 			label = "Red LED";
 		};
 		led1: led_1 {
-			gpios = <&gpio0 16 0>;
+			gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
 			label = "Green LED";
 		};
 		led2: led_2 {
-			gpios = <&gpio0 6 0>;
+			gpios = <&gpio0 6 GPIO_ACTIVE_LOW>;
 			label = "Blue LED";
 		};
+		led4: led_4 {
+			gpios = <&gpio1 9 GPIO_ACTIVE_HIGH>;
+			label = "User LED";
+		};
+	};
+
+	vdd_env: vdd-env {
+		compatible = "regulator-fixed-sync", "regulator-fixed";
+		label = "vdd_env";
+		regulator-name = "vdd_env";
+		enable-gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+		regulator-boot-on;
+	};
+
+	zephyr,user {
+		/* I2C pull-ups are connected to VDD via pin voltage level */
+		pull-up-gpios = <&gpio1 0 GPIO_ACTIVE_HIGH>;
 	};
 
 	/* These aliases are provided for compatibility with samples */
@@ -43,6 +60,7 @@
 		led0 = &led0;
 		led1 = &led1;
 		led2 = &led2;
+		led4 = &led4;
 		spi = &spi2;
 	};
 };
@@ -79,15 +97,10 @@
 	};
 };
 
-/*
- * guide specifying pin numbers: https://docs.zephyrproject.org/latest/boards/arm/nrf52840dk_nrf52840/doc/index.html
- * Given Pin PB.A:
- * pin_no = B*32 + A
- * ex. P1.0 => 32
- */
 &adc {
 	status = "okay";
 };
+
 &uart0 {
 	compatible = "nordic,nrf-uart";
 	current-speed = <115200>;
@@ -96,6 +109,7 @@
 	pinctrl-1 = <&uart0_sleep>;
 	pinctrl-names = "default", "sleep";
 };
+
 arduino_i2c: &i2c0 {
 	compatible = "nordic,nrf-twim";
 	status = "okay";
@@ -103,6 +117,7 @@ arduino_i2c: &i2c0 {
 	pinctrl-1 = <&i2c0_sleep>;
 	pinctrl-names = "default", "sleep";
 };
+
 &i2c1 {
 	compatible = "nordic,nrf-twim";
 	status = "okay";
@@ -110,7 +125,8 @@ arduino_i2c: &i2c0 {
 	pinctrl-1 = <&i2c1_sleep>;
 	pinctrl-names = "default", "sleep";
 };
-// we use SPI2 because SPI1/0 shares conflicts with I2C1/0
+
+/* SPI2 is used because SPI1/0 shares conflicts with I2C1/0 */
 arduino_spi: &spi2 {
 	compatible = "nordic,nrf-spim";
 	status = "okay";
@@ -118,40 +134,16 @@ arduino_spi: &spi2 {
 	pinctrl-1 = <&spi2_sleep>;
 	pinctrl-names = "default", "sleep";
 };
+
 &gpio0 {
 	status = "okay";
 };
+
 &gpio1 {
 	status = "okay";
 };
+
 zephyr_udc0: &usbd {
 	compatible = "nordic,nrf-usbd";
 	status = "okay";
-};
-// All PWM's should be enabled
-&pwm0 {
-	status = "okay";
-};
-&pwm1 {
-	status = "okay";
-};
-&pwm2 {
-	status = "okay";
-};
-&pwm3 {
-	status = "okay";
-};
-/*
- * NOTE: curiously, there is no PDM (microphone) interface in the
- * nordic DTSI file.
- * You'll need to use the nordic-specific PDM libraries.
- */
-
-/*
- * the following sets up the peripherals according to this file:
- * https://github.com/arduino/ArduinoCore-nRF528x-mbedos/blob/19ddd214d255ca20b233eefa76662b360595c146/variants/ARDUINO_NANO33BLE/variant.cpp#L136
- * The bootloader will conflict with RTC1
- */
-&rtc1 {
-	status = "disabled";
 };

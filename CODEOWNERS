@@ -97,8 +97,11 @@
 /boards/arm/96b_wistrio/                  @Mani-Sadhasivam
 /boards/arm/arduino_due/                  @ioannisg
 /boards/arm/bbc_microbit_v2/              @LingaoM
+/boards/arm/bl5340_dvk/                   @lairdjm
+/boards/arm/bl65*/                        @lairdjm
 /boards/arm/blackpill_f401ce/             @coderkalyan
 /boards/arm/blackpill_f411ce/             @coderkalyan
+/boards/arm/bt*10/                        @greg-leach
 /boards/arm/cc1352r1_launchxl/            @bwitherspoon
 /boards/arm/cc26x2r1_launchxl/            @bwitherspoon
 /boards/arm/cc3220sf_launchxl/            @vanti
@@ -126,6 +129,7 @@
 /boards/arm/nucleo*/                      @erwango @ABOSTM @FRASTM
 /boards/arm/nucleo_f401re/                @idlethread
 /boards/arm/nuvoton_pfm_m487/             @ssekar15
+/boards/arm/pinnacle_100_dvk/             @rerickson1
 /boards/arm/qemu_cortex_a9/               @ibirnbaum
 /boards/arm/qemu_cortex_r*/               @stephanosio
 /boards/arm/qemu_cortex_m*/               @ioannisg @stephanosio
@@ -340,6 +344,7 @@
 /drivers/pwm/*rv32m1*                     @henrikbrixandersen
 /drivers/pwm/*sam0*                       @nzmichaelh
 /drivers/pwm/*stm32*                      @gmarull
+/drivers/pwm/*test*                       @JordanYates
 /drivers/pwm/*xlnx*                       @henrikbrixandersen
 /drivers/pwm/pwm_capture.c                @henrikbrixandersen
 /drivers/pwm/pwm_shell.c                  @henrikbrixandersen
@@ -707,9 +712,9 @@ scripts/gen_image_info.py                 @tejlmand
 /share/zephyr-package/                    @tejlmand
 /share/zephyrunittest-package/            @tejlmand
 /subsys/bluetooth/                        @alwa-nordic @jhedberg @Vudentz
-/subsys/bluetooth/audio/                  @alwa-nordic @jhedberg @Vudentz @Thalley @asbjornsabo
+/subsys/bluetooth/audio/                  @jhedberg @Vudentz @Thalley @asbjornsabo
 /subsys/bluetooth/controller/             @carlescufi @cvinayak @thoh-ot @kruithofa
-/subsys/bluetooth/mesh/                   @jhedberg @trond-snekvik @alwa-nordic @Vudentz @LingaoM
+/subsys/bluetooth/mesh/                   @jhedberg @trond-snekvik @Vudentz @LingaoM
 /subsys/canbus/                           @alexanderwachter @henrikbrixandersen
 /subsys/debug/                            @nashif
 /subsys/debug/coredump/                   @dcpleung
