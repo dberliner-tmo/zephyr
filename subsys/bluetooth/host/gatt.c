@@ -3155,6 +3155,8 @@ static int gatt_exchange_mtu_encode(struct net_buf *buf, size_t len,
 int bt_gatt_exchange_mtu(struct bt_conn *conn,
 			 struct bt_gatt_exchange_params *params)
 {
+	int err;
+
 	__ASSERT(conn, "invalid parameter\n");
 	__ASSERT(params && params->func, "invalid parameters\n");
 
@@ -3162,9 +3164,19 @@ int bt_gatt_exchange_mtu(struct bt_conn *conn,
 		return -ENOTCONN;
 	}
 
-	return gatt_req_send(conn, gatt_mtu_rsp, params,
-			     gatt_exchange_mtu_encode, BT_ATT_OP_MTU_REQ,
-			     sizeof(struct bt_att_exchange_mtu_req));
+	/* This request shall only be sent once during a connection by the client. */
+	if (atomic_test_and_set_bit(conn->flags, BT_CONN_ATT_MTU_EXCHANGED)) {
+		return -EALREADY;
+	}
+
+	err = gatt_req_send(conn, gatt_mtu_rsp, params,
+			    gatt_exchange_mtu_encode, BT_ATT_OP_MTU_REQ,
+			    sizeof(struct bt_att_exchange_mtu_req));
+	if (err) {
+		atomic_clear_bit(conn->flags, BT_CONN_ATT_MTU_EXCHANGED);
+	}
+
+	return err;
 }
 
 static void gatt_discover_next(struct bt_conn *conn, uint16_t last_handle,
@@ -4896,6 +4908,20 @@ static void add_subscriptions(struct bt_conn *conn)
 		}
 	}
 }
+
+#if defined(CONFIG_BT_GATT_AUTO_UPDATE_MTU)
+static void gatt_exchange_mtu_func(struct bt_conn *conn, uint8_t err,
+				   struct bt_gatt_exchange_params *params)
+{
+	if (err) {
+		BT_WARN("conn %p err 0x%02x", conn, err);
+	}
+}
+
+static struct bt_gatt_exchange_params gatt_exchange_params = {
+	.func = gatt_exchange_mtu_func,
+};
+#endif /* CONFIG_BT_GATT_AUTO_UPDATE_MTU */
 #endif /* CONFIG_BT_GATT_CLIENT */
 
 #define CCC_STORE_MAX 48
@@ -5158,7 +5184,14 @@ void bt_gatt_connected(struct bt_conn *conn)
 
 #if defined(CONFIG_BT_GATT_CLIENT)
 	add_subscriptions(conn);
+#if defined(CONFIG_BT_GATT_AUTO_UPDATE_MTU)
+	int err;
 
+	err = bt_gatt_exchange_mtu(conn, &gatt_exchange_params);
+	if (err) {
+		BT_WARN("MTU Exchange failed (err %d)", err);
+	}
+#endif /* CONFIG_BT_GATT_AUTO_UPDATE_MTU */
 #endif /* CONFIG_BT_GATT_CLIENT */
 }
 

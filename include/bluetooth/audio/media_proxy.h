@@ -9,6 +9,11 @@
 
 /** @brief Media proxy module
  *
+ * @defgroup bt_media_proxy Media Proxy
+ *
+ * @ingroup bluetooth
+ * @{
+ *
  * The media proxy module is the connection point between media players
  * and media controllers.
  *
@@ -257,6 +262,7 @@ struct media_proxy_ctrl_cbs {
 	 */
 	void (*local_player_instance)(struct media_player *player, int err);
 
+#ifdef CONFIG_MCTL_REMOTE_PLAYER_CONTROL
 	/**
 	 * @brief Discover Player Instance callback
 	 *
@@ -269,6 +275,7 @@ struct media_proxy_ctrl_cbs {
 	 *                 or errno on negative value.
 	 */
 	void (*discover_player)(struct media_player *player, int err);
+#endif /* CONFIG_MCTL_REMOTE_PLAYER_CONTROL */
 
 	/**
 	 * @brief Media Player Name receive callback
@@ -1610,5 +1617,7 @@ void media_proxy_pl_search_results_id_cb(uint64_t id);
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */ /* End of group bt_media_proxy */
 
 #endif /* ZEPHYR_INCLUDE_BLUETOOTH_AUDIO_MEDIA_PROXY_H_ */
