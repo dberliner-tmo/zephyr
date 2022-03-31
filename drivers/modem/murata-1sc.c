@@ -2086,7 +2086,7 @@ int get_cnum(char *rbuf)
 
 	snprintk(buf, sizeof(buf), "AT+CNUM");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_MSEC(20));
+			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		ret = -1;
@@ -2109,7 +2109,7 @@ int get_cops(char *rbuf)
 
 	snprintk(buf, sizeof(buf), "AT+COPS?");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_MSEC(20));
+			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		ret = -1;
