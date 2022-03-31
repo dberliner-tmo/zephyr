@@ -617,7 +617,7 @@ void bt_smp_process()
 				}
 
 				//check exists first
-				bt_auth->pairing_failed(selected_conn, current_event->status);
+				// bt_auth_info_cbs->pairing_failed(selected_conn, current_event->status);
 				bt_conn_unref(selected_conn);
 				break;
 
@@ -686,8 +686,8 @@ void bt_smp_process()
 						rsi_uint16_to_2bytes(selected_conn->le.keys->ltk.ediv, current_event->enc_start.localediv);	
 					}
 					// selected_conn->le.keys->flags |= current_event->enc_start.sc_enable ? BT_KEYS_SC : 0;
-				} else {
-					bt_auth->pairing_failed(selected_conn, current_event->status);
+				// } else {
+				// 	bt_auth_info_cbs->pairing_failed(selected_conn, current_event->status);
 				}
 				bt_conn_unref(selected_conn);
 				break;
