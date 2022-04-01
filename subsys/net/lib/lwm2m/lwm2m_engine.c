@@ -5589,6 +5589,7 @@ static int load_tls_credential(struct lwm2m_ctx *client_ctx, uint16_t res_id,
 
 int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 {
+	socklen_t addr_len;
 	int flags;
 #if defined(CONFIG_LWM2M_DTLS_SUPPORT)
 	int ret;
@@ -5641,7 +5642,7 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 			return -errno;
 		}
 
-		if (client_ctx->desthostname != NULL) {
+		if (client_ctx->hostname_verify && (client_ctx->desthostname != NULL)) {
 			/** store character at len position */
 			tmp = client_ctx->desthostname[client_ctx->desthostnamelen];
 
@@ -5656,14 +5657,23 @@ int lwm2m_socket_start(struct lwm2m_ctx *client_ctx)
 			client_ctx->desthostname[client_ctx->desthostnamelen] = tmp;
 			if (ret < 0) {
 				LOG_ERR("Failed to set TLS_HOSTNAME option: %d", errno);
+				lwm2m_engine_context_close(client_ctx);
 				return -errno;
 			}
 		}
 	}
 #endif /* CONFIG_LWM2M_DTLS_SUPPORT */
+	if ((client_ctx->remote_addr).sa_family == AF_INET) {
+		addr_len = sizeof(struct sockaddr_in);
+	} else if ((client_ctx->remote_addr).sa_family == AF_INET6) {
+		addr_len = sizeof(struct sockaddr_in6);
+	} else {
+		lwm2m_engine_context_close(client_ctx);
+		return -EPROTONOSUPPORT;
+	}
 
 	if (connect(client_ctx->sock_fd, &client_ctx->remote_addr,
-		    NET_SOCKADDR_MAX_SIZE) < 0) {
+		    addr_len) < 0) {
 		LOG_ERR("Cannot connect UDP (-%d)", errno);
 		lwm2m_engine_context_close(client_ctx);
 		return -errno;

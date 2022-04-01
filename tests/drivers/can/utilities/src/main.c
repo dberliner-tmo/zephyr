@@ -1,21 +1,26 @@
-/* main.c - Application main entry point */
-
 /*
+ * Copyright (c) 2022 Vestas Wind Systems A/S
  * Copyright (c) 2019 Intel Corporation
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
-LOG_MODULE_REGISTER(can_test, LOG_LEVEL_ERR);
-
-#include <zephyr/types.h>
-#include <stddef.h>
-#include <string.h>
 #include <drivers/can.h>
-
+#include <logging/log.h>
 #include <ztest.h>
 
+LOG_MODULE_REGISTER(can_utilities, LOG_LEVEL_ERR);
+
+/**
+ * @addtogroup t_driver_can
+ * @{
+ * @defgroup t_can_utilities test_can_utilities
+ * @}
+ */
+
+/**
+ * @brief Test of @a can_copy_frame_to_zframe()
+ */
 static void test_can_frame_to_zcan_frame(void)
 {
 	struct can_frame frame = { 0 };
@@ -45,6 +50,9 @@ static void test_can_frame_to_zcan_frame(void)
 	zassert_equal(msg.dlc, expected.dlc, "Msg length invalid");
 }
 
+/**
+ * @brief Test of @a can_copy_zframe_to_frame()
+ */
 static void test_zcan_frame_to_can_frame(void)
 {
 	struct can_frame frame = { 0 };
@@ -76,6 +84,9 @@ static void test_zcan_frame_to_can_frame(void)
 		      "CAN msg length not same");
 }
 
+/**
+ * @brief Test of @a can_copy_filter_to_zfilter()
+ */
 static void test_can_filter_to_zcan_filter(void)
 {
 	struct can_filter filter = { 0 };
@@ -109,6 +120,9 @@ static void test_can_filter_to_zcan_filter(void)
 		      "id mask not set");
 }
 
+/**
+ * @brief Test of @a can_copy_zfilter_to_filter()
+ */
 static void test_zcan_filter_to_can_filter(void)
 {
 	struct can_filter filter = { 0 };
@@ -135,13 +149,58 @@ static void test_zcan_filter_to_can_filter(void)
 	zassert_equal(filter.can_mask, expected.can_mask, "CAN mask not same");
 }
 
+/**
+ * @brief Test of @a can_dlc_to_bytes()
+ */
+static void test_can_dlc_to_bytes(void)
+{
+	uint8_t dlc;
+
+	/* CAN 2.0B/CAN-FD DLC, 0 to 8 data bytes */
+	for (dlc = 0; dlc <= 8; dlc++) {
+		zassert_equal(can_dlc_to_bytes(dlc), dlc, "wrong number of bytes for DLC %u", dlc);
+	}
+
+	/* CAN-FD DLC, 12 to 64 data bytes in steps */
+	zassert_equal(can_dlc_to_bytes(9),  12, "wrong number of bytes for DLC 9");
+	zassert_equal(can_dlc_to_bytes(10), 16, "wrong number of bytes for DLC 10");
+	zassert_equal(can_dlc_to_bytes(11), 20, "wrong number of bytes for DLC 11");
+	zassert_equal(can_dlc_to_bytes(12), 24, "wrong number of bytes for DLC 12");
+	zassert_equal(can_dlc_to_bytes(13), 32, "wrong number of bytes for DLC 13");
+	zassert_equal(can_dlc_to_bytes(14), 48, "wrong number of bytes for DLC 14");
+	zassert_equal(can_dlc_to_bytes(15), 64, "wrong number of bytes for DLC 15");
+}
+
+/**
+ * @brief Test of @a can_bytes_to_dlc()
+ */
+static void test_can_bytes_to_dlc(void)
+{
+	uint8_t bytes;
+
+	/* CAN 2.0B DLC, 0 to 8 data bytes */
+	for (bytes = 0; bytes <= 8; bytes++) {
+		zassert_equal(can_bytes_to_dlc(bytes), bytes, "wrong DLC for %u byte(s)", bytes);
+	}
+
+	/* CAN-FD DLC, 12 to 64 data bytes in steps */
+	zassert_equal(can_bytes_to_dlc(12), 9,  "wrong DLC for 12 bytes");
+	zassert_equal(can_bytes_to_dlc(16), 10, "wrong DLC for 16 bytes");
+	zassert_equal(can_bytes_to_dlc(20), 11, "wrong DLC for 20 bytes");
+	zassert_equal(can_bytes_to_dlc(24), 12, "wrong DLC for 24 bytes");
+	zassert_equal(can_bytes_to_dlc(32), 13, "wrong DLC for 32 bytes");
+	zassert_equal(can_bytes_to_dlc(48), 14, "wrong DLC for 48 bytes");
+	zassert_equal(can_bytes_to_dlc(64), 15, "wrong DLC for 64 bytes");
+}
+
 void test_main(void)
 {
-	ztest_test_suite(test_can_frame,
+	ztest_test_suite(can_utilities_tests,
 			 ztest_unit_test(test_can_frame_to_zcan_frame),
 			 ztest_unit_test(test_zcan_frame_to_can_frame),
 			 ztest_unit_test(test_can_filter_to_zcan_filter),
-			 ztest_unit_test(test_zcan_filter_to_can_filter));
-
-	ztest_run_test_suite(test_can_frame);
+			 ztest_unit_test(test_zcan_filter_to_can_filter),
+			 ztest_unit_test(test_can_dlc_to_bytes),
+			 ztest_unit_test(test_can_bytes_to_dlc));
+	ztest_run_test_suite(can_utilities_tests);
 }
