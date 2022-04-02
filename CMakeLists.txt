@@ -1697,21 +1697,27 @@ list(APPEND
   )
 
 if(CONFIG_LOG_DICTIONARY_SUPPORT)
-  set(LOG_DICT_DB_NAME ${PROJECT_BINARY_DIR}/log_dictionary.json)
+  set(log_dict_db_output --json=${PROJECT_BINARY_DIR}/log_dictionary.json)
+elseif(CONFIG_LOG_MIPI_SYST_USE_CATALOG)
+  set(log_dict_db_output --syst=${PROJECT_BINARY_DIR}/mipi_syst_collateral.xml)
+endif()
 
+if(log_dict_db_output)
   list(APPEND
     post_build_commands
     COMMAND
     ${PYTHON_EXECUTABLE}
     ${ZEPHYR_BASE}/scripts/logging/dictionary/database_gen.py
     ${KERNEL_ELF_NAME}
-    ${LOG_DICT_DB_NAME}
+    ${log_dict_db_output}
     --build-header ${PROJECT_BINARY_DIR}/include/generated/version.h
     )
   list(APPEND
     post_build_byproducts
     ${LOG_DICT_DB_NAME}
     )
+
+  unset(log_dict_db_output)
 endif()
 
 # Add post_build_commands to post-process the final .elf file produced by
