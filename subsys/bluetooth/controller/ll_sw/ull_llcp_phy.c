@@ -174,23 +174,6 @@ static void pu_reset_timing_restrict(struct ll_conn *conn)
 	pu_set_timing_restrict(conn, conn->lll.phy_tx);
 }
 
-static uint16_t pu_event_counter(struct ll_conn *conn)
-{
-	struct lll_conn *lll;
-	uint16_t event_counter;
-
-	/* TODO(thoh): Lazy hardcoded */
-	uint16_t lazy = 0;
-
-	/**/
-	lll = &conn->lll;
-
-	/* Calculate current event counter */
-	event_counter = lll->event_counter + lll->latency_prepare + lazy;
-
-	return event_counter;
-}
-
 #if defined(CONFIG_BT_PERIPHERAL)
 static uint8_t pu_check_update_ind(struct ll_conn *conn, struct proc_ctx *ctx)
 {
@@ -203,7 +186,8 @@ static uint8_t pu_check_update_ind(struct ll_conn *conn, struct proc_ctx *ctx)
 		ret = 1;
 	} else {
 		/* if instant already passed, quit procedure with error */
-		if (is_instant_reached_or_passed(ctx->data.pu.instant, pu_event_counter(conn))) {
+		if (is_instant_reached_or_passed(ctx->data.pu.instant,
+						 ull_conn_event_counter(conn))) {
 			ctx->data.pu.error = BT_HCI_ERR_INSTANT_PASSED;
 			ret = 1;
 		}
@@ -240,9 +224,6 @@ static uint8_t pu_apply_phy_update(struct ll_conn *conn, struct proc_ctx *ctx)
 	return (ctx->data.pu.c_to_p_phy || ctx->data.pu.p_to_c_phy);
 }
 
-/*
- * TODO: this is the same as calc_eff_time in ull_connections.c
- */
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 static uint16_t pu_calc_eff_time(uint8_t max_octets, uint8_t phy, uint16_t default_time)
 {
@@ -460,7 +441,7 @@ static void lp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx
 	if (ctx->pause || !llcp_tx_alloc_peek(conn, ctx)) {
 		ctx->state = LP_PU_STATE_WAIT_TX_PHY_UPDATE_IND;
 	} else {
-		ctx->data.pu.instant = pu_event_counter(conn) + PHY_UPDATE_INSTANT_DELTA;
+		ctx->data.pu.instant = ull_conn_event_counter(conn) + PHY_UPDATE_INSTANT_DELTA;
 		lp_pu_tx(conn, ctx, PDU_DATA_LLCTRL_TYPE_PHY_UPD_IND);
 		ctx->rx_opcode = PDU_DATA_LLCTRL_TYPE_UNUSED;
 		ctx->state = LP_PU_STATE_WAIT_TX_ACK_PHY_UPDATE_IND;
@@ -470,7 +451,6 @@ static void lp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx
 
 static void lp_pu_st_idle(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt, void *param)
 {
-	/* TODO */
 	switch (evt) {
 	case LP_PU_EVT_RUN:
 		lp_pu_send_phy_req(conn, ctx, evt, param);
@@ -500,7 +480,6 @@ static void lp_pu_st_wait_rx_phy_rsp(struct ll_conn *conn, struct proc_ctx *ctx,
 {
 	switch (evt) {
 	case LP_PU_EVT_PHY_RSP:
-		/* TODO: should we swap the function call with variable declaration? */
 		llcp_rr_set_incompat(conn, INCOMPAT_RESERVED);
 		/* 'Prefer' the phys from the REQ */
 		uint8_t tx_pref = ctx->data.pu.tx;
@@ -651,7 +630,7 @@ static void lp_pu_st_wait_rx_phy_update_ind(struct ll_conn *conn, struct proc_ct
 static void lp_pu_check_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				void *param)
 {
-	if (is_instant_reached_or_passed(ctx->data.pu.instant, pu_event_counter(conn))) {
+	if (is_instant_reached_or_passed(ctx->data.pu.instant, ull_conn_event_counter(conn))) {
 		const uint8_t phy_changed = pu_apply_phy_update(conn, ctx);
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 		if (phy_changed) {
@@ -668,7 +647,6 @@ static void lp_pu_check_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint
 static void lp_pu_st_wait_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				  void *param)
 {
-	/* TODO */
 	switch (evt) {
 	case LP_PU_EVT_RUN:
 		lp_pu_check_instant(conn, ctx, evt, param);
@@ -850,7 +828,7 @@ static void rp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx
 		ctx->state = RP_PU_STATE_WAIT_TX_PHY_UPDATE_IND;
 	} else {
 		llcp_rr_set_paused_cmd(conn, PROC_CTE_REQ);
-		ctx->data.pu.instant = pu_event_counter(conn) + PHY_UPDATE_INSTANT_DELTA;
+		ctx->data.pu.instant = ull_conn_event_counter(conn) + PHY_UPDATE_INSTANT_DELTA;
 		rp_pu_tx(conn, ctx, PDU_DATA_LLCTRL_TYPE_PHY_UPD_IND);
 		ctx->rx_opcode = PDU_DATA_LLCTRL_TYPE_UNUSED;
 		ctx->state = RP_PU_STATE_WAIT_TX_ACK_PHY_UPDATE_IND;
@@ -875,7 +853,6 @@ static void rp_pu_send_phy_rsp(struct ll_conn *conn, struct proc_ctx *ctx, uint8
 
 static void rp_pu_st_idle(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt, void *param)
 {
-	/* TODO */
 	switch (evt) {
 	case RP_PU_EVT_RUN:
 		ctx->state = RP_PU_STATE_WAIT_RX_PHY_REQ;
@@ -1018,7 +995,7 @@ static void rp_pu_st_wait_rx_phy_update_ind(struct ll_conn *conn, struct proc_ct
 static void rp_pu_check_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				void *param)
 {
-	if (is_instant_reached_or_passed(ctx->data.pu.instant, pu_event_counter(conn))) {
+	if (is_instant_reached_or_passed(ctx->data.pu.instant, ull_conn_event_counter(conn))) {
 		ctx->data.pu.error = BT_HCI_ERR_SUCCESS;
 		const uint8_t phy_changed = pu_apply_phy_update(conn, ctx);
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -1035,7 +1012,6 @@ static void rp_pu_check_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint
 static void rp_pu_st_wait_instant(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				  void *param)
 {
-	/* TODO */
 	switch (evt) {
 	case RP_PU_EVT_RUN:
 		rp_pu_check_instant(conn, ctx, evt, param);

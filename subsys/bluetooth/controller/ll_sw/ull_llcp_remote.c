@@ -73,37 +73,23 @@ enum {
 
 static bool proc_with_instant(struct proc_ctx *ctx)
 {
-	/*
-	 * TODO: should we combine all the cases that return 0
-	 * and all the cases that return 1?
-	 */
 	switch (ctx->proc) {
 	case PROC_UNKNOWN:
-		return 0U;
 	case PROC_FEATURE_EXCHANGE:
-		return 0U;
 	case PROC_MIN_USED_CHANS:
-		return 0U;
 	case PROC_LE_PING:
-		return 0U;
 	case PROC_VERSION_EXCHANGE:
-		return 0U;
 	case PROC_ENCRYPTION_START:
 	case PROC_ENCRYPTION_PAUSE:
-		return 0U;
-	case PROC_PHY_UPDATE:
-		return 1U;
-	case PROC_CONN_UPDATE:
-	case PROC_CONN_PARAM_REQ:
-		return 1U;
 	case PROC_TERMINATE:
-		return 0U;
-	case PROC_CHAN_MAP_UPDATE:
-		return 1U;
 	case PROC_DATA_LENGTH_UPDATE:
-		return 0U;
 	case PROC_CTE_REQ:
 		return 0U;
+	case PROC_PHY_UPDATE:
+	case PROC_CONN_UPDATE:
+	case PROC_CONN_PARAM_REQ:
+	case PROC_CHAN_MAP_UPDATE:
+		return 1U;
 	default:
 		/* Unknown procedure */
 		LL_ASSERT(0);
@@ -444,7 +430,7 @@ static void rr_act_complete(struct ll_conn *conn)
 
 static void rr_act_connect(struct ll_conn *conn)
 {
-	/* TODO */
+	/* Empty on purpose */
 }
 
 static void rr_act_disconnect(struct ll_conn *conn)
@@ -814,7 +800,6 @@ static void rr_abort(struct ll_conn *conn)
 		ctx = rr_dequeue(conn);
 	}
 
-	/* TODO(thoh): Whats missing here ??? */
 	rr_set_collision(conn, 0U);
 	rr_set_state(conn, RR_STATE_IDLE);
 }
