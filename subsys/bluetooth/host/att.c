@@ -2640,6 +2640,12 @@ static void att_reset(struct bt_att *att)
 	}
 #endif /* CONFIG_BT_ATT_PREPARE_COUNT > 0 */
 
+#if defined(CONFIG_BT_EATT)
+	struct k_work_sync sync;
+
+	(void)k_work_cancel_delayable_sync(&att->connection_work, &sync);
+#endif /* CONFIG_BT_EATT */
+
 	while ((buf = net_buf_get(&att->tx_queue, K_NO_WAIT))) {
 		net_buf_unref(buf);
 	}
@@ -2944,12 +2950,20 @@ static struct bt_att_chan *att_chan_new(struct bt_att *att, atomic_val_t flags)
 }
 
 #if defined(CONFIG_BT_EATT)
-#if defined(CONFIG_BT_TESTING)
 size_t bt_eatt_count(struct bt_conn *conn)
 {
-	struct bt_att *att = att_get(conn);
+	struct bt_att *att;
 	struct bt_att_chan *chan;
 	size_t eatt_count = 0;
+
+	if (!conn) {
+		return 0;
+	}
+
+	att = att_get(conn);
+	if (!att) {
+		return 0;
+	}
 
 	SYS_SLIST_FOR_EACH_CONTAINER(&att->chans, chan, node) {
 		if (atomic_test_bit(chan->flags, ATT_ENHANCED)) {
@@ -2959,7 +2973,6 @@ size_t bt_eatt_count(struct bt_conn *conn)
 
 	return eatt_count;
 }
-#endif /* CONFIG_BT_TESTING */
 
 static void att_enhanced_connection_work_handler(struct k_work *work)
 {
@@ -3072,14 +3085,16 @@ static void ecred_connect_cb(struct bt_conn *conn, uint16_t result, uint8_t atte
 	}
 }
 
-int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels)
+int bt_eatt_connect(struct bt_conn *conn, size_t num_channels)
 {
 	struct bt_att_chan *att_chan = att_get_fixed_chan(conn);
 	struct bt_att *att = att_chan->att;
-	struct bt_l2cap_chan *chan[CONFIG_BT_EATT_MAX] = {};
-	int i = 0;
+	struct bt_l2cap_chan *chan[CONFIG_BT_EATT_MAX + 1] = {};
+	size_t offset = 0;
+	size_t i = 0;
+	int err;
 
-	if (num_channels > CONFIG_BT_EATT_MAX) {
+	if (num_channels > CONFIG_BT_EATT_MAX || num_channels == 0) {
 		return -EINVAL;
 	}
 
@@ -3097,8 +3112,43 @@ int bt_eatt_connect(struct bt_conn *conn, uint8_t num_channels)
 		return -ENOMEM;
 	}
 
-	return bt_l2cap_ecred_chan_connect(conn, chan, BT_EATT_PSM);
+	while (offset < i) {
+		/* bt_l2cap_ecred_chan_connect() uses the first L2CAP_ECRED_CHAN_MAX_PER_REQ
+		 * elements of the array or until a null-terminator is reached.
+		 */
+		err = bt_l2cap_ecred_chan_connect(conn, &chan[offset], BT_EATT_PSM);
+		if (err < 0) {
+			return err;
+		}
+
+		offset += L2CAP_ECRED_CHAN_MAX_PER_REQ;
+	}
+
+	return 0;
 }
+
+#if defined(CONFIG_BT_EATT_AUTO_CONNECT)
+void eatt_auto_connect(struct bt_conn *conn, uint8_t conn_err)
+{
+	int eatt_err;
+
+	if (conn_err) {
+		return;
+	}
+
+	eatt_err = att_schedule_eatt_connect(conn, CONFIG_BT_EATT_MAX);
+	if (eatt_err < 0) {
+		BT_WARN("Automatic creation of EATT bearers failed on "
+			"connection %s with error %d",
+			bt_addr_le_str_real(bt_conn_get_dst(conn)), eatt_err);
+	}
+}
+
+BT_CONN_CB_DEFINE(conn_callbacks) = {
+	.connected = eatt_auto_connect,
+};
+
+#endif /* CONFIG_BT_EATT_AUTO_CONNECT */
 
 int bt_eatt_disconnect(struct bt_conn *conn)
 {

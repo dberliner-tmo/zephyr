@@ -260,10 +260,10 @@ static uint8_t pu_update_eff_times(struct ll_conn *conn, struct proc_ctx *ctx)
 	    (eff_rx_time != lll->dle.eff.max_rx_time)) {
 		lll->dle.eff.max_tx_time = eff_tx_time;
 		lll->dle.eff.max_rx_time = eff_rx_time;
-		return 1;
+		return 1U;
 	}
 
-	return 0;
+	return 0U;
 }
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
@@ -366,6 +366,7 @@ static void pu_ntf(struct ll_conn *conn, struct proc_ctx *ctx)
 	/* Enqueue notification towards LL */
 	ll_rx_put(ntf->hdr.link, ntf);
 	ll_rx_sched();
+	ctx->data.pu.ntf_pu = 0;
 }
 
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
@@ -397,17 +398,33 @@ static void lp_pu_complete(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t e
 #else
 #define NTF_DLE 0
 #endif
-	const uint8_t ntf_count = ctx->data.pu.ntf_pu + NTF_DLE;
+	uint8_t ntf_count = ctx->data.pu.ntf_pu + NTF_DLE;
 	/* when complete reset timing restrictions - idempotent
 	 * (so no problem if we need to wait for NTF buffer)
 	 */
+
 	pu_reset_timing_restrict(conn);
 
+	/* if we need to send both PHY and DLE notification, but we
+	 * do not have 2 buffers available we serialize the sending
+	 * of notifications
+	 */
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+	if ((ntf_count > 1) && !llcp_ntf_alloc_num_available(ntf_count)) {
+		ntf_count = 1;
+	}
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 	if (ntf_count && !llcp_ntf_alloc_num_available(ntf_count)) {
 		ctx->state = LP_PU_STATE_WAIT_NTF;
 	} else {
 		if (ctx->data.pu.ntf_pu) {
 			pu_ntf(conn, ctx);
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+			if (ntf_count == 1 && NTF_DLE == 1) {
+				ctx->state = LP_PU_STATE_WAIT_NTF;
+				return;
+			}
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 		}
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 		if (ctx->data.pu.ntf_dle) {
@@ -422,14 +439,15 @@ static void lp_pu_complete(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t e
 
 static void lp_pu_send_phy_req(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt, void *param)
 {
-	if (ctx->pause || llcp_rr_get_collision(conn) || !llcp_tx_alloc_peek(conn, ctx) ||
+	if (llcp_lr_ispaused(conn) || llcp_rr_get_collision(conn) ||
+	    !llcp_tx_alloc_peek(conn, ctx) ||
 	    (llcp_rr_get_paused_cmd(conn) == PROC_PHY_UPDATE)) {
 		ctx->state = LP_PU_STATE_WAIT_TX_PHY_REQ;
 	} else {
 		llcp_rr_set_incompat(conn, INCOMPAT_RESOLVABLE);
 		llcp_rr_set_paused_cmd(conn, PROC_CTE_REQ);
 		lp_pu_tx(conn, ctx, PDU_DATA_LLCTRL_TYPE_PHY_REQ);
-		llcp_tx_pause_data(conn);
+		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 		ctx->state = LP_PU_STATE_WAIT_TX_ACK_PHY_REQ;
 	}
 }
@@ -438,7 +456,7 @@ static void lp_pu_send_phy_req(struct ll_conn *conn, struct proc_ctx *ctx, uint8
 static void lp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				      void *param)
 {
-	if (ctx->pause || !llcp_tx_alloc_peek(conn, ctx)) {
+	if (llcp_lr_ispaused(conn) || !llcp_tx_alloc_peek(conn, ctx)) {
 		ctx->state = LP_PU_STATE_WAIT_TX_PHY_UPDATE_IND;
 	} else {
 		ctx->data.pu.instant = ull_conn_event_counter(conn) + PHY_UPDATE_INSTANT_DELTA;
@@ -487,7 +505,7 @@ static void lp_pu_st_wait_rx_phy_rsp(struct ll_conn *conn, struct proc_ctx *ctx,
 
 		llcp_pdu_decode_phy_rsp(ctx, (struct pdu_data *)param);
 		/* Pause data tx */
-		llcp_tx_pause_data(conn);
+		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 		/* Combine with the 'Preferred' phys */
 		pu_combine_phys(conn, ctx, tx_pref, rx_pref);
 		lp_pu_send_phy_update_ind(conn, ctx, evt, param);
@@ -534,7 +552,7 @@ static void lp_pu_st_wait_tx_ack_phy_req(struct ll_conn *conn, struct proc_ctx *
 			/* Unknown role */
 			LL_ASSERT(0);
 		}
-		llcp_tx_resume_data(conn);
+		llcp_tx_resume_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 		break;
 	default:
 		/* Ignore other evts */
@@ -580,7 +598,7 @@ static void lp_pu_st_wait_tx_ack_phy_update_ind(struct ll_conn *conn, struct pro
 			ctx->data.pu.ntf_pu = ctx->data.pu.host_initiated;
 			lp_pu_complete(conn, ctx, evt, param);
 		}
-		llcp_tx_resume_data(conn);
+		llcp_tx_resume_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 		break;
 	default:
 		/* Ignore other evts */
@@ -796,17 +814,32 @@ static void rp_pu_complete(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t e
 #else
 #define NTF_DLE 0
 #endif
-	const uint8_t ntf_count = ctx->data.pu.ntf_pu + NTF_DLE;
+	uint8_t ntf_count = ctx->data.pu.ntf_pu + NTF_DLE;
 	/* when complete reset timing restrictions - idempotent
 	 * (so no problem if we need to wait for NTF buffer)
 	 */
 	pu_reset_timing_restrict(conn);
 
+	/* if we need to send both PHY and DLE notification, but we
+	 * do not have 2 buffers available we serialize the sending
+	 * of notifications
+	 */
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+	if ((ntf_count > 1) && !llcp_ntf_alloc_num_available(ntf_count)) {
+		ntf_count = 1;
+	}
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH) */
 	if ((ntf_count > 0) && !llcp_ntf_alloc_num_available(ntf_count)) {
 		ctx->state = RP_PU_STATE_WAIT_NTF;
 	} else {
 		if (ctx->data.pu.ntf_pu) {
 			pu_ntf(conn, ctx);
+#if defined(CONFIG_BT_CTLR_DATA_LENGTH)
+			if (ntf_count == 1 && NTF_DLE == 1) {
+				ctx->state = RP_PU_STATE_WAIT_NTF;
+				return;
+			}
+#endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 		}
 #if defined(CONFIG_BT_CTLR_DATA_LENGTH)
 		if (ctx->data.pu.ntf_dle) {
@@ -823,7 +856,7 @@ static void rp_pu_complete(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t e
 static void rp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				      void *param)
 {
-	if (ctx->pause || !llcp_tx_alloc_peek(conn, ctx) ||
+	if (llcp_rr_ispaused(conn) || !llcp_tx_alloc_peek(conn, ctx) ||
 	(llcp_rr_get_paused_cmd(conn) == PROC_PHY_UPDATE)) {
 		ctx->state = RP_PU_STATE_WAIT_TX_PHY_UPDATE_IND;
 	} else {
@@ -839,7 +872,7 @@ static void rp_pu_send_phy_update_ind(struct ll_conn *conn, struct proc_ctx *ctx
 #if defined(CONFIG_BT_PERIPHERAL)
 static void rp_pu_send_phy_rsp(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt, void *param)
 {
-	if (ctx->pause || !llcp_tx_alloc_peek(conn, ctx) ||
+	if (llcp_rr_ispaused(conn) || !llcp_tx_alloc_peek(conn, ctx) ||
 	    (llcp_rr_get_paused_cmd(conn) == PROC_PHY_UPDATE)) {
 		ctx->state = RP_PU_STATE_WAIT_TX_PHY_RSP;
 	} else {
@@ -869,7 +902,7 @@ static void rp_pu_st_wait_rx_phy_req(struct ll_conn *conn, struct proc_ctx *ctx,
 	llcp_pdu_decode_phy_req(ctx, (struct pdu_data *)param);
 	/* Combine with the 'Preferred' the phys in conn->phy_pref_?x */
 	pu_combine_phys(conn, ctx, conn->phy_pref_tx, conn->phy_pref_rx);
-	llcp_tx_pause_data(conn);
+	llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 	switch (evt) {
 	case RP_PU_EVT_PHY_REQ:
 		switch (conn->lll.role) {
@@ -944,7 +977,7 @@ static void rp_pu_st_wait_tx_ack_phy(struct ll_conn *conn, struct proc_ctx *ctx,
 		} else {
 			/* empty clause */
 		}
-		llcp_tx_resume_data(conn);
+		llcp_tx_resume_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_PHY_UPDATE);
 		break;
 	default:
 		/* Ignore other evts */
