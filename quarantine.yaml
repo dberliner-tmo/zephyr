@@ -4,23 +4,75 @@
     - drivers.counter
   platforms:
     - tmo_hwg_dev_kit
+    - tmo_tracker_v2
     - tmo_dev_edge
   comment: "Not ready to run these tests yet"
 
 - scenarios:
+    - arch.arm.sw_vector_relay
+    - arch.interrupt.arm.hardfault_validation
+    - benchmark.data_structures
+    - benchmark.cmsis_dsp.basicmath.fpu
+    - coredump.logging_backend
+    - crypto.rand32.random_ctr_drbg
+    - drivers.entropy
     - kernel.memory_slabs.api
     - kernel.workqueue
     - kernel.common
-    - portability.cmsis_rtos_v2
+    - kernel.common.tls
+    - kernel.condvar
+    - kernel.memory_heap
+    - kernel.poll
+    - kernel.objects
+    - kernel.device
+    - kernel.futex
+    - kernel.threads.error.case
+    - kernel.threads.init
+    - kernel.scheduler.dumb_no_timeslicing
+    - kernel.scheduler.slice_perthread
+    - lib.cbprintf_fp.fprintfcb
     - libraries.encoding.jwt
-    - sample.kernel.philosopher
-    - sample.kernel.metairq_dispatch
+    - libraries.cmsis_dsp.support
+    - libraries.cmsis_dsp.transform.rf64.fpu
+    - libraries.cmsis_dsp.filtering.biquad
+    - libraries.cmsis_dsp.filtering.biquad.fpu
+    - libraries.cmsis_dsp.transform.cf64
+    - libraries.cmsis_dsp.transform.cf64.fpu
+    - libraries.cmsis_dsp.matrix.unary_q15.fpu
+    - libraries.cmsis_dsp.matrix.binary_q31.fpu
+    - libraries.cmsis_dsp.filtering.decim
+    - libraries.cmsis_dsp.quaternionmath.fpu
+    - libraries.cmsis_dsp.quaternionmath
+    - libraries.cmsis_dsp.statistics.fpu
+    - libraries.cmsis_dsp.transform.rq15.fpu
     - libraries.libc.minimal.mem_alloc
+    - libraries.libc.minimal.mem_alloc_negative_testing
+    - logging.log_msg
+    - logging.add.async
+    - portability.cmsis_rtos_v1
+    - portability.cmsis_rtos_v2
+    - portability.posix.common.newlib
+    - portability.posix.common.tls.newlib
+    - portability.posix.fs.tls.newlib
+    - posix.eventfd_basic.posix_api
+    - peripheral.gpio.1pin
+    - shell.getopt
+    - sample.logger.basic
+    - sample.kernel.philosopher
+    - sample.kernel.philosopher.stacks
+    - sample.kernel.philosopher.preempt_only
+    - sample.kernel.metairq_dispatch
+    - sample.modules.nanopb
+    - sample.nvs.basic
+    - shell.history
+    - testing.ztest.customized_output
+    - tracing.osawareness.openocd
     - libraries.cmsis_dsp.transform.cf64
     - libraries.cmsis_dsp.transform.cf64.fpu
     - logging.add.async
     - benchmark.data_structures
   platforms:
     - tmo_hwg_dev_kit
+    - tmo_tracker_v2
     - tmo_dev_edge
   comment: "These tests do not pass at 9600 baud"

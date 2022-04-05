@@ -565,7 +565,7 @@ const bt_addr_le_t *bt_conn_get_dst(const struct bt_conn *conn)
 	return &conn->le.dst;
 }
 
-uint8_t bt_conn_index(struct bt_conn *conn)
+uint8_t bt_conn_index(const struct bt_conn *conn)
 {
 	ptrdiff_t index;
 
