@@ -122,7 +122,6 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 	uint8_t acad_len;
 	uint8_t data_len;
 	uint8_t hdr_len;
-	uint8_t is_stop;
 	uint8_t *ptr;
 	uint8_t phy;
 
@@ -323,7 +322,6 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 	ftr->extra = NULL;
 
 	ftr->aux_sched = 0U;
-	is_stop = 0U;
 
 	pdu = (void *)((struct node_rx_pdu *)rx)->pdu;
 	p = (void *)&pdu->adv_ext_ind;
@@ -586,8 +584,6 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 	if (!IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC) || lll) {
 		/* Do not ULL schedule if scan disable requested */
 		if (unlikely(scan->is_stop)) {
-			is_stop = scan->is_stop;
-
 			goto ull_scan_aux_rx_flush;
 		}
 
@@ -604,8 +600,6 @@ void ull_scan_aux_setup(memq_link_t *link, struct node_rx_hdr *rx)
 		/* Do not ULL schedule if sync terminate requested */
 		sync = HDR_LLL2ULL(sync_lll);
 		if (unlikely(sync->is_stop)) {
-			is_stop = sync->is_stop;
-
 			goto ull_scan_aux_rx_flush;
 		}
 
@@ -725,23 +719,27 @@ ull_scan_aux_rx_flush:
 			 * release and probable infinite loop processing the
 			 * list.
 			 */
-			if (likely(!is_stop)) {
-				aux->rx_last->rx_ftr.extra = rx;
-				aux->rx_last = rx;
+			if (unlikely(scan->is_stop)) {
+				return;
 			}
+
+			aux->rx_last->rx_ftr.extra = rx;
+			aux->rx_last = rx;
 		} else {
+			const struct ll_sync_set *sync;
+
 			LL_ASSERT(sync_lll);
 
 			ll_rx_put(link, rx);
 			ll_rx_sched();
+
+			sync = HDR_LLL2ULL(sync_lll);
+			if (unlikely(sync->is_stop)) {
+				return;
+			}
 		}
 
-		/* scanning or sync terminate requested, auxiliary context
-		 * release will be done in ull_scan_aux_stop()
-		 */
-		if (unlikely(is_stop)) {
-			return;
-		}
+		LL_ASSERT(aux->parent);
 
 		flush_safe(aux);
 
@@ -777,6 +775,7 @@ void ull_scan_aux_done(struct node_rx_event_done *done)
 		}
 
 		aux = HDR_LLL2ULL(sync->lll.lll_aux);
+		LL_ASSERT(aux->parent);
 	} else {
 		struct ll_scan_set *scan;
 		struct lll_scan *lll;
@@ -922,6 +921,8 @@ void ull_scan_aux_release(memq_link_t *link, struct node_rx_hdr *rx)
 		}
 
 		if (!is_stop) {
+			LL_ASSERT(aux->parent);
+
 			flush_safe(aux);
 
 		} else if (!scan) {
@@ -1059,7 +1060,12 @@ static inline struct ll_sync_iso_set *
 
 static void done_disabled_cb(void *param)
 {
-	flush(param);
+	struct ll_scan_aux_set *aux;
+
+	aux = param;
+	LL_ASSERT(aux->parent);
+
+	flush(aux);
 }
 
 static void flush_safe(void *param)
@@ -1067,6 +1073,9 @@ static void flush_safe(void *param)
 	struct ll_scan_aux_set *aux;
 	struct ull_hdr *hdr;
 	uint8_t ref;
+
+	aux = param;
+	LL_ASSERT(aux->parent);
 
 	/* ref == 0
 	 * All PDUs were scheduled from LLL and there is no pending done
@@ -1077,7 +1086,6 @@ static void flush_safe(void *param)
 	 * callback. Flushing here would release aux context and thus
 	 * ull_hdr before done event was processed.
 	 */
-	aux = param;
 	hdr = &aux->ull;
 	ref = ull_ref_get(hdr);
 	if (ref == 0U) {
@@ -1179,6 +1187,7 @@ static void aux_sync_incomplete(void *param)
 	struct ll_scan_aux_set *aux;
 
 	aux = param;
+	LL_ASSERT(aux->parent);
 
 	/* ULL scheduling succeeded hence no backup node rx present, use the
 	 * extra node rx reserved for incomplete data status generation.
@@ -1288,6 +1297,11 @@ static void ticker_op_cb(uint32_t status, void *param)
 		if (IS_ENABLED(CONFIG_BT_CTLR_SYNC_PERIODIC) && sync) {
 			mfy.fp = aux_sync_incomplete;
 		} else {
+			struct ll_scan_aux_set *aux;
+
+			aux = param;
+			LL_ASSERT(aux->parent);
+
 			mfy.fp = flush_safe;
 		}
 	}
