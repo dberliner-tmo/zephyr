@@ -13,8 +13,6 @@ variables:
 coding-guidelines:
   image: ubuntu:20.04
   stage: test
-  tags:
-    - selfhost-regular
   cache:
     key: guidelines
     paths:
@@ -39,8 +37,6 @@ coding-guidelines:
 coding-guidelines-check-warns:
   stage: test
   image: ubuntu:latest
-  tags:
-    - selfhost-regular
   needs:
     - coding-guidelines
   script:
@@ -56,8 +52,6 @@ coding-guidelines-check-warns:
 compliance:
   stage: test
   image: ubuntu:latest
-  tags:
-    - selfhost-regular
   variables:
     ZEPHYR_BASE: ${CI_PROJECT_DIR}
   artifacts:
@@ -99,8 +93,6 @@ compliance:
 compliance-check-warns:
   image: ubuntu:latest
   stage: test
-  tags:
-    - selfhost-regular
   needs: 
     - compliance
   script:
@@ -127,8 +119,6 @@ compliance-check-warns:
 twister:
   image: zephyrprojectrtos/ci:v0.18.4
   stage: test
-  tags:
-    - selfhost-regular
   variables:
     DEBIAN_FRONTEND: noninteractive
     ZEPHYR_TOOLCHAIN_VARIANT: llvm
@@ -169,6 +159,7 @@ twister:
     - west manifest --validate
     - west -vvv update
     - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
+  timeout: 90 minutes
 
 git-merge:
   image: alpine:latest
