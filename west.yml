@@ -240,15 +240,18 @@ manifest:
       path: modules/tee/tf-m/psa-arch-tests
       groups:
         - tee
+    - name: zcbor
+      revision: 882c489a7d9fdfff31d27666914a78a9eb6976d7
+      path: modules/lib/zcbor
+    - name: zscilib
+      path: modules/lib/zscilib
+      revision: 12bfe3f0a9fcbfe3edab7eabc9678b6c62875d34
     - name: wiseconnect
       path:  modules/hal/silabs_wiseconnect
       url: git@gitlab.com:tmobile/suhwdev/firmware/zephyr-wiseconnect.git
       revision: d6955bddb7571c1fd2f6f17814fdc30171254851
       groups:
         - hal
-    - name: zscilib
-      path: modules/lib/zscilib
-      revision: 12bfe3f0a9fcbfe3edab7eabc9678b6c62875d34
 
   group-filter:
     - -ci
