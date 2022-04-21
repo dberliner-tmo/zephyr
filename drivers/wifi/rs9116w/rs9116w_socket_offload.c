@@ -376,7 +376,10 @@ static int rs9116w_connect(void *obj, const struct sockaddr *addr,
 		errno = EINVAL;
 		return -1;
 	}
-
+	if (rsi_socket_pool[sd].sock_state == RSI_SOCKET_STATE_CONNECTED) {
+		errno = EISCONN;
+		return -1;
+	}
 	retval = rsi_connect(sd, rsi_addr, rsi_addrlen);
 	// errno = rsi_wlan_get_status();
 	return retval;
@@ -802,6 +805,11 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 	rsi_socklen_t rsi_addrlen;
 	size_t per_send = 1000;
 
+	if (!buf || !len) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
 
 	if (is_udp) {
@@ -818,7 +826,7 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 			return -1;
 		}
 	}
-	if (len < per_send) {
+	if (len <= per_send) {
 		if (to != NULL) {
 			retval = rsi_sendto(sd, (int8_t*)buf, len, flags,
 						rsi_addr, rsi_addrlen);
