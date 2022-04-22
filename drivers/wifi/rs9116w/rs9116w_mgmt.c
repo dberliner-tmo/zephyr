@@ -83,6 +83,7 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
      * 9.1.1 int32_t rsi_wlan_scan(uint8_t *ssid, uint8_t chno, rsi_rsp_scan_t *result,uint32_t length)
      */
     printk("Got to rs9116w_mgmt_scan\n");
+    rsi_wlan_req_radio(1);
     ret = rsi_wlan_scan(NULL, 0, &(rs9116w_dev->scan_results), sizeof(rsi_rsp_scan_t));
     if (ret) {
         LOG_ERR("rsi_wlan_scan error: %d", ret);
@@ -164,6 +165,9 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
     // Inform Zephyr there are no more APs, should generate a SCAN COMPLETE message
     cb(rs9116w_dev->net_iface, 0, NULL);
 
+    LOG_DBG("Reinitializing WLAN radio");
+    rsi_wlan_req_radio(0);
+
     return ret;
 }
 #define Z_PF_INET         1          /**< IP protocol family version 4. */
@@ -197,7 +201,7 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     void *rsi_psk;
     int ret;
 
-    // Check if already connected?
+    rsi_wlan_req_radio(1);
 
     // Connect to an access point
     if (params->security == WIFI_SECURITY_TYPE_NONE) {
@@ -350,6 +354,7 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
     if (rsi_wlan_get_state() <  RSI_WLAN_STATE_CONNECTED) {
         return -EALREADY;
     }
+    rsi_wlan_req_radio(1);
 
     /*
      * 9.1.9 int32_t rsi_wlan_disconnect(void);
@@ -364,6 +369,10 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
         LOG_ERR("rsi_wlan_disconnect error: %d", ret);
         return -EIO;
     }
+
+    LOG_DBG("Deinitializing WLAN radio");
+    rsi_wlan_req_radio(0);
+    
     return 0;
 }
 
@@ -380,10 +389,15 @@ static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
     int16_t rssi;
     rsi_rsp_wireless_info_t winfo;
 
+    // rsi_wlan_req_radio(1);
+
     ret = rsi_wlan_get(RSI_WLAN_INFO, (uint8_t *)&winfo, sizeof(winfo));
 
-    if (ret) {
+    if (ret && ret != 103) {
         return -EIO;
+    } else if (ret == 103) {
+        rssi = 0;
+        winfo.wlan_state = 0;
     }
     
     if (winfo.wlan_state){
@@ -468,19 +482,19 @@ static int rs9116w_init(const struct device *dev)
      * 8.1 int32_t *rsi_driver_init(uint8_t *buffer, uint32_t length);
      */
     status = rsi_driver_init(global_buf, GLOBAL_BUFF_LEN);
-    printk("rs9116w_init: rsi_driver_init returned %d\n", status);
+    LOG_DBG("rs9116w_init: rsi_driver_init returned %d", status);
 
     if (status >= 0 && status <= GLOBAL_BUFF_LEN)
     {
-        printk("rs9116w_init: rsi_driver_init using %d of %d bytes\n", status, GLOBAL_BUFF_LEN);
+        LOG_DBG("rs9116w_init: rsi_driver_init using %d of %d bytes", status, GLOBAL_BUFF_LEN);
     }
     else if (status > GLOBAL_BUFF_LEN) {
-        printk("rs9116w_init: rsi_driver_init error: not enough memory, driver needs %d\n", status);
+        LOG_ERR("rs9116w_init: rsi_driver_init error: not enough memory, driver needs %d", status);
         return -ENOMEM;
     }
     else if (status < 0)
     {
-        printk("rs9116w_init: rsi_driver_init error: %d\n", status);
+        LOG_ERR("rs9116w_init: rsi_driver_init error: %d", status);
         return status;
     }
 
@@ -491,7 +505,7 @@ static int rs9116w_init(const struct device *dev)
      */
     status = rsi_device_init(LOAD_NWP_FW);
 
-    printk("rs9116w_init: rsi_device_init returned %d\n", status);
+    LOG_DBG("rs9116w_init: rsi_device_init returned %d", status);
 
 #if IS_ENABLED(CONFIG_WISECONNECT_USE_OS_BINDINGS)
     k_thread_create(&driver_task, driver_task_stack,
@@ -508,37 +522,38 @@ static int rs9116w_init(const struct device *dev)
      */
     if (!status) {
         status = rsi_wireless_init(RSI_WLAN_CLIENT_MODE, RSI_OPERMODE_WLAN_BLE);
-        printk("rs9116w_init: rsi_wireless_init returned %d\n", status);
+        LOG_DBG("rs9116w_init: rsi_wireless_init returned %d", status);
     }
 
     rsi_wlan_radio_init();
 
     // Get the MAC (must be after rsi_wlan_radio_init())
     status = rsi_wlan_get(RSI_MAC_ADDRESS, mac, sizeof(mac));
-    printk("rsi_wlan_get after rsi_wireless_init returned %d, mac: %02x:%02x:%02x:%02x:%02x:%02x\n", status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    LOG_DBG("rsi_wlan_get after rsi_wireless_init returned %d, mac: %02x:%02x:%02x:%02x:%02x:%02x", status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     memcpy(rs9116w_dev->mac, mac, sizeof(mac));
 
     if (status)
-        LOG_DBG("RS9116W WiFi driver failed to initialize, status = %d", status);
+        LOG_ERR("RS9116W WiFi driver failed to initialize, status = %d", status);
     else
-        LOG_DBG("RS9116W WiFi driver Initialized");
+        LOG_INF("RS9116W WiFi driver Initialized");
 
 
     // Get the FW version
     status = rsi_get_fw_version(rs9116w_dev->fw_version, sizeof(rs9116w_dev->fw_version));
     if (status != 0)
-        printk("rsi_get_fw_version returned %d\n", status);
+        LOG_DBG("rsi_get_fw_version returned %d", status);
     else
     {
-        printk("FW version: %s\n", rs9116w_dev->fw_version);
+        LOG_DBG("FW version: %s", rs9116w_dev->fw_version);
     }
 
     int state = rsi_wlan_get_state();
-    printk("state: %d\n", state);
+    LOG_DBG("rsi_wlan state: %d", state);
     /*Don't know that this is necessary, but it doesn't hurt*/
     status = rsi_send_feature_frame();
 
-    return status;
+    LOG_DBG("Feature frame status: %d", status);
+    return 0;
 }
 
 static const struct net_wifi_mgmt_offload rs9116w_api = {
