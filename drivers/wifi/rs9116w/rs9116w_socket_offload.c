@@ -1157,7 +1157,7 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 
 #if IS_ENABLED(CONFIG_NET_IPV6)
 	if (v6) {
-		retval6 = rsi_dns_req(6, node, dns4_1, dns4_2, &qr6, sizeof(qr6));
+		retval6 = rsi_dns_req(6, (uint8_t*)node, dns6_1, dns6_2, &qr6, sizeof(qr6));
 	}
 #endif
 
