@@ -76,6 +76,9 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 /* Needed since only the first closed recv actually behaves correctly */
 ATOMIC_DEFINE(closed_socks_map, 10);
 
+/* for adding nonblocking as a socket option */
+ATOMIC_DEFINE(nb_socks_map, 10);
+
 static int rs9116w_socket(int family, int type, int proto)
 {
 	// uint8_t sec_method = SL_SO_SEC_METHOD_SSLv3_TLSV1_2;
@@ -473,9 +476,9 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 }
 
 //Deal with TLS !TODO
-#ifdef CONFIG_NET_SOCKETS_SOCKOPT_TLS
+#if IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_TLS)
 #include <sys/base64.h>
-uint8_t pem[6144];
+uint8_t pem[6144]; /* Todo: Make size configurable */
 
 static uint8_t cert_idx_ca = 0, cert_idx_pkey = 0, cert_idx_crt = 0;
 
@@ -699,7 +702,10 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 	rsi_socklen_t rsi_addrlen;
 
 	/* 1k to account for TLS overhead */
-	size_t per_rcv = 1000;
+	size_t per_rcv = 1460;
+	if (rsi_socket_pool[sd].sock_bitmap & RSI_SOCKET_FEAT_SSL){
+		per_rcv -= RSI_SSL_HEADER_SIZE;
+	}
 
 	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
 	bool waitall = false;
@@ -711,6 +717,10 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 
 	if (atomic_test_bit(closed_socks_map, sd)) {
 		return 0;
+	}
+
+	if (atomic_test_bit(nb_socks_map, sd)) {
+		flags |= ZSOCK_MSG_DONTWAIT;
 	}
 
 	/*
@@ -734,9 +744,9 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 		waitall = true;
 	}
 
-	if (is_udp) {
-		per_rcv = 1460;
-	}
+	// if (is_udp) {
+	// 	per_rcv = 1460;
+	// }
 
 	size_t vlen = MIN(len, per_rcv);
 
@@ -803,17 +813,20 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 	struct rsi_sockaddr_in rsi_addr_in;
 	struct rsi_sockaddr_in6 rsi_addr_in6;
 	rsi_socklen_t rsi_addrlen;
-	size_t per_send = 1000;
+	size_t per_send = 1460;
 
 	if (!buf || !len) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
+	// bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
 
-	if (is_udp) {
-		per_send = 1460;
+	// if (is_udp) {
+	// 	per_send = 1460;
+	// }
+	if (rsi_socket_pool[sd].sock_bitmap & RSI_SOCKET_FEAT_SSL){
+		per_send -= RSI_SSL_HEADER_SIZE;
 	}
 
 	if (to != NULL) {
@@ -885,6 +898,25 @@ static ssize_t rs9116w_sendmsg(void *obj, const struct msghdr *msg,
 	return (ssize_t) sent;
 }
 
+static int rs9116w_fnctl(int sd, int cmd, va_list args)
+{
+	switch (cmd) {
+	case F_GETFL:
+		return atomic_test_bit(nb_socks_map, sd) ? O_NONBLOCK : 0;
+	case F_SETFL:
+		if ((va_arg(args, int) & O_NONBLOCK) != 0) {
+			atomic_set_bit(nb_socks_map, sd);
+			return 0;
+		}
+		errno = EINVAL;
+		return -1;
+	default:
+		LOG_ERR("Invalid command: %d", cmd);
+		errno = EINVAL;
+		return -1;
+	}
+}
+
 static int rs9116w_ioctl(void *obj, unsigned int request, va_list args)
 {
 	// int sd = OBJ_TO_SD(obj);
@@ -909,9 +941,10 @@ static int rs9116w_ioctl(void *obj, unsigned int request, va_list args)
 		return rs9116w_poll(fds, nfds, timeout);
 	}
 
-	default:
-		errno = EINVAL;
-		return -1;
+	default: {
+		int sd = OBJ_TO_SD(obj);
+		return rs9116w_fnctl(sd, request, args);
+	}
 	}
 }
 
