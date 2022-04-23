@@ -379,7 +379,7 @@ static int rs9116w_mgmt_disconnect(const struct device *dev)
 static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
 {
     struct rs9116w_device *rs9116w_dev = dev->data;
-    
+
     if (!cb) {
         return -EINVAL;
     }
@@ -399,7 +399,7 @@ static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
         rssi = 0;
         winfo.wlan_state = 0;
     }
-    
+
     if (winfo.wlan_state){
         ret = rsi_wlan_get(RSI_RSSI, (uint8_t *)&rssi, 2);
         if (ret) {
