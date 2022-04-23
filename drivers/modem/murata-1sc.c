@@ -1009,7 +1009,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
 			data->rx_buf, 0, len);
 	pbuf[out_len] = '\0';
 
-	LOG_INF("received file: %s", pbuf);
+	LOG_DBG("received cert file: %s", pbuf);
 
 	return 0;
 }
@@ -1388,7 +1388,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 {
 	struct modem_socket *sock = (struct modem_socket *)obj;
 	char   sendbuf[100] = {0};
-	int    ret;
+	int    ret = 0;
 	struct socket_read_data sock_data;
 	int total = 0;
 
@@ -1445,23 +1445,14 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 
 		if (ret < 0) {
 			k_sem_give(&mdata.sem_xlate_buf);
-			if ( total == 0) {  /* it may read error if previous data has been read successfully */
-				errno = -ret;
-				ret = -1;
-			} else {
-				ret = 0;
-			}
 			break;
 		}
-		errno = 0;
 
 		if (sock_data.recv_read_len == 0) {
-			if (total > 0) {
+			if (flags & ZSOCK_MSG_DONTWAIT) {
 				k_sem_give(&mdata.sem_xlate_buf);
 				break;
-			}
-
-			if ((flags & ZSOCK_MSG_DONTWAIT) == 0) {
+			} else {
 				k_sem_give(&mdata.sem_xlate_buf);
 
 				// TBD: wait time should be set by setsockopt SO_RCVTIMEO
@@ -1483,10 +1474,15 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 
 	/* clear socket data */
 	sock->data = NULL;
-	if (total == 0) {
-		errno = EAGAIN;
+
+	/* Set errno and return */
+	if (ret < 0) {
+		errno = -ret;
+	} else {
+		errno = total ? 0 : EAGAIN;
 	}
-	return total;
+	ret = total ? total : -1;
+	return ret;
 }
 
 static bool offload_is_supported(int family, int type, int proto)
@@ -1529,6 +1525,11 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		MODEM_CMD("ERROR", on_cmd_error, 0, ","),
 		MODEM_CMD("%SOCKETCMD:", on_cmd_atcmdinfo_sockopen, 0U, ""),
 	};
+
+	if (addrlen > sizeof(struct sockaddr)) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	if (sock->id < mdata.socket_config.base_socket_num - 1) {
 		LOG_ERR("Invalid socket_id(%d) from fd:%d",
@@ -1666,6 +1667,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Connected successfully. */
 	sock->is_connected = true;
 	errno = 0;
+	memcpy(&sock->dst, addr, addrlen);
 	return 0;
 
 exit:
@@ -1691,9 +1693,30 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 	}
 
 	if (!sock->is_connected) {
-		errno = ENOTCONN;
-		return -1;
+		if (sock->type == SOCK_DGRAM) {
+			/* for unconnected udp, try to connect */
+			ret = offload_connect(obj, to, tolen);
+			if (ret < 0) {
+				errno = ret;
+				return -1;
+			}
+		} else {
+			errno = ENOTCONN;
+			return -1;
+		}
+	} else {
+		/* if already connected, to should be NULL and tolen should be 0 */
+		/* or if not, check whether it is the same as the connected socket */
+		if (to != NULL || tolen != 0) {
+			if ((to == NULL && tolen) ||
+			    ((to != NULL) && !tolen) ||
+			    (memcmp(to, &sock->dst, tolen) != 0)) {
+				errno = EISCONN;
+				return -1;
+			}
+		}
 	}
+
 	ret = send_socket_data(sock, to, buf, len, MDM_CMD_TIMEOUT);
 	if (ret < 0) {
 		errno = -ret;
