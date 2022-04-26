@@ -108,6 +108,7 @@ static void rr_check_done(struct ll_conn *conn, struct proc_ctx *ctx)
 		LL_ASSERT(ctx_header == ctx);
 
 		rr_dequeue(conn);
+
 		llcp_proc_ctx_release(ctx);
 	}
 }
@@ -192,6 +193,15 @@ void llcp_rr_resume(struct ll_conn *conn)
 	conn->llcp.remote.pause = 0U;
 }
 
+void llcp_rr_prt_restart(struct ll_conn *conn)
+{
+	conn->llcp.remote.prt_expire = conn->llcp.prt_reload;
+}
+
+void llcp_rr_prt_stop(struct ll_conn *conn)
+{
+	conn->llcp.remote.prt_expire = 0U;
+}
 
 void llcp_rr_rx(struct ll_conn *conn, struct proc_ctx *ctx, struct node_rx_pdu *rx)
 {
@@ -416,10 +426,13 @@ static void rr_act_complete(struct ll_conn *conn)
 
 	rr_set_collision(conn, 0U);
 
-	/* Dequeue pending request that just completed */
 	ctx = llcp_rr_peek(conn);
 	LL_ASSERT(ctx != NULL);
 
+	/* Stop procedure response timeout timer */
+	llcp_rr_prt_stop(conn);
+
+	/* Mark the procedure as safe to delete */
 	ctx->done = 1U;
 }
 
@@ -461,6 +474,7 @@ static void rr_st_disconnect(struct ll_conn *conn, uint8_t evt, void *param)
 static void rr_st_idle(struct ll_conn *conn, uint8_t evt, void *param)
 {
 	struct proc_ctx *ctx;
+	struct proc_ctx *ctx_local;
 
 	switch (evt) {
 	case RR_EVT_PREPARE:
@@ -493,7 +507,10 @@ static void rr_st_idle(struct ll_conn *conn, uint8_t evt, void *param)
 				 * Local incompatible procedure request is kept pending.
 				 */
 
-				/* Pause local incompatible procedure */
+				/*
+				 * Pause local incompatible procedure
+				 * in case we run a procedure with instant
+				 */
 				rr_set_collision(conn, with_instant);
 
 				/* Run remote procedure */
@@ -509,7 +526,7 @@ static void rr_st_idle(struct ll_conn *conn, uint8_t evt, void *param)
 				/* Run remote procedure */
 				rr_act_run(conn);
 				rr_set_state(conn, RR_STATE_ACTIVE);
-			} else if (with_instant && central && incompat == INCOMPAT_RESOLVABLE) {
+			} else if (central && incompat == INCOMPAT_RESOLVABLE) {
 				/* Central collision
 				 * => Send reject
 				 *
@@ -522,20 +539,24 @@ static void rr_st_idle(struct ll_conn *conn, uint8_t evt, void *param)
 
 				conn->llcp.remote.reject_opcode = pdu->llctrl.opcode;
 				rr_act_reject(conn);
-			} else if (!with_instant && central && incompat == INCOMPAT_RESOLVABLE) {
-				/* No collision with procedure without instant
-				 * => Run procedure
-				 */
-				rr_act_run(conn);
-				rr_set_state(conn, RR_STATE_ACTIVE);
-			} else if (with_instant && incompat == INCOMPAT_RESERVED) {
+			} else if (incompat == INCOMPAT_RESERVED) {
 				/* Protocol violation.
 				 * => Disconnect
-				 *
+				 * See Bluetooth Core Specification Version 5.3 Vol 6, Part B
+				 * section 5.3 (page 2879) for error codes
 				 */
 
-				/* TODO */
-				LL_ASSERT(0);
+				ctx_local = llcp_lr_peek(conn);
+
+				if (ctx_local->proc == ctx->proc ||
+				    (ctx_local->proc == PROC_CONN_UPDATE &&
+				     ctx->proc == PROC_CONN_PARAM_REQ)) {
+					conn->llcp_terminate.reason_final =
+						BT_HCI_ERR_LL_PROC_COLLISION;
+				} else {
+					conn->llcp_terminate.reason_final =
+						BT_HCI_ERR_DIFF_TRANS_COLLISION;
+				}
 			}
 		}
 		break;
@@ -548,10 +569,10 @@ static void rr_st_idle(struct ll_conn *conn, uint8_t evt, void *param)
 		break;
 	}
 }
+
 static void rr_st_reject(struct ll_conn *conn, uint8_t evt, void *param)
 {
-	/* TODO */
-	LL_ASSERT(0);
+	rr_act_reject(conn);
 }
 
 static void rr_st_unsupported(struct ll_conn *conn, uint8_t evt, void *param)
@@ -633,6 +654,7 @@ static void rr_execute_fsm(struct ll_conn *conn, uint8_t evt, void *param)
 void llcp_rr_init(struct ll_conn *conn)
 {
 	rr_set_state(conn, RR_STATE_DISCONNECT);
+	conn->llcp.remote.prt_expire = 0U;
 }
 
 void llcp_rr_prepare(struct ll_conn *conn, struct node_rx_pdu *rx)
@@ -795,6 +817,7 @@ static void rr_abort(struct ll_conn *conn)
 		ctx = rr_dequeue(conn);
 	}
 
+	llcp_rr_prt_stop(conn);
 	rr_set_collision(conn, 0U);
 	rr_set_state(conn, RR_STATE_IDLE);
 }

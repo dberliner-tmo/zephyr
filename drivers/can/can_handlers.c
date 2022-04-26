@@ -10,14 +10,14 @@
 static int z_vrfy_can_calc_timing(const struct device *dev, struct can_timing *res,
 				  uint32_t bitrate, uint16_t sample_pnt)
 {
-	struct can_timing local_res;
+	struct can_timing res_copy;
 	int err;
 
 	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, get_core_clock));
-	Z_OOPS(z_user_from_copy(&local_res, res, sizeof(local_res)));
+	Z_OOPS(z_user_from_copy(&res_copy, res, sizeof(res_copy)));
 
-	err = z_impl_can_calc_timing(dev, &local_res, bitrate, sample_pnt);
-	Z_OOPS(z_user_to_copy(res, &local_res, sizeof(*res)));
+	err = z_impl_can_calc_timing(dev, &res_copy, bitrate, sample_pnt);
+	Z_OOPS(z_user_to_copy(res, &res_copy, sizeof(*res)));
 
 	return err;
 }
@@ -84,14 +84,14 @@ static inline const struct can_timing *z_vrfy_can_get_timing_max(const struct de
 static int z_vrfy_can_calc_timing_data(const struct device *dev, struct can_timing *res,
 				       uint32_t bitrate, uint16_t sample_pnt)
 {
-	struct can_timing local_res;
+	struct can_timing res_copy;
 	int err;
 
 	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, get_core_clock));
-	Z_OOPS(z_user_from_copy(&local_res, res, sizeof(local_res)));
+	Z_OOPS(z_user_from_copy(&res_copy, res, sizeof(res_copy)));
 
-	err = z_impl_can_calc_timing_data(dev, &local_res, bitrate, sample_pnt);
-	Z_OOPS(z_user_to_copy(res, &local_res, sizeof(*res)));
+	err = z_impl_can_calc_timing_data(dev, &res_copy, bitrate, sample_pnt);
+	Z_OOPS(z_user_to_copy(res, &res_copy, sizeof(*res)));
 
 	return err;
 }
@@ -115,6 +115,15 @@ static inline const struct can_timing *z_vrfy_can_get_timing_max_data(const stru
 
 #endif /* CONFIG_CAN_FD_MODE */
 
+static inline int z_vrfy_can_get_max_filters(const struct device *dev, enum can_ide id_type)
+{
+	/* Optional API function */
+	Z_OOPS(Z_SYSCALL_OBJ(dev, K_OBJ_DRIVER_CAN));
+
+	return z_impl_can_get_max_filters(dev, id_type);
+}
+#include <syscalls/can_get_max_filters_mrsh.c>
+
 static inline int z_vrfy_can_set_mode(const struct device *dev, enum can_mode mode)
 {
 	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, set_mode));
@@ -123,19 +132,28 @@ static inline int z_vrfy_can_set_mode(const struct device *dev, enum can_mode mo
 }
 #include <syscalls/can_set_mode_mrsh.c>
 
+static inline int z_vrfy_can_set_bitrate(const struct device *dev, uint32_t bitrate,
+					 uint32_t bitrate_data)
+{
+	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, set_timing));
+
+	return z_impl_can_set_bitrate(dev, bitrate, bitrate_data);
+}
+#include <syscalls/can_set_bitrate_mrsh.c>
+
 static inline int z_vrfy_can_send(const struct device *dev,
 				  const struct zcan_frame *frame,
 				  k_timeout_t timeout,
 				  can_tx_callback_t callback,
 				  void *user_data)
 {
-	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, send));
+	struct zcan_frame frame_copy;
 
-	Z_OOPS(Z_SYSCALL_MEMORY_READ(frame, sizeof(*frame)));
-	Z_OOPS(Z_SYSCALL_MEMORY_READ(frame->data, sizeof(frame->data)));
+	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, send));
+	Z_OOPS(z_user_from_copy(&frame_copy, frame, sizeof(frame_copy)));
 	Z_OOPS(Z_SYSCALL_VERIFY_MSG(callback == NULL, "callbacks may not be set from user mode"));
 
-	return z_impl_can_send(dev, frame, timeout, callback, user_data);
+	return z_impl_can_send(dev, &frame_copy, timeout, callback, user_data);
 }
 #include <syscalls/can_send_mrsh.c>
 
@@ -143,11 +161,13 @@ static inline int z_vrfy_can_add_rx_filter_msgq(const struct device *dev,
 						struct k_msgq *msgq,
 						const struct zcan_filter *filter)
 {
+	struct zcan_filter filter_copy;
+
 	Z_OOPS(Z_SYSCALL_DRIVER_CAN(dev, add_rx_filter));
 	Z_OOPS(Z_SYSCALL_OBJ(msgq, K_OBJ_MSGQ));
-	Z_OOPS(Z_SYSCALL_MEMORY_READ(filter, sizeof(*filter)));
+	Z_OOPS(z_user_from_copy(&filter_copy, filter, sizeof(filter_copy)));
 
-	return z_impl_can_add_rx_filter_msgq(dev, msgq, filter);
+	return z_impl_can_add_rx_filter_msgq(dev, msgq, &filter_copy);
 }
 #include <syscalls/can_add_rx_filter_msgq_mrsh.c>
 

@@ -47,6 +47,7 @@ config LOG_MIPI_SYST_CATALOG_ARGS_BUFFER_SIZE
 config LOG_DICTIONARY_SUPPORT
 	bool
 	depends on LOG2
+	select LOG_DICTIONARY_DB
 	help
 	  Enable support for dictionary based logging.
 
@@ -107,7 +108,6 @@ config LOG_BACKEND_FORMAT_TIMESTAMP
 
 config LOG_OUTPUT_FORMAT_LINUX_TIMESTAMP
 	bool "Format timestamp in Linux format"
-	default n
 	help
 	  This formatting is something in the middle between the pure raw format
 	  and the hh:mm:ss:ms,us one. It resembles the Linux's kernel format in

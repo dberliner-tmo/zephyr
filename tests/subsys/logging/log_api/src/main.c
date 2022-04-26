@@ -19,9 +19,6 @@
 #define NO_BACKENDS 0
 #endif
 
-#define MODULE_NAME test
-#define CXX_MODULE_NAME test_cxx
-
 LOG_MODULE_REGISTER(test, CONFIG_SAMPLE_MODULE_LOG_LEVEL);
 
 #define LOG2_SIMPLE_MSG_LEN \
@@ -44,7 +41,7 @@ MOCK_LOG_BACKEND_DEFINE(backend2, false);
 static log_timestamp_t stamp;
 static bool in_panic;
 static int16_t test_source_id;
-static int16_t test_cxx_source_id;
+static int16_t test2_source_id;
 
 static log_timestamp_t timestamp_get(void)
 {
@@ -103,8 +100,8 @@ static void log_setup(bool backend2_enable)
 
 	mock_log_frontend_reset();
 
-	test_source_id = log_source_id_get(STRINGIFY(MODULE_NAME));
-	test_cxx_source_id = log_source_id_get(STRINGIFY(CXX_MODULE_NAME));
+	test_source_id = log_source_id_get(STRINGIFY(test));
+	test2_source_id = log_source_id_get(STRINGIFY(test2));
 
 	if (NO_BACKENDS) {
 		return;
@@ -149,6 +146,11 @@ static void process_and_validate(bool backend2_enable, bool panic)
 	}
 }
 
+static bool dbg_enabled(void)
+{
+	return IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG) || (CONFIG_LOG_OVERRIDE_LEVEL == 4);
+}
+
 ZTEST(test_log_api, test_log_various_messages)
 {
 	char str[128];
@@ -166,7 +168,7 @@ ZTEST(test_log_api, test_log_various_messages)
 #define TEST_MSG_0_PREFIX "%s: %lld %llu %hhd"
 #define TEST_MSG_1 "%f %d %f"
 
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		/* If prefix is enabled, add function name prefix */
 		if (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG)) {
 			snprintk(str, sizeof(str),
@@ -201,7 +203,7 @@ ZTEST(test_log_api, test_log_various_messages)
 #define TEST_MSG_0 "%hhd"
 #define TEST_MSG_0_PREFIX "%s: %hhd"
 #define TEST_MSG_1 "%p"
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		/* If prefix is enabled, add function name prefix */
 		if (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG)) {
 			snprintk(str, sizeof(str),
@@ -263,7 +265,7 @@ ZTEST(test_log_api, test_log_backend_runtime_filtering)
 
 	log_setup(true);
 
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		char str[128];
 
 		/* If prefix is enabled, add function name prefix */
@@ -546,7 +548,7 @@ ZTEST(test_log_api, test_log_from_declared_module)
 	log_setup(false);
 
 	/* See test module for log message content. */
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		char str[128];
 
 		/* If prefix is enabled, add function name prefix */
@@ -570,7 +572,7 @@ ZTEST(test_log_api, test_log_from_declared_module)
 
 	test_func();
 
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		char str[128];
 
 		/* If prefix is enabled, add function name prefix */
@@ -754,7 +756,7 @@ ZTEST(test_log_api, test_log_arg_evaluation)
 
 	log_setup(false);
 
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		/* Debug message arguments are only evaluated when this level
 		 * is enabled.
 		 */
@@ -766,7 +768,7 @@ ZTEST(test_log_api, test_log_arg_evaluation)
 	mock_log_backend_record(&backend1, LOG_CURRENT_MODULE_ID(),
 				CONFIG_LOG_DOMAIN_ID, LOG_LEVEL_INF,
 				exp_timestamp++, "0 0");
-	if (IS_ENABLED(CONFIG_SAMPLE_MODULE_LOG_LEVEL_DBG)) {
+	if (dbg_enabled()) {
 		/* If prefix is enabled, add function name prefix */
 		if (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG)) {
 			snprintk(str, sizeof(str),
@@ -791,6 +793,41 @@ ZTEST(test_log_api, test_log_arg_evaluation)
 	process_and_validate(false, false);
 #undef TEST_MSG_0
 #undef TEST_MSG_0_PREFIX
+}
+
+ZTEST(test_log_api, test_log_override_level)
+{
+	log_timestamp_t exp_timestamp = TIMESTAMP_INIT_VAL;
+
+	log_setup(false);
+
+	if (CONFIG_LOG_OVERRIDE_LEVEL == 4) {
+		char str[128];
+
+		/* If prefix is enabled, add function name prefix */
+		if (IS_ENABLED(CONFIG_LOG_FUNC_NAME_PREFIX_DBG)) {
+			snprintk(str, sizeof(str),
+				 "%s: " TEST_DBG_MSG, "test_func");
+		} else {
+			snprintk(str, sizeof(str), TEST_DBG_MSG);
+		}
+
+		mock_log_frontend_record(test2_source_id, LOG_LEVEL_DBG, str);
+		mock_log_backend_record(&backend1, test2_source_id,
+					CONFIG_LOG_DOMAIN_ID, LOG_LEVEL_DBG,
+					exp_timestamp++, str);
+
+		mock_log_frontend_record(test2_source_id, LOG_LEVEL_ERR, TEST_ERR_MSG);
+		mock_log_backend_record(&backend1, test2_source_id,
+					CONFIG_LOG_DOMAIN_ID, LOG_LEVEL_ERR,
+					exp_timestamp++, TEST_ERR_MSG);
+	} else if (CONFIG_LOG_OVERRIDE_LEVEL != 0) {
+		zassert_true(false, "Unexpected configuration.");
+	}
+
+	test_func2();
+
+	process_and_validate(false, false);
 }
 
 /* Disable backends because same suite may be executed again but compiled by C++ */
@@ -842,6 +879,9 @@ static void log_api_suite_before(void *data)
 	/* Flush logs and enable test backends. */
 	flush_log();
 
+	if (IS_ENABLED(CONFIG_LOG_FRONTEND)) {
+		mock_log_frontend_check_enable();
+	}
 	mock_log_backend_check_enable(&backend1);
 	mock_log_backend_check_enable(&backend2);
 }
@@ -862,6 +902,9 @@ static void log_api_suite_after(void *data)
 	/* Disable testing backends after the test. Otherwise test may fail due
 	 * to unexpected log message.
 	 */
+	if (IS_ENABLED(CONFIG_LOG_FRONTEND)) {
+		mock_log_frontend_check_disable();
+	}
 	mock_log_backend_check_disable(&backend1);
 	mock_log_backend_check_disable(&backend2);
 }

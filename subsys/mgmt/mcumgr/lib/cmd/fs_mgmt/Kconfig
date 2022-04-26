@@ -5,6 +5,7 @@
 menuconfig MCUMGR_CMD_FS_MGMT
 	bool "Mcumgr handlers for file management (insecure)"
 	depends on FILE_SYSTEM
+	select MGMT_MIN_DECODING_LEVEL_2
 	help
 	  Enables mcumgr handlers for file management
 
@@ -52,9 +53,13 @@ config FS_MGMT_MAX_OFFSET_LEN
 	  the selection made in FS_MGMT_MAX_FILE_SIZE menu.
 
 config FS_MGMT_UL_CHUNK_SIZE
-	int "Maximum chunk size for file uploads"
+	int "Maximum chunk size for file uploads (DEPRECATED)"
 	default 512
 	help
+	  DEPRECATED: The chunk is now directly read from received frame buffer
+	  and is no longer copied first into intermediate buffer so the actual
+	  file chunk is as much as MCUMGR_BUF_SIZE can take, less the other
+	  SMP fields.
 	  Limits the maximum chunk size for file uploads, in bytes.  A buffer of
 	  this size gets allocated on the stack during handling of a file upload command.
 
@@ -84,6 +89,45 @@ config FS_MGMT_DL_CHUNK_SIZE
 
 endif
 
+config FS_MGMT_FILE_STATUS
+	bool "File status command"
+	default y
+	help
+	  This command allows a remote device to retrieve the status of a file,
+	  at present only the size of the file is returned (if it exists).
+
+config FS_MGMT_CHECKSUM_HASH
+	bool "Checksum/hash mcumgr functions"
+	help
+	  Enable this to support the hash/checksum mcumgr functionality,
+	  individual checksum and hash types need to be enabled below.
+	  Note that this requires enough stack space to buffer data
+	  from the file being read and generate the output hash/checksum.
+
+if FS_MGMT_CHECKSUM_HASH
+
+config FS_MGMT_CHECKSUM_HASH_CHUNK_SIZE
+	int "Checksum calculation buffer size"
+	range 32 16384
+	default 128
+	help
+	  Chunk size of buffer to use when calculating file checksum or hash
+	  (uses stack).
+
+config FS_MGMT_CHECKSUM_IEEE_CRC32
+	bool "IEEE CRC32 checksum support"
+	default y
+	help
+	  Enable IEEE CRC32 checksum support for mcumgr.
+
+config FS_MGMT_HASH_SHA256
+	bool "SHA256 hash support"
+	depends on TINYCRYPT_SHA256 || MBEDTLS_MAC_SHA256_ENABLED
+	help
+	  Enable SHA256 hash support for mcumgr.
+
+endif
+
 config FS_MGMT_PATH_SIZE
 	int "Maximum file path length"
 	default 64
@@ -91,4 +135,5 @@ config FS_MGMT_PATH_SIZE
 	  Limits the maximum path length for file operations, in bytes.  A buffer
 	  of this size gets allocated on the stack during handling of file upload
 	  and download commands.
+
 endif

@@ -17,6 +17,17 @@ config OS_MGMT_RESET_MS
 	  before performing the reset.  This delay allows time for the mcumgr
 	  response to be delivered.
 
+config OS_MGMT_RESET_HOOK
+	bool "Reset hook"
+	help
+	  Allows applications to control and get notifications of when a reset
+	  command has been issued via an mcumgr command. With this option
+	  disabled, modules will reboot when the command is received without
+	  notification, when this is enabled and a handler is registered, the
+	  application will be notified that a reset command has been received
+	  and will allow the application to perform any required operations
+	  before accepting or declining the reset request.
+
 config OS_MGMT_TASKSTAT
 	bool "Support for taskstat command"
 	depends on THREAD_MONITOR
@@ -52,6 +63,14 @@ choice OS_MGMT_TASKSTAT_THREAD_NAME_CHOICE
 		bool "Thread priority"
 
 endchoice
+
+config OS_MGMT_TASKSTAT_MAX_NUM_THREADS
+	int "Predicted maximum number of threads to return on taskstat list"
+	default 50
+	help
+	  This is used for defining CBOR map holding thread info.
+	  The value does not affect memory allocation, it is used by zcbor
+	  to figure out how to encode map depending on its predicted size.
 
 config OS_MGMT_TASKSTAT_THREAD_NAME_LEN
 	int "Length of thread name to return in response"
@@ -94,15 +113,23 @@ endif
 config OS_MGMT_ECHO
 	bool "Support for echo command"
 	default y
+	select MGMT_MIN_DECODING_LEVEL_2
 
 if OS_MGMT_ECHO
 
 config OS_MGMT_ECHO_LENGTH
-	int "Echo buffer"
+	int "Echo buffer (DEPRECATED)"
 	default 128
 	help
-	  Size of echo buffer in bytes.
+	  DEPRECATED: The echo sentence is no longer copied into intermediate
+	  buffer, instead a transport buffer is used to directly copy echo
+	  sentence to response. Echo may still respond with not enough
+	  memory error, in case when it would not be possible to fit source
+	  sentence into response buffer limited by MCUMGR_BUF_SIZE.
 
 endif
+
+config OS_MGMT_MCUMGR_PARAMS
+	bool "MCUMGR Parameters retrieval command"
 
 endif

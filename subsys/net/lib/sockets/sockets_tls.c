@@ -1076,6 +1076,13 @@ static int tls_mbedtls_init(struct tls_context *context, bool is_server)
 		return ret;
 	}
 
+	if (context->options.ciphersuites[0] != 0) {
+		/* Specific ciphersuites configured, so use them */
+		NET_DBG("Using user-specified ciphersuites");
+		mbedtls_ssl_conf_ciphersuites(&context->config,
+					      context->options.ciphersuites);
+	}
+
 #if defined(CONFIG_MBEDTLS_SSL_ALPN)
 	if (ALPN_MAX_PROTOCOLS && context->options.alpn_list[0] != NULL) {
 		ret = mbedtls_ssl_conf_alpn_protocols(&context->config,
@@ -1198,6 +1205,8 @@ static int tls_opt_ciphersuite_list_set(struct tls_context *context,
 	memcpy(context->options.ciphersuites, optval, optlen);
 	context->options.ciphersuites[cipher_cnt] = 0;
 
+	mbedtls_ssl_conf_ciphersuites(&context->config,
+				      context->options.ciphersuites);
 	return 0;
 }
 
@@ -2573,6 +2582,11 @@ int ztls_setsockopt_ctx(struct tls_context *ctx, int level, int optname,
 							 optlen, true);
 		break;
 #endif /* CONFIG_NET_SOCKETS_ENABLE_DTLS */
+
+	case TLS_NATIVE:
+		/* Option handled at the socket dispatcher level. */
+		err = 0;
+		break;
 
 	default:
 		/* Unknown or read-only option. */

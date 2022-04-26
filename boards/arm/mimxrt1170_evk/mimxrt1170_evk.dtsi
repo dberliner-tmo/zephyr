@@ -32,7 +32,7 @@
 		compatible = "pwm-leds";
 
 		green_pwm_led: green_pwm_led {
-			pwms = <&flexpwm1_pwm2 0>;
+			pwms = <&flexpwm1_pwm2 0 PWM_MSEC(20)>;
 		};
 	};
 };
@@ -63,6 +63,12 @@
 	pinctrl-1 = <&pinmux_lpuart1_sleep>;
 	pinctrl-names = "default", "sleep";
 	current-speed = <115200>;
+};
+
+&lpuart2 {
+	pinctrl-0 = <&pinmux_lpuart2>;
+	pinctrl-1 = <&pinmux_lpuart2_sleep>;
+	pinctrl-names = "default", "sleep";
 };
 
 &user_button {

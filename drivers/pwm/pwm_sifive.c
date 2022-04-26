@@ -112,25 +112,14 @@ static int pwm_sifive_pin_set(const struct device *dev,
 			      uint32_t pulse_cycles,
 			      pwm_flags_t flags)
 {
-	const struct pwm_sifive_cfg *config = NULL;
+	const struct pwm_sifive_cfg *config = dev->config;
 	uint32_t count_max = 0U;
 	uint32_t max_cmp_val = 0U;
 	uint32_t pwmscale = 0U;
 
-	if (dev == NULL) {
-		LOG_ERR("The device instance pointer was NULL\n");
-		return -EFAULT;
-	}
-
 	if (flags) {
 		/* PWM polarity not supported (yet?) */
 		return -ENOTSUP;
-	}
-
-	config = dev->config;
-	if (config == NULL) {
-		LOG_ERR("The device configuration is NULL\n");
-		return -EFAULT;
 	}
 
 	if (pwm >= SF_NUMCHANNELS) {
@@ -139,7 +128,7 @@ static int pwm_sifive_pin_set(const struct device *dev,
 	}
 
 	/* Channel 0 sets the period, we can't output PWM with it */
-	if ((pwm == 0U)) {
+	if (pwm == 0U) {
 		LOG_ERR("PWM channel 0 cannot be configured\n");
 		return -ENOTSUP;
 	}
@@ -168,12 +157,6 @@ static int pwm_sifive_pin_set(const struct device *dev,
 	if (pwmscale > SF_PWMSCALEMASK) {
 		LOG_ERR("Requested period is %d but maximum is %d\n",
 			period_cycles, max_cmp_val << pwmscale);
-		return -EIO;
-	}
-
-	if (pulse_cycles > period_cycles) {
-		LOG_ERR("Requested pulse %d is longer than period %d\n",
-			pulse_cycles, period_cycles);
 		return -EIO;
 	}
 

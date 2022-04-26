@@ -352,6 +352,14 @@ void llcp_tx_resume_data(struct ll_conn *conn, enum llcp_tx_q_pause_data_mask re
 void llcp_tx_flush(struct ll_conn *conn);
 
 /*
+ * LLCP Procedure Response Timeout
+ */
+void llcp_lr_prt_restart(struct ll_conn *conn);
+void llcp_lr_prt_stop(struct ll_conn *conn);
+void llcp_rr_prt_restart(struct ll_conn *conn);
+void llcp_rr_prt_stop(struct ll_conn *conn);
+
+/*
  * LLCP Local Procedure Common
  */
 void llcp_lp_comm_tx_ack(struct ll_conn *conn, struct proc_ctx *ctx, struct node_tx *tx);
@@ -405,6 +413,7 @@ void llcp_lp_cu_run(struct ll_conn *conn, struct proc_ctx *ctx, void *param);
 /*
  * LLCP Local Channel Map Update
  */
+void llcp_lp_chmu_rx(struct ll_conn *conn, struct proc_ctx *ctx, struct node_rx_pdu *rx);
 void llcp_lp_chmu_init_proc(struct proc_ctx *ctx);
 void llcp_lp_chmu_run(struct ll_conn *conn, struct proc_ctx *ctx, void *param);
 

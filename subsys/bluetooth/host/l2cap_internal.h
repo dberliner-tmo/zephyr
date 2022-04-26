@@ -254,6 +254,8 @@ struct bt_l2cap_br_fixed_chan {
 				.accept = _accept,		\
 			}
 
+#define BR_CHAN(_ch) CONTAINER_OF(_ch, struct bt_l2cap_br_chan, chan)
+
 /* Notify L2CAP channels of a new connection */
 void bt_l2cap_connected(struct bt_conn *conn);
 
@@ -313,6 +315,9 @@ static inline int bt_l2cap_send(struct bt_conn *conn, uint16_t cid,
 	return bt_l2cap_send_cb(conn, cid, buf, NULL, NULL);
 }
 
+int bt_l2cap_chan_send_cb(struct bt_l2cap_chan *chan, struct net_buf *buf, bt_conn_tx_cb_t cb,
+			  void *user_data);
+
 /* Receive a new L2CAP PDU from a connection */
 void bt_l2cap_recv(struct bt_conn *conn, struct net_buf *buf, bool complete);
 
@@ -353,6 +358,8 @@ int bt_l2cap_br_chan_connect(struct bt_conn *conn, struct bt_l2cap_chan *chan,
 
 /* Send packet data to connected peer */
 int bt_l2cap_br_chan_send(struct bt_l2cap_chan *chan, struct net_buf *buf);
+int bt_l2cap_br_chan_send_cb(struct bt_l2cap_chan *chan, struct net_buf *buf, bt_conn_tx_cb_t cb,
+			     void *user_data);
 
 /*
  * Handle security level changed on link passing HCI status of performed

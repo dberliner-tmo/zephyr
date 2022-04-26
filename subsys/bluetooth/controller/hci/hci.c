@@ -2869,7 +2869,7 @@ static void le_df_connectionless_iq_report(struct pdu_data *pdu_rx,
 		 * node rx footer field.
 		 */
 		sync_handle = ull_sync_handle_get(sync);
-		per_evt_counter = lll->event_counter;
+		per_evt_counter = iq_report->event_counter;
 	}
 #endif /* CONFIG_BT_CTLR_DF_SCAN_CTE_RX */
 
@@ -3015,7 +3015,7 @@ static void le_df_connection_iq_report(struct node_rx_pdu *node_rx, struct net_b
 	sep->cte_type = iq_report->cte_info.type;
 
 	sep->data_chan_idx = iq_report->chan_idx;
-	sep->conn_evt_counter = sys_cpu_to_le16(lll->event_counter);
+	sep->conn_evt_counter = sys_cpu_to_le16(iq_report->event_counter);
 
 	if (sep->cte_type == BT_HCI_LE_AOA_CTE) {
 		sep->slot_durations = iq_report->local_slot_durations;
@@ -6119,7 +6119,6 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 	const uint8_t *data = NULL;
 	uint8_t scan_data_len = 0U;
 	uint8_t adv_addr_type = 0U;
-	bool direct_report = false;
 	uint8_t sec_phy_scan = 0U;
 	uint8_t *adv_addr = NULL;
 	uint8_t data_status = 0U;
@@ -6226,11 +6225,21 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 			bt_addr_le_t addr;
 
 			lll = node_rx->hdr.rx_ftr.param;
+
+#if defined(CONFIG_BT_CTLR_EXT_SCAN_FP)
 			direct_addr_type_curr =
 				ext_adv_direct_addr_type(lll,
 							 direct_resolved_curr,
 							 direct_report_curr,
 							 adv->rx_addr, ptr);
+#else /* !CONFIG_BT_CTLR_EXT_SCAN_FP */
+			direct_addr_type_curr =
+				ext_adv_direct_addr_type(lll,
+							 direct_resolved_curr,
+							 false, adv->rx_addr,
+							 ptr);
+#endif /* !CONFIG_BT_CTLR_EXT_SCAN_FP */
+
 			direct_addr_curr = ptr;
 			ptr += BDADDR_SIZE;
 
@@ -6247,7 +6256,7 @@ static void le_ext_adv_report(struct pdu_data *pdu_data,
 			ptr += sizeof(*adi);
 
 			BT_DBG("    AdvDataInfo DID = 0x%x, SID = 0x%x",
-			       adi->did, adi->sid);
+			       adi_curr->did, adi_curr->sid);
 		}
 
 		if (h->aux_ptr) {
@@ -6351,10 +6360,6 @@ no_ext_hdr:
 			rl_idx = rl_idx_curr;
 #endif /* CONFIG_BT_CTLR_PRIVACY */
 
-#if defined(CONFIG_BT_CTLR_EXT_SCAN_FP)
-			direct_report = direct_report_curr;
-#endif /* CONFIG_BT_CTLR_EXT_SCAN_FP */
-
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC) && \
 	defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
 			devmatch = devmatch_curr;
@@ -6403,12 +6408,6 @@ no_ext_hdr:
 				rl_idx = rl_idx_curr;
 			}
 #endif /* CONFIG_BT_CTLR_PRIVACY */
-
-#if defined(CONFIG_BT_CTLR_EXT_SCAN_FP)
-			if (!direct_report) {
-				direct_report = direct_report_curr;
-			}
-#endif /* CONFIG_BT_CTLR_EXT_SCAN_FP */
 
 #if defined(CONFIG_BT_CTLR_SYNC_PERIODIC) && \
 	defined(CONFIG_BT_CTLR_FILTER_ACCEPT_LIST)
@@ -7913,7 +7912,7 @@ static void encode_data_ctrl(struct node_rx_pdu *node_rx,
 #endif /* CONFIG_BT_CTLR_DATA_LENGTH */
 
 #if defined(CONFIG_BT_CTLR_DF_CONN_CTE_REQ)
-	case PDU_DATA_LLCTRL_TYPE_CTE_REQ:
+	case PDU_DATA_LLCTRL_TYPE_CTE_RSP:
 		le_df_cte_req_failed(BT_HCI_CTE_REQ_STATUS_RSP_WITHOUT_CTE, handle, buf);
 		break;
 #endif /* CONFIG_BT_CTLR_DF_CONN_CTE_REQ */

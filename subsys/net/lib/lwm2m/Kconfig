@@ -25,12 +25,22 @@ choice
 
 config LWM2M_VERSION_1_0
 	bool "LwM2M version 1.0"
+	imply LWM2M_RW_OMA_TLV_SUPPORT
 
 config LWM2M_VERSION_1_1
 	bool "LwM2M version 1.1 [EXPERIMENTAL]"
 	select EXPERIMENTAL
+	imply LWM2M_RW_CBOR_SUPPORT
+	imply ZCBOR
 
 endchoice
+
+config LWM2M_SHELL
+	bool "LwM2M shell utilities"
+	select SHELL
+	help
+	  Activate shell module that provides LwM2M commands like
+	  send to the console.
 
 config LWM2M_DTLS_SUPPORT
 	bool "DTLS support in the LwM2M client"
@@ -402,6 +412,11 @@ config LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_ADDR
 	help
 	  Network address of the CoAP proxy server.
 
+config LWM2M_RW_OMA_TLV_SUPPORT
+	bool "TLV data format"
+	help
+	  Include support for write / parse TLV data
+
 config LWM2M_RW_JSON_SUPPORT
 	bool "support for JSON writer"
 	default y
@@ -420,6 +435,12 @@ config LWM2M_COMPOSITE_PATH_LIST_SIZE
 	default 6
 	help
 	  Define path list size for Composite Read and send operation.
+
+config LWM2M_RW_CBOR_SUPPORT
+	bool "support for CBOR writer"
+	depends on ZCBOR
+	help
+	  Include support for writing CBOR data
 
 config LWM2M_DEVICE_PWRSRC_MAX
 	int "Maximum # of device power source records"

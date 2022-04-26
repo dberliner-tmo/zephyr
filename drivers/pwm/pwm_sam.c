@@ -54,8 +54,8 @@ static int sam_pwm_pin_set(const struct device *dev, uint32_t ch,
 		return -ENOTSUP;
 	}
 
-	if (period_cycles == 0U || pulse_cycles > period_cycles) {
-		return -EINVAL;
+	if (period_cycles == 0U) {
+		return -ENOTSUP;
 	}
 
 	if (period_cycles > 0xffff) {

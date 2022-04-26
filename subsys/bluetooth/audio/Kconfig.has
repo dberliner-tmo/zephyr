@@ -7,6 +7,8 @@
 menuconfig BT_HAS
 	bool "Hearing Access Service support [EXPERIMENTAL]"
 	select EXPERIMENTAL
+	depends on BT_SMP_SC_PAIR_ONLY
+	depends on BT_SMP_MIN_ENC_KEY_SIZE = 16
 	help
 	  This option enables support for Hearing Access Service.
 
@@ -96,3 +98,18 @@ config BT_DEBUG_HAS
 	  This option enables enables Hearing Access Service debug logs.
 
 endif # BT_HAS
+
+config BT_HAS_CLIENT
+	bool "Hearing Access Service Client support [EXPERIMENTAL]"
+	select EXPERIMENTAL
+	select BT_GATT_CLIENT
+	select BT_GATT_AUTO_DISCOVER_CCC
+	select BT_GATT_AUTO_UPDATE_MTU
+	help
+	  This option enables support for Hearing Access Service Client.
+
+config BT_DEBUG_HAS_CLIENT
+	bool "Hearing Access Service Client debug"
+	depends on BT_HAS_CLIENT
+	help
+	  This option enables enables Hearing Access Service Client debug logs.

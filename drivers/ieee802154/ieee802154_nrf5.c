@@ -1005,7 +1005,9 @@ void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
 	if ((id == DRX_SLOT_PH) || (id == DRX_SLOT_RX)) {
 		__ASSERT_NO_MSG(nrf5_data.event_handler);
 		nrf5_data.event_handler(dev, IEEE802154_EVENT_SLEEP, NULL);
-		return;
+		if (error == NRF_802154_RX_ERROR_DELAYED_TIMEOUT) {
+			return;
+		}
 	}
 #else
 	ARG_UNUSED(id);
@@ -1030,6 +1032,10 @@ void nrf_802154_receive_failed(nrf_802154_rx_error_t error, uint32_t id)
 	default:
 		reason = IEEE802154_RX_FAIL_OTHER;
 		break;
+	}
+
+	if (IS_ENABLED(CONFIG_IEEE802154_NRF5_LOG_RX_FAILURES)) {
+		LOG_INF("Rx failed, error = %d", error);
 	}
 
 	nrf5_data.last_frame_ack_fpb = false;
