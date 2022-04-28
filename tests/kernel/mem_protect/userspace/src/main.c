@@ -17,6 +17,7 @@
 #include <debug/stack.h>
 #include <syscall_handler.h>
 #include "test_syscall.h"
+#include <sys/libc-hooks.h> /* for z_libc_partition */
 
 #if defined(CONFIG_ARC)
 #include <arch/arc/v2/mpu/arc_core_mpu.h>
@@ -680,7 +681,12 @@ static void drop_user(volatile bool *to_modify)
  */
 static void test_init_and_access_other_memdomain(void)
 {
-	struct k_mem_partition *parts[] = { &ztest_mem_partition, &alt_part };
+	struct k_mem_partition *parts[] = {
+#if Z_LIBC_PARTITION_EXISTS
+		&z_libc_partition,
+#endif
+		&ztest_mem_partition, &alt_part
+	};
 
 	zassert_equal(
 		k_mem_domain_init(&alternate_domain, ARRAY_SIZE(parts), parts),
@@ -940,6 +946,7 @@ void test_syscall_context(void)
 	check_syscall_context();
 }
 
+#ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 static void tls_leakage_user_part(void *p1, void *p2, void *p3)
 {
 	char *tls_area = p1;
@@ -949,9 +956,11 @@ static void tls_leakage_user_part(void *p1, void *p2, void *p3)
 			      "TLS data leakage to user mode");
 	}
 }
+#endif
 
 void test_tls_leakage(void)
 {
+#ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 	/* Tests two assertions:
 	 *
 	 * - That a user thread has full access to its TLS area
@@ -964,15 +973,21 @@ void test_tls_leakage(void)
 
 	k_thread_user_mode_enter(tls_leakage_user_part,
 				 _current->userspace_local_data, NULL, NULL);
+#else
+	ztest_test_skip();
+#endif
 }
 
+#ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 void tls_entry(void *p1, void *p2, void *p3)
 {
 	printk("tls_entry\n");
 }
+#endif
 
 void test_tls_pointer(void)
 {
+#ifdef CONFIG_THREAD_USERSPACE_LOCAL_DATA
 	k_thread_create(&test_thread, test_stack, STACKSIZE, tls_entry,
 			NULL, NULL, NULL, 1, K_USER, K_FOREVER);
 
@@ -996,6 +1011,9 @@ void test_tls_pointer(void)
 		printk("tls area out of bounds\n");
 		ztest_test_fail();
 	}
+#else
+	ztest_test_skip();
+#endif
 }
 
 

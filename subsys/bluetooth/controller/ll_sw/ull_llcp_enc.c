@@ -343,7 +343,6 @@ static void lp_enc_st_unencrypted(struct ll_conn *conn, struct proc_ctx *ctx, ui
 	case LP_ENC_EVT_RUN:
 		/* Pause Tx data */
 		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
-		llcp_tx_flush(conn);
 		lp_enc_send_enc_req(conn, ctx, evt, param);
 		break;
 	default:
@@ -478,7 +477,6 @@ static void lp_enc_state_encrypted(struct ll_conn *conn, struct proc_ctx *ctx, u
 	case LP_ENC_EVT_RUN:
 		/* Pause Tx data */
 		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
-		llcp_tx_flush(conn);
 		lp_enc_send_pause_enc_req(conn, ctx, evt, param);
 		break;
 	default:
@@ -911,7 +909,6 @@ static void rp_enc_state_wait_rx_enc_req(struct ll_conn *conn, struct proc_ctx *
 	case RP_ENC_EVT_ENC_REQ:
 		/* Pause Tx data */
 		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
-		llcp_tx_flush(conn);
 		/* Pause Rx data */
 		ull_conn_pause_rx_data(conn);
 
@@ -1054,7 +1051,6 @@ static void rp_enc_state_wait_rx_pause_enc_req(struct ll_conn *conn, struct proc
 	case RP_ENC_EVT_PAUSE_ENC_REQ:
 		/* Pause Tx data */
 		llcp_tx_pause_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
-		llcp_tx_flush(conn);
 		/*
 		 * Pause Rx data; will be resumed when the encapsulated
 		 * Start Procedure is done.
@@ -1198,6 +1194,11 @@ void llcp_rp_enc_ltk_req_reply(struct ll_conn *conn, struct proc_ctx *ctx)
 void llcp_rp_enc_ltk_req_neg_reply(struct ll_conn *conn, struct proc_ctx *ctx)
 {
 	rp_enc_execute_fsm(conn, ctx, RP_ENC_EVT_LTK_REQ_NEG_REPLY, NULL);
+}
+
+bool llcp_rp_enc_ltk_req_reply_allowed(struct ll_conn *conn, struct proc_ctx *ctx)
+{
+	return (ctx->state == RP_ENC_STATE_WAIT_LTK_REPLY);
 }
 
 void llcp_rp_enc_run(struct ll_conn *conn, struct proc_ctx *ctx, void *param)
