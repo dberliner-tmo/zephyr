@@ -21,6 +21,7 @@
 
 #include "pdu.h"
 #include "ll.h"
+#include "ll_feat.h"
 #include "ll_settings.h"
 
 #include "lll.h"
@@ -33,6 +34,7 @@
 #include "ull_internal.h"
 #include "ull_llcp.h"
 #include "ull_llcp_internal.h"
+#include "ull_llcp_features.h"
 #include "ull_conn_internal.h"
 
 #define BT_DBG_ENABLED IS_ENABLED(CONFIG_BT_DEBUG_HCI_DRIVER)
@@ -375,6 +377,23 @@ static void lp_enc_store_s(struct ll_conn *conn, struct proc_ctx *ctx, struct pd
 	memcpy(&conn->lll.ccm_rx.iv[4], pdu->llctrl.enc_rsp.ivs, sizeof(pdu->llctrl.enc_rsp.ivs));
 }
 
+static inline uint8_t reject_error_code(struct pdu_data *pdu)
+{
+	if (pdu->llctrl.opcode == PDU_DATA_LLCTRL_TYPE_REJECT_IND) {
+		return pdu->llctrl.reject_ind.error_code;
+#if defined(CONFIG_BT_CTLR_EXT_REJ_IND)
+	} else if (pdu->llctrl.opcode == PDU_DATA_LLCTRL_TYPE_REJECT_EXT_IND) {
+		return pdu->llctrl.reject_ext_ind.error_code;
+#endif /* CONFIG_BT_CTLR_EXT_REJ_IND */
+	} else {
+		/* Called with an invalid PDU */
+		LL_ASSERT(0);
+
+		/* Keep compiler happy */
+		return BT_HCI_ERR_UNSPECIFIED;
+	}
+}
+
 static void lp_enc_st_wait_rx_enc_rsp(struct ll_conn *conn, struct proc_ctx *ctx, uint8_t evt,
 				      void *param)
 {
@@ -385,9 +404,33 @@ static void lp_enc_st_wait_rx_enc_rsp(struct ll_conn *conn, struct proc_ctx *ctx
 		/* Pause Rx data */
 		ull_conn_pause_rx_data(conn);
 		lp_enc_store_s(conn, ctx, pdu);
+
+		/* After the Central has received the LL_ENC_RSP PDU,
+		 * only PDUs related to this procedure are valid, and invalids should
+		 * result in disconnect.
+		 * to achieve this enable the greedy RX behaviour, such that
+		 * all PDU's end up in this FSM.
+		 */
+		ctx->rx_greedy = 1U;
+
 		/* Wait for LL_START_ENC_REQ */
 		ctx->rx_opcode = PDU_DATA_LLCTRL_TYPE_START_ENC_REQ;
 		ctx->state = LP_ENC_STATE_WAIT_RX_START_ENC_REQ;
+		break;
+	case LP_ENC_EVT_REJECT:
+		/* Encryption is not supported by the Link Layer of the Peripheral */
+
+		/* Resume Tx data */
+		llcp_tx_resume_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
+
+		/* Store the error reason */
+		ctx->data.enc.error = reject_error_code(pdu);
+
+		/* Resume possibly paused remote procedure */
+		llcp_rr_resume(conn);
+
+		/* Complete the procedure */
+		lp_enc_complete(conn, ctx, evt, param);
 		break;
 	default:
 		/* Ignore other evts */
@@ -409,11 +452,15 @@ static void lp_enc_st_wait_rx_start_enc_req(struct ll_conn *conn, struct proc_ct
 		llcp_tx_resume_data(conn, LLCP_TX_QUEUE_PAUSE_DATA_ENCRYPTION);
 		/* Resume Rx data */
 		ull_conn_resume_rx_data(conn);
-		ctx->data.enc.error = (pdu->llctrl.opcode == PDU_DATA_LLCTRL_TYPE_REJECT_IND) ?
-						    pdu->llctrl.reject_ind.error_code :
-						    pdu->llctrl.reject_ext_ind.error_code;
+
+		/* Store the error reason */
+		ctx->data.enc.error = reject_error_code(pdu);
+
 		/* Resume possibly paused remote procedure */
 		llcp_rr_resume(conn);
+
+		/* Disable the greedy behaviour */
+		ctx->rx_greedy = 0U;
 
 		lp_enc_complete(conn, ctx, evt, param);
 		break;
@@ -449,6 +496,9 @@ static void lp_enc_st_wait_rx_start_enc_rsp(struct ll_conn *conn, struct proc_ct
 
 		/* Resume possibly paused remote procedure */
 		llcp_rr_resume(conn);
+
+		/* Disable the greedy behaviour */
+		ctx->rx_greedy = 0U;
 
 		lp_enc_complete(conn, ctx, evt, param);
 		break;
@@ -596,7 +646,23 @@ void llcp_lp_enc_rx(struct ll_conn *conn, struct proc_ctx *ctx, struct node_rx_p
 		break;
 	default:
 		/* Unknown opcode */
-		LL_ASSERT(0);
+
+		/*
+		 * BLUETOOTH CORE SPECIFICATION Version 5.3
+		 * Vol 6, Part B, 5.1.3.1 Encryption Start procedure
+		 *
+		 * [...]
+		 *
+		 * If, at any time during the encryption start procedure after the Peripheral has
+		 * received the LL_ENC_REQ PDU or the Central has received the
+		 * LL_ENC_RSP PDU, the Link Layer of the Central or the Peripheral receives an
+		 * unexpected Data Physical Channel PDU from the peer Link Layer, it shall
+		 * immediately exit the Connection state, and shall transition to the Standby state.
+		 * The Host shall be notified that the link has been disconnected with the error
+		 * code Connection Terminated Due to MIC Failure (0x3D).
+		 */
+
+		conn->llcp_terminate.reason_final = BT_HCI_ERR_TERM_DUE_TO_MIC_FAIL;
 	}
 }
 
@@ -652,9 +718,12 @@ static struct node_tx *llcp_rp_enc_tx(struct ll_conn *conn, struct proc_ctx *ctx
 		llcp_pdu_encode_pause_enc_rsp(pdu);
 		break;
 	case PDU_DATA_LLCTRL_TYPE_REJECT_IND:
-		/* TODO(thoh): Select between LL_REJECT_IND and LL_REJECT_EXT_IND */
-		llcp_pdu_encode_reject_ext_ind(pdu, PDU_DATA_LLCTRL_TYPE_ENC_REQ,
-					       BT_HCI_ERR_PIN_OR_KEY_MISSING);
+		if (conn->llcp.fex.valid && feature_ext_rej_ind(conn)) {
+			llcp_pdu_encode_reject_ext_ind(pdu, PDU_DATA_LLCTRL_TYPE_ENC_REQ,
+						       BT_HCI_ERR_PIN_OR_KEY_MISSING);
+		} else {
+			llcp_pdu_encode_reject_ind(pdu, BT_HCI_ERR_PIN_OR_KEY_MISSING);
+		}
 		break;
 	default:
 		LL_ASSERT(0);
@@ -1168,7 +1237,23 @@ void llcp_rp_enc_rx(struct ll_conn *conn, struct proc_ctx *ctx, struct node_rx_p
 		break;
 	default:
 		/* Unknown opcode */
-		LL_ASSERT(0);
+
+		/*
+		 * BLUETOOTH CORE SPECIFICATION Version 5.3
+		 * Vol 6, Part B, 5.1.3.1 Encryption Start procedure
+		 *
+		 * [...]
+		 *
+		 * If, at any time during the encryption start procedure after the Peripheral has
+		 * received the LL_ENC_REQ PDU or the Central has received the
+		 * LL_ENC_RSP PDU, the Link Layer of the Central or the Peripheral receives an
+		 * unexpected Data Physical Channel PDU from the peer Link Layer, it shall
+		 * immediately exit the Connection state, and shall transition to the Standby state.
+		 * The Host shall be notified that the link has been disconnected with the error
+		 * code Connection Terminated Due to MIC Failure (0x3D).
+		 */
+
+		conn->llcp_terminate.reason_final = BT_HCI_ERR_TERM_DUE_TO_MIC_FAIL;
 	}
 }
 

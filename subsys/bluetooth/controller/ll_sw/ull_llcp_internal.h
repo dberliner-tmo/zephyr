@@ -134,6 +134,9 @@ struct proc_ctx {
 	/* Expected opcode to be received next */
 	enum pdu_data_llctrl_type rx_opcode;
 
+	/* Greedy RX (used for central encryption) */
+	uint8_t rx_greedy;
+
 	/* Last transmitted opcode used for unknown/reject */
 	enum pdu_data_llctrl_type tx_opcode;
 
@@ -481,7 +484,7 @@ void llcp_rr_run(struct ll_conn *conn);
 void llcp_rr_complete(struct ll_conn *conn);
 void llcp_rr_connect(struct ll_conn *conn);
 void llcp_rr_disconnect(struct ll_conn *conn);
-void llcp_rr_new(struct ll_conn *conn, struct node_rx_pdu *rx);
+void llcp_rr_new(struct ll_conn *conn, struct node_rx_pdu *rx, bool valid_pdu);
 
 #if defined(CONFIG_BT_CTLR_LE_PING)
 /*

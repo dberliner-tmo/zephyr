@@ -121,9 +121,9 @@ static bool channel_psel_get(uint32_t channel, uint32_t *psel,
 		== PWM_PSEL_OUT_CONNECT_Connected);
 }
 
-static int pwm_nrfx_pin_set(const struct device *dev, uint32_t pwm,
-			    uint32_t period_cycles, uint32_t pulse_cycles,
-			    pwm_flags_t flags)
+static int pwm_nrfx_set_cycles(const struct device *dev, uint32_t channel,
+			       uint32_t period_cycles, uint32_t pulse_cycles,
+			       pwm_flags_t flags)
 {
 	/* We assume here that period_cycles will always be 16MHz
 	 * peripheral clock. Since pwm_nrfx_get_cycles_per_sec() function might
@@ -132,7 +132,6 @@ static int pwm_nrfx_pin_set(const struct device *dev, uint32_t pwm,
 	 */
 	const struct pwm_nrfx_config *config = dev->config;
 	struct pwm_nrfx_data *data = dev->data;
-	uint8_t channel = pwm;
 	bool inverted = (flags & PWM_POLARITY_INVERTED);
 	bool was_stopped;
 
@@ -142,9 +141,9 @@ static int pwm_nrfx_pin_set(const struct device *dev, uint32_t pwm,
 	}
 
 	/* Check if nrfx_pwm_stop function was called in previous
-	 * pwm_nrfx_pin_set call. Relying only on state returned by
-	 * nrfx_pwm_is_stopped may cause race condition if the pwm_nrfx_pin_set
-	 * is called multiple times in quick succession.
+	 * pwm_nrfx_set_cycles call. Relying only on state returned by
+	 * nrfx_pwm_is_stopped may cause race condition if the
+	 * pwm_nrfx_set_cycles is called multiple times in quick succession.
 	 */
 	was_stopped = !pwm_channel_is_active(channel, data) &&
 		      !any_other_channel_is_active(channel, data);
@@ -227,7 +226,7 @@ static int pwm_nrfx_pin_set(const struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-static int pwm_nrfx_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
+static int pwm_nrfx_get_cycles_per_sec(const struct device *dev, uint32_t channel,
 				       uint64_t *cycles)
 {
 	/* TODO: Since this function might be removed, we will always return
@@ -240,7 +239,7 @@ static int pwm_nrfx_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 }
 
 static const struct pwm_driver_api pwm_nrfx_drv_api_funcs = {
-	.pin_set = pwm_nrfx_pin_set,
+	.set_cycles = pwm_nrfx_set_cycles,
 	.get_cycles_per_sec = pwm_nrfx_get_cycles_per_sec,
 };
 
