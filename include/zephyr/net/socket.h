@@ -984,6 +984,7 @@ struct net_socket_register {
 
 /** @endcond */
 
+#if defined(CONFIG_NET_OFFLOAD)
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
 /**
  * @brief Create a network socket on a specific socket offload interface
@@ -993,13 +994,14 @@ struct net_socket_register {
  */
 static inline int zsock_socket_ext(int family, int type, int proto, struct net_if *iface)
 {
-  if (iface->if_dev->offloaded && iface->if_dev->socket != NULL){
-    return iface->if_dev->socket(family, type, proto);
+  if (iface->if_dev->offload && iface->if_dev->socket_offload != NULL){
+    return iface->if_dev->socket_offload(family, type, proto);
   } else {
     errno = EINVAL;
     return -1;
   }
 }
+#endif
 #endif
 
 #ifdef __cplusplus

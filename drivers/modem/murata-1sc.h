@@ -24,7 +24,7 @@
 /* Default lengths of certain things. */
 #define MDM_MANUFACTURER_LENGTH		  40
 #define MDM_MODEL_LENGTH		  16
-#define MDM_REVISION_LENGTH		  64
+#define MDM_REVISION_LENGTH		  32
 #define MDM_IMEI_LENGTH			  16
 #define MDM_IMSI_LENGTH			  16
 #define MDM_ICCID_LENGTH		  32
