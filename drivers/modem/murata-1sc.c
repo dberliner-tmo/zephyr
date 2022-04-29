@@ -17,6 +17,7 @@
 #include <drivers/uart.h>
 #include <drivers/console/uart_mux.h>
 
+#include <net/net_offload.h>
 #include "murata-1sc.h"
 #include "modem_context.h"
 #include "modem_receiver.h"
@@ -504,7 +505,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_manufacturer)
 			sizeof(mdata.mdm_manufacturer) - 1,
 			data->rx_buf, 0, len);
 	mdata.mdm_manufacturer[out_len] = '\0';
-	LOG_INF("Manufacturer: %s", log_strdup(mdata.mdm_manufacturer));
+	LOG_DBG("Manufacturer: %s", log_strdup(mdata.mdm_manufacturer));
 	return 0;
 }
 
@@ -517,7 +518,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_model)
 	mdata.mdm_model[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("Model: %s", log_strdup(mdata.mdm_model));
+	LOG_DBG("Model: %s", log_strdup(mdata.mdm_model));
 	return 0;
 }
 
@@ -530,7 +531,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_revision)
 	mdata.mdm_revision[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("Revision: %s", log_strdup(mdata.mdm_revision));
+	LOG_DBG("Revision: RK_%s", log_strdup(mdata.mdm_revision));
 	return 0;
 }
 
@@ -543,7 +544,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imei)
 	mdata.mdm_imei[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("IMEI: %s", log_strdup(mdata.mdm_imei));
+	LOG_DBG("IMEI: %s", log_strdup(mdata.mdm_imei));
 	return 0;
 }
 
@@ -557,7 +558,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_imsi)
 	mdata.mdm_imsi[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("IMSI: %s", log_strdup(mdata.mdm_imsi));
+	LOG_DBG("IMSI: %s", log_strdup(mdata.mdm_imsi));
 	return 0;
 }
 
@@ -570,7 +571,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_iccid)
 	mdata.mdm_iccid[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("ICCID: %s", log_strdup(mdata.mdm_iccid));
+	LOG_DBG("ICCID: %s", log_strdup(mdata.mdm_iccid));
 	return 0;
 }
 #endif //defined(CONFIG_MODEM_SIM_NUMBERS)
@@ -586,7 +587,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getbands)
 	bandstr[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("BANDS - %s", log_strdup(bandstr));
+	LOG_DBG("BANDS - %s", log_strdup(bandstr));
 	return 0;
 }
 
@@ -601,7 +602,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getcgdcont)
 	cgdcont_resp_str[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("CGDCONT: %s", log_strdup(cgdcont_resp_str));
+	LOG_DBG("CGDCONT: %s", log_strdup(cgdcont_resp_str));
 	return 0;
 }
 
@@ -616,7 +617,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_usim)
 	status_usim[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("USIM: %s", log_strdup(status_usim));
+	LOG_DBG("USIM: %s", log_strdup(status_usim));
 	return 0;
 }
 
@@ -635,7 +636,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_getacfg)
 	if (strcmp(autoconnmode_str, "false") == 0) {
 		needtoset_autoconn_to_true = true;
 	} else {
-		LOG_INF("Auto Conn Mode: %s", log_strdup(autoconnmode_str));
+		LOG_DBG("Auto Conn Mode: %s", log_strdup(autoconnmode_str));
 	}
 	return 0;
 }
@@ -652,7 +653,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cfun)
 	cfun_resp_str[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("CFUN: %s", log_strdup(cfun_resp_str));
+	LOG_DBG("CFUN: %s", log_strdup(cfun_resp_str));
 	return 0;
 }
 
@@ -667,7 +668,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmdinfo_cereg)
 	cereg_resp_str[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_INF("CEREG: %s", log_strdup(cereg_resp_str));
+	LOG_DBG("CEREG: %s", log_strdup(cereg_resp_str));
 	return 0;
 }
 #endif
@@ -697,7 +698,7 @@ MODEM_CMD_DEFINE(on_cmd_ipgwmask)
 			parse_ipgwmask(buf, mdata.mdm_ip, mdata.mdm_nmask, mdata.mdm_gw);
 
 			/* Log the received information. */
-			LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
+			LOG_DBG("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
 		}
 	}
 	return ret;
@@ -1110,7 +1111,7 @@ static int murata_1sc_setup(void)
 		SETUP_CMD_NOHANDLE("AT+CNMI=2,1,2,1,0"),
 		SETUP_CMD("AT+CGMI", "", on_cmd_atcmdinfo_manufacturer, 0U, ""),
 		SETUP_CMD("AT+CGMM", "", on_cmd_atcmdinfo_model, 0U, ""),
-		SETUP_CMD("AT+CGMR", "", on_cmd_atcmdinfo_revision, 0U, ""),
+		SETUP_CMD("AT+CGMR", "RK_", on_cmd_atcmdinfo_revision, 0U, ""),
 		SETUP_CMD("AT+CGSN", "", on_cmd_atcmdinfo_imei, 0U, ""),
 #if defined(CONFIG_MODEM_SIM_NUMBERS)
 		SETUP_CMD("AT+CIMI", "", on_cmd_atcmdinfo_imsi, 0U, ""),
@@ -1978,6 +1979,7 @@ typedef enum {
 	msisdn_e,
 	connsts_e,
 	ip_e,
+	version_e,
 	invalid
 } atcmd_idx_e;
 
@@ -2109,10 +2111,11 @@ int get_sigstrength(char *rbuf)
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		ret = -1;
 	}
-	snprintk(rbuf, MAX_RESP_SIZE, "Signal Strength: %d dBm", sigStrength);
+	snprintk(rbuf, MAX_RESP_SIZE, "%d dBm", sigStrength);
 
 	return ret;
 }
+
 /**
  * get phone number
  */
@@ -2179,9 +2182,32 @@ int get_ip(char *rbuf)
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		ret = -1;
 	}
-	//LOG_INF("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
 	snprintk(rbuf, MAX_RESP_SIZE, "IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
 
+	return ret;
+}
+
+/**
+ * get version
+ */
+int get_version(char *rbuf)
+{
+	int ret;
+	char buf[32] = {0};
+	/* Modem command response to sms receive the data. */
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("RK_", on_cmd_atcmdinfo_revision, 0U, ""),
+	};
+
+	snprintk(buf, sizeof(buf), "AT+CGMR");
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(2));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		ret = -1;
+	}
+	memcpy(rbuf,"RK_", 3);
+	memcpy(rbuf+3, mdata.mdm_revision, sizeof(buf)-3);
 	return ret;
 }
 
@@ -2200,6 +2226,9 @@ static void dyn_query(atcmd_idx_e idx, void *buf)
 		break;
 		case ip_e:
 		sts = get_ip(buf);
+		break;
+		case version_e:
+		sts = get_version(buf);
 		break;
 		default:
 		LOG_ERR("not valid request");
@@ -2221,6 +2250,7 @@ _cmd_t cmd_pool[] = {
 	{"MSISDN", msisdn_e, dyn_query},
 	{"CONN_STS", connsts_e, dyn_query},
 	{"IP", ip_e, dyn_query},
+	{"VERSION", version_e, dyn_query},
 	{}
 };
 int get_at_resp(char* io_str)
@@ -2655,6 +2685,22 @@ static int murata_1sc_init(const struct device *dev)
 	return 0;
 }
 
+static int net_offload_dummy_get(sa_family_t family,
+				 enum net_sock_type type,
+				 enum net_ip_protocol ip_proto,
+				 struct net_context **context)
+{
+
+	LOG_ERR("CONFIG_NET_SOCKETS_OFFLOAD must be enabled for this driver");
+
+	return -ENOTSUP;
+}
+
+/* placeholders, until Zephyr IP stack updated to handle a NULL net_offload */
+static struct net_offload modem_net_offload = {
+	.get = net_offload_dummy_get,
+};
+
 /* Setup the Modem NET Interface. */
 static void murata_1sc_net_iface_init(struct net_if *iface)
 {
@@ -2667,8 +2713,8 @@ static void murata_1sc_net_iface_init(struct net_if *iface)
 			NET_LINK_ETHERNET);
 	data->net_iface = iface;
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-	iface->if_dev->offloaded = true;
-	iface->if_dev->socket = offload_socket;
+	iface->if_dev->offload = &modem_net_offload;
+	iface->if_dev->socket_offload = offload_socket;
 #endif
 
 }

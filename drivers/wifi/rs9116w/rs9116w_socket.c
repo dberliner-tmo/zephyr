@@ -452,8 +452,7 @@ int rs9116w_offload_init(struct rs9116w_device *rs9116w)
     // TBD: What else goes here?
 
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
-    rs9116w->net_iface->if_dev->offloaded = true;
-    rs9116w->net_iface->if_dev->socket = rs9116w_socket_create;
+    rs9116w->net_iface->if_dev->socket_offload = rs9116w_socket_create;
     rs9116w_socket_offload_init();
 #endif
 
