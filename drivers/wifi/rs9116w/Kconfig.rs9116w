@@ -37,13 +37,20 @@ config RS9116W_SOCKET_PRIO
 
 endif # RS9116W_OVERRIDE_DEFAULT_PRIO
 
-endif # WIFI_RS9116W
-
-if NET_SOCKETS_OFFLOAD && NET_SOCKETS_SOCKOPT_TLS
-
-config RSI_NEED_BAS64
-	bool
-	default y
+if  NET_SOCKETS_OFFLOAD
+config RS9116W_TLS_OFFLOAD
+	bool "Allow the builtin TLS stack on the RS9116W to be utilized"
 	select BASE64
+	default n
 
-endif
+if RS9116W_TLS_OFFLOAD
+
+config RS9116W_TLS_PEM_BUF_SZ
+	int "Buffer size to allocate for PEM conversion"
+	default 6144
+
+endif # RS9116W_TLS_OFFLOAD
+
+endif # NET_SOCKETS_OFFLOAD
+
+endif # WIFI_RS9116W
