@@ -476,9 +476,9 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 }
 
 //Deal with TLS !TODO
-#if IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && IS_ENABLED(CONFIG_NET_SOCKETS_OFFLOAD_TLS)
+#if IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && IS_ENABLED(CONFIG_RS9116W_TLS_OFFLOAD)
 #include <sys/base64.h>
-uint8_t pem[6144]; /* Todo: Make size configurable */
+uint8_t pem[CONFIG_RS9116W_TLS_PEM_BUF_SZ]; /* Todo: Make size configurable */
 
 static uint8_t cert_idx_ca = 0, cert_idx_pkey = 0, cert_idx_crt = 0;
 
@@ -548,7 +548,7 @@ static int map_credentials(int sd, const void *optval, socklen_t optlen)
 			strcpy(pem, header);
 			offset = strlen(header);
 			size_t written;
-			base64_encode(pem + offset, 6144 - offset - strlen(footer), &written, cert->buf, cert->len);
+			base64_encode(pem + offset, CONFIG_RS9116W_TLS_PEM_BUF_SZ - offset - strlen(footer), &written, cert->buf, cert->len);
 			memcpy(pem + offset + written, footer, strlen(footer));
 			retval = rsi_wlan_set_certificate_index(cert_type, cert_idx, pem, strlen(pem));
 			if (retval < 0) {
