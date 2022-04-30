@@ -10,6 +10,7 @@ menuconfig MODEM_MURATA_1SC
         select MODEM_IFACE_UART
         select MODEM_SOCKET
         select NET_SOCKETS_OFFLOAD
+        select BASE64
         imply GPIO
         help
           Choose this setting to enable Murata 1SC modem
