@@ -18,7 +18,7 @@
 #include <drivers/console/uart_mux.h>
 
 #include <net/net_offload.h>
-#include "murata-1sc.h"
+#include "drivers/modem/murata-1sc.h"
 #include "modem_context.h"
 #include "modem_receiver.h"
 #include "modem_iface_uart.h"
@@ -82,7 +82,7 @@ static size_t data_to_hex_str(const void* input_buf, size_t input_len, char* out
 	size_t i;
 
 	for (i = 0; (i < (output_len - 1) / 2) && (i < input_len); i++) {
-		snprintf(&output_buf[(i * 2)], output_len, "%02X", ((uint8_t*)input_buf)[i]);
+		snprintk(&output_buf[(i * 2)], output_len, "%02X", ((uint8_t*)input_buf)[i]);
 	}
 
 	return i * 2;
@@ -169,7 +169,7 @@ struct murata_1sc_data {
 	 */
 	char xlate_buf[MDM_MAX_DATA_LENGTH * 2 + 50];
 
-	/* Semaphore(s) */
+	/* Semaphores */
 	struct k_sem sem_response;
 	struct k_sem sem_sock_conn;
 	struct k_sem sem_xlate_buf;
@@ -213,8 +213,8 @@ static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_MURATA_1SC_RX_STACK_SI
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
 
 
-/* Func: murata_1sc_rx
- * Desc: Thread to process all messages received from the Modem.
+/**
+ * @brief Thread to process all messages received from the Modem.
  */
 static void murata_1sc_rx(void)
 {
@@ -226,8 +226,8 @@ static void murata_1sc_rx(void)
 	}
 }
 
-/* Func: murata_1sc_atoi
- * Desc: Convert string to long integer, but handle errors
+/**
+ * @brief Convert string to long integer, but handle errors
  */
 static int murata_1sc_atoi(const char *s, const int err_value,
 		const char *desc, const char *func)
@@ -305,8 +305,8 @@ MODEM_CMD_DEFINE(on_cmd_error)
 	return 0;
 }
 
-/* Func: send_socket_data
- * Desc: This function will send data over the socket object.
+/**
+ * @brief This function will send data over the socket object.
  */
 static ssize_t send_socket_data(struct modem_socket *sock,
 		const struct sockaddr *dst_addr,
@@ -366,8 +366,8 @@ exit:
 	return total;
 }
 
-/* Func: on_cmd_sockread_common
- * Desc: Function to read data on a given socket.
+/**
+ * @brief Function to read data on a given socket.
  */
 static int on_cmd_sockread_common(int socket_fd,
 		struct modem_cmd_handler_data *data,
@@ -1093,8 +1093,8 @@ static int post_mdm_init(void)
 }
 #endif
 
-/* Func: murata_1sc_setup
- * Desc: This function is used to setup the modem from zero. 
+/**
+ * @brief This function is used to setup the modem from zero.
  */
 static int murata_1sc_setup(void)
 {
@@ -1163,8 +1163,8 @@ static int murata_1sc_setup(void)
 	return ret;
 }
 
-/* Func: socket_close
- * Desc: Function to close the given socket descriptor.
+/**
+ * @brief Function to close the given socket descriptor.
  */
 static void socket_close(struct modem_socket *sock)
 {
@@ -1193,8 +1193,8 @@ static void socket_close(struct modem_socket *sock)
 	modem_socket_put(&mdata.socket_config, sock->sock_fd);
 }
 
-/* Func: send sms message
- * Desc: Send a sms message
+/**
+ * @brief Send a sms message
  */
 static int send_sms_msg(void *obj, const struct sms_out *sms)
 {
@@ -1277,9 +1277,9 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
 			// printk("SMS msg: '%s'\n", str1 + 2);
 
 			// Prepare the return struct
-			snprintf(sms->phone, sizeof(sms->phone), "%s", argv[2]);
-			snprintf(sms->time, sizeof(sms->time), "%.8s,%.11s", argv[4]+1, argv[5]);
-			snprintf(sms->msg, sizeof(sms->msg), "%s", str1 + 2);
+			snprintk(sms->phone, sizeof(sms->phone), "%s", argv[2]);
+			snprintk(sms->time, sizeof(sms->time), "%.8s,%.11s", argv[4]+1, argv[5]);
+			snprintk(sms->msg, sizeof(sms->msg), "%s", str1 + 2);
 
 			// Set sms_index so we can delete the message from recv_sms_msg
 			// TBD: should we just delete it here
@@ -1306,8 +1306,8 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
 	return 0;
 }
 
-/* Func: recieve sms messages
- * Desc: recieve sms messages 
+/**
+ * @brief recieve sms messages
  */
 static int recv_sms_msg(void *obj, struct sms_in *sms)
 {
@@ -1328,7 +1328,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, buf, &mdata.sem_response, K_MSEC(5000));
 	if (ret < 0) {
-		// printk("JML Error 1\n");
+		// printk("recv_sms_msg error 1\n");
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 	}
 
@@ -1340,7 +1340,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				data_cmd, ARRAY_SIZE(data_cmd), buf, &mdata.sem_response, K_MSEC(5000));
 		if (ret < 0) {
-			// printk("JML Error 2, ret = %d\n", ret);
+			// printk("recv_sms_msg error 2, ret = %d\n", ret);
 			LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 		}
 
@@ -1354,7 +1354,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 				ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 						NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
 				if (ret < 0) {
-					// printk("JML Error 3\n");
+					// printk("recv_sms_msg error 3\n");
 					LOG_ERR("%s ret:%d", log_strdup(buf), ret);
 				}
 
@@ -1376,12 +1376,12 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 		count++;
 	}
 
-	// printk("JML returning %d\n", ret);
+	// printk("recv_sms_msg returning %d\n", ret);
 	return ret;
 }
 
-/* Func: offload_recvfrom
- * Desc: This function will receive data on the socket object.
+/**
+ * @brief This function will receive data on the socket object.
  */
 static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 		int flags, struct sockaddr *from,
@@ -1507,8 +1507,8 @@ static int offload_socket(int family, int type, int proto)
 	return ret;
 }
 
-/* Func: offload_connect
- * Desc: This function will connect with a provided TCP or UDP.
+/**
+ * @brief This function will connect with a provided TCP or UDP.
  */
 static int offload_connect(void *obj, const struct sockaddr *addr,
 		socklen_t addrlen)
@@ -1548,13 +1548,13 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 
 	switch (sock->ip_proto) {
 		case IPPROTO_UDP:
-			snprintf(protocol, sizeof(protocol), "UDP");
+			snprintk(protocol, sizeof(protocol), "UDP");
 			break;
 		case IPPROTO_TCP:
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 		case IPPROTO_TLS_1_2:
 #endif
-			snprintf(protocol, sizeof(protocol), "TCP");
+			snprintk(protocol, sizeof(protocol), "TCP");
 			break;
 		default:
 			LOG_ERR("INVALID PROTOCOL %d", sock->ip_proto);
@@ -1678,8 +1678,8 @@ exit:
 	return -1;
 }
 
-/* Func: offload_sendto
- * Desc: This function will send data on the socket object.
+/**
+ * @brief This function will send data on the socket object.
  */
 static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		int flags, const struct sockaddr *to,
@@ -1748,24 +1748,24 @@ static int offload_bind(void *obj, const struct sockaddr *addr,
 	return 0;
 }
 
-/* Func: offload_read
- * Desc: This function reads data from the given socket object.
+/**
+ * @brief This function reads data from the given socket object.
  */
 static ssize_t offload_read(void *obj, void *buffer, size_t count)
 {
 	return offload_recvfrom(obj, buffer, count, 0, NULL, 0);
 }
 
-/* Func: offload_write
- * Desc: This function writes data to the given socket object.
+/**
+ * @brief This function writes data to the given socket object.
  */
 static ssize_t offload_write(void *obj, const void *buffer, size_t count)
 {
 	return offload_sendto(obj, buffer, count, 0, NULL, 0);
 }
 
-/* Func: offload_close
- * Desc: This function closes the connection with the remote client and
+/**
+ * @brief This function closes the connection with the remote client and
  * frees the socket.
  */
 static int offload_close(void *obj)
@@ -1791,8 +1791,8 @@ static int offload_close(void *obj)
 	return 0;
 }
 
-/* Func: offload_sendmsg
- * Desc: This function sends messages to the modem.
+/**
+ * @brief This function sends messages to the modem.
  */
 static ssize_t offload_sendmsg(void *obj, const struct msghdr *msg, int flags)
 {
@@ -2279,51 +2279,6 @@ struct aggr_ipv4_addr {	//for testing
 	struct in_addr gw;
 	struct in_addr nmask;
 };
-/* Func: offload_ioctl
- * Desc: Function call to handle various misc requests.
- */
-static int offload_ioctl(void *obj, unsigned int request, va_list args)
-{
-	int ret;
-	struct aggr_ipv4_addr *a_ipv4_addr;
-	char *cmd_str;
-
-	// TBD: cast obj to socket, find the right instance of the murata_1sc_data etc
-	// assumming one instance for now
-
-	switch (request) {
-		case SMS_SEND:
-			ret = send_sms_msg(obj, (struct sms_out *)va_arg(args, struct sms_out *));
-			va_end(args);
-			break;
-
-		case SMS_RECV:
-			ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *));
-			va_end(args);
-			break;
-
-		case GET_IPV4_CONF:
-			a_ipv4_addr = va_arg(args, struct aggr_ipv4_addr*);
-			LOG_DBG("***** in driver ioctl *****");
-			get_ipv4_config();
-			ret = inet_pton(AF_INET, mdata.mdm_ip, &a_ipv4_addr->ip);
-			ret = inet_pton(AF_INET, mdata.mdm_gw, &a_ipv4_addr->gw);
-			ret = inet_pton(AF_INET, mdata.mdm_nmask, &a_ipv4_addr->nmask);
-			ret = 0;
-			break;
-		case GET_ATCMD_RESP:
-			cmd_str = (char *)va_arg(args, char *);
-			ret = get_at_resp(cmd_str);
-			//printk("app req: %s\n", cmd_str);
-			break;
-
-		default:
-			errno = EINVAL;
-			ret = -1;
-			break;
-	}
-	return ret;
-}
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 /**
@@ -2377,7 +2332,7 @@ static ssize_t send_cert(struct modem_socket *sock,
 	if (certfile_exist != 0) {
 		snprintk(sptr, sizeof(cert_cmd_buf),
 				"AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type%2);
-		cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintf
+		cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintk
 		LOG_DBG("sptr: %s", sptr);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, sptr,
@@ -2574,6 +2529,336 @@ static int offload_setsockopt(void *obj, int level, int optname,
 	}
 	return retval;
 #endif
+}
+
+/**
+ * FW update support functions for local updates (not via LwM2M)
+ *
+ * FW updates basically work like this:
+ * 1. Get the FW file into the host device FLASH or memory
+ * 2. Xfer the FW file to the modem
+ * 2a. Xfer the header (first 256 bytes)
+ * 2b. Xfer remaining chunks of the FW file
+ * 3. Tell the modem to perform the update
+ * 4. Reset the modem and wait for update to complete
+ */
+
+/**
+ * @brief Initiate FW transfer from host to device
+ *
+ * @param file is the filename of the FW file
+ *
+ * @return OK or ERROR
+ *
+ * send_buf = 'AT%FILECMD="PUT","' + str(rfile) + '",1'
+ */
+static int init_fw_xfer(const char *file)
+{
+	char buf[64];
+	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1", file);
+
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0U, buf, &mdata.sem_response, K_SECONDS(1));
+
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+	}
+	return ret;
+}
+
+MODEM_CMD_DEFINE(on_cmd_upgcmd)
+{
+	return ATOI(argv[1], 0, "diu_result");
+}
+
+#define FW_HEADER_SIZE 256
+
+/**
+ * @brief send first chunk of FW file data to the modem (256 bytes)
+ *
+ * @param data is ptr to chunk of binary data
+ *
+ * @return diu_result:
+ *    0 - successfully finished software upgrade step (image pre-check, update, etc.)
+ *    1 - general upgrade errors
+ *    2 - failed to the pre-checking of delta image
+ *    3 - image validation failure
+ *    4 - failed to update
+ *    5 - delta update Agent was not found
+ *    6 - no upgrade result is found
+ *
+ * send_buf = 'AT%UPGCMD="CFGPART","' + interim_map_str + '"'
+ */
+static int send_fw_header(const char *data)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%UPGCMD:", on_cmd_upgcmd, 1U, "")
+	};
+
+	k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
+
+	/* Create the command prefix */
+	int i = snprintk(mdata.xlate_buf, sizeof(mdata.xlate_buf), "AT%%UPGCMD=\"CFGPART\",\"");
+
+	/* Add the hex string */
+	data_to_hex_str(data, FW_HEADER_SIZE, &mdata.xlate_buf[i], sizeof(mdata.xlate_buf) - i);
+
+	/* Finish the command */
+	snprintk(&mdata.xlate_buf[i + FW_HEADER_SIZE * 2], sizeof(mdata.xlate_buf), "\"");
+
+	/* Send the command */
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
+			&mdata.sem_response, K_SECONDS(4));
+
+	k_sem_give(&mdata.sem_xlate_buf);
+
+	return ret;
+}
+
+MODEM_CMD_DEFINE(on_cmd_filedata)
+{
+	return ATOI(argv[1], 0, "written") / 2;
+}
+
+/**
+ * @brief Send a chunk of FW file data to the modem
+ *
+ * @param data is ptr to raw data
+ * @param more is 0 if this is the last chunk, 1 otherwise
+ * @param len is len of raw data, must be <= MDM_MAX_DATA_LENGTH (1500)
+ *
+ * @return bytes written, or ERROR
+ *
+ * send_buf = 'AT%FILEDATA="WRITE",0' + ',' + str(display_sz) + ',"' + (out_hexstr) + '"'
+ */
+static int send_fw_data(const struct send_fw_data_t *sfd)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%FILEDATA:", on_cmd_filedata, 1U, "")
+	};
+
+	if (sfd->len <= 0 || sfd->len > MDM_MAX_DATA_LENGTH)
+		return -1;
+
+	k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
+
+	/* Create the command prefix */
+	int i = snprintk(mdata.xlate_buf, sizeof(mdata.xlate_buf), "AT%%FILEDATA=\"WRITE\",%d,%d,", sfd->more, sfd->len * 2);
+
+	/* Add the hex string */
+	data_to_hex_str(sfd->data, sfd->len, &mdata.xlate_buf[i], sizeof(mdata.xlate_buf) - i);
+
+	/* Finish the command */
+	snprintk(&mdata.xlate_buf[i + sfd->len * 2], sizeof(mdata.xlate_buf), "\"");
+
+	/* Send the command */
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
+			&mdata.sem_response, K_SECONDS(4));
+
+	k_sem_give(&mdata.sem_xlate_buf);
+
+	return ret;
+}
+
+/**
+ * @brief Initiate FW upgrade after FW file has been xfer'ed to modem
+ *
+ * @param file is the filename of the FW file to use for upgrading
+ *
+ * @return diu_result:
+ *    0 - successfully finished software upgrade step (image pre-check, update, etc.)
+ *    1 - general upgrade errors
+ *    2 - failed to the pre-checking of delta image
+ *    3 - image validation failure
+ *    4 - failed to update
+ *    5 - delta update Agent was not found
+ *    6 - no upgrade result is found
+ *
+ * send_buf = 'AT%UPGCMD="UPGVRM","' + lfile + '"'
+ */
+static int init_fw_upgrade(const char *file)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%UPGCMD:", on_cmd_upgcmd, 1U, "")
+	};
+
+	char buf[64];
+	snprintk(buf, sizeof(buf), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
+
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			&mdata.sem_response, K_SECONDS(1));
+
+	if (ret < 0) {
+		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+	}
+	return ret;
+}
+
+static char chksum[CHKSUM_ABILITY_MAX_LEN];
+
+MODEM_CMD_DEFINE(on_cmd_chksum)
+{
+	size_t out_len = net_buf_linearize(chksum, sizeof(chksum) - 1,
+			data->rx_buf, 0, len);
+	chksum[out_len] = '\0';
+	return 0;
+}
+
+/**
+ * @brief check whether file checksum is supported
+ *
+ * @param response is the response received from the request
+ * @return OK or ERROR
+ *
+ * send_buf = 'AT%GETACFG=filemgr.file.put_fcksum'
+ */
+static int get_file_chksum_ability(char *response)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("", on_cmd_chksum, 1U, "")
+	};
+
+	char buf[64];
+	snprintk(buf, sizeof(buf), "AT%%GETACFG=filemgr.file.put_fcksum");
+
+	chksum[0] = '\0';
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			&mdata.sem_response, K_SECONDS(1));
+
+	if (ret < 0) {
+		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+	}
+	else {
+		snprintk(response, CHKSUM_ABILITY_MAX_LEN, "%s", chksum);
+	}
+	return ret;
+}
+
+static char file_cmd_full_access[CMD_FULL_ACCESS_MAX_LEN];
+
+MODEM_CMD_DEFINE(on_cmd_file_cmd_full_access)
+{
+	size_t out_len = net_buf_linearize(file_cmd_full_access, sizeof(file_cmd_full_access) - 1,
+			data->rx_buf, 0, len);
+	file_cmd_full_access[out_len] = '\0';
+	return 0;
+}
+
+/**
+ * @brief check setting of admin.services.file_cmd_full_access
+ *
+ * @param response is the response received from the request
+ * @return OK or ERROR
+ *
+ * send_buf = 'AT%GETACFG=admin.services.file_cmd_full_access'
+ */
+static int get_file_mode(char *response)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("", on_cmd_file_cmd_full_access, 1U, "")
+	};
+
+	char buf[64];
+	snprintk(buf, sizeof(buf), "AT%%GETACFG=admin.services.file_cmd_full_access");
+
+	file_cmd_full_access[0] = '\0';
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			&mdata.sem_response, K_SECONDS(1));
+
+	if (ret < 0) {
+		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+	} else {
+		snprintk(response, CMD_FULL_ACCESS_MAX_LEN, "%s", file_cmd_full_access);
+	}
+	return ret;
+}
+
+/**
+ * @brief Function call to handle various misc requests.
+ */
+static int offload_ioctl(void *obj, unsigned int request, va_list args)
+{
+	int ret;
+	struct aggr_ipv4_addr *a_ipv4_addr;
+	char *cmd_str;
+
+	// TBD: cast obj to socket, find the right instance of the murata_1sc_data etc
+	// assumming one instance for now
+
+	switch (request) {
+		case SMS_SEND:
+			ret = send_sms_msg(obj, (struct sms_out *)va_arg(args, struct sms_out *));
+			va_end(args);
+			break;
+
+		case SMS_RECV:
+			ret = recv_sms_msg(obj, (struct sms_in *)va_arg(args, struct sms_in *));
+			va_end(args);
+			break;
+
+		case GET_IPV4_CONF:
+			a_ipv4_addr = va_arg(args, struct aggr_ipv4_addr*);
+			va_end(args);
+			get_ipv4_config();
+			inet_pton(AF_INET, mdata.mdm_ip, &a_ipv4_addr->ip);
+			inet_pton(AF_INET, mdata.mdm_gw, &a_ipv4_addr->gw);
+			inet_pton(AF_INET, mdata.mdm_nmask, &a_ipv4_addr->nmask);
+			ret = 0;
+			break;
+
+		case GET_ATCMD_RESP:
+			cmd_str = (char *)va_arg(args, char *);
+			va_end(args);
+			ret = get_at_resp(cmd_str);
+			//printk("app req: %s\n", cmd_str);
+			break;
+
+		case INIT_FW_XFER:
+			ret = init_fw_xfer((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		case SEND_FW_HEADER:
+			ret = send_fw_header((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		case SEND_FW_DATA:
+			ret = send_fw_data((struct send_fw_data_t *)va_arg(args, struct send_fw_data_t *));
+			va_end(args);
+			break;
+
+		case INIT_FW_UPGRADE:
+			ret = init_fw_upgrade((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		case GET_CHKSUM_ABILITY:
+			ret = get_file_chksum_ability((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		case GET_FILE_MODE:
+			ret = get_file_mode((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		default:
+			errno = EINVAL;
+			ret = -1;
+			break;
+	}
+	return ret;
 }
 
 static const struct socket_op_vtable offload_socket_fd_op_vtable = {

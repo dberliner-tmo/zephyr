@@ -6,7 +6,7 @@
 
 #define MDM_UART_DEV_NAME		  DT_INST_BUS_LABEL(0)
 #define MDM_CMD_TIMEOUT			  K_SECONDS(5)
-#define MDM_REGISTRATION_TIMEOUT	  K_SECONDS(180)
+#define MDM_REGISTRATION_TIMEOUT	  K_SECONDS(10)
 #define MDM_SENDMSG_SLEEP		  K_MSEC(1)
 #define MDM_MAX_DATA_LENGTH		  1500
 #define MDM_RECV_MAX_BUF		  30
@@ -35,6 +35,8 @@
 #define MDM_MASK_LENGTH           16
 #define MDM_PHN_LENGTH            16
 #define MDM_CARRIER_LENGTH        16
+#define CHKSUM_ABILITY_MAX_LEN    64
+#define CMD_FULL_ACCESS_MAX_LEN   64
 
 /**
  * this is for tmo_shell to call for overriding the wifi dns_offload
@@ -55,4 +57,21 @@ struct socket_read_data {
 	size_t		 recv_buf_len;
 	struct sockaddr	 *recv_addr;
 	uint16_t	 recv_read_len;
+};
+
+struct send_fw_data_t {
+	char *data;
+	int more;
+	size_t len;
+};
+
+enum murata_1sc_io_ctl {
+	GET_IPV4_CONF = 0x10,
+	GET_ATCMD_RESP,
+	INIT_FW_XFER,
+	SEND_FW_HEADER,
+	SEND_FW_DATA,
+	INIT_FW_UPGRADE,
+	GET_CHKSUM_ABILITY,
+	GET_FILE_MODE,
 };
