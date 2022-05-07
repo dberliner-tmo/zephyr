@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2021 Jimmy Johnson <catch22@fastmail.net>
+ * Copyright (c) 2022 T-Mobile USA, Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,13 +17,9 @@
 
 #include "tmp108.h"
 
+
+
 LOG_MODULE_REGISTER(TMP108, CONFIG_SENSOR_LOG_LEVEL);
-
-/** TI conversion scale from 16 bit int temp value to float */
-#define TMP108_TEMP_MULTIPLIER    62500
-
-/** TMP typical conversion time of 27 ms after waking from sleep */
-#define TMP108_WAKEUP_TIME_IN_MS 30
 
 struct tmp108_config {
 	const struct i2c_dt_spec i2c_spec;
@@ -162,7 +159,7 @@ static int tmp108_channel_get(const struct device *dev,
 		return -ENOTSUP;
 	}
 
-	uval = (int32_t)(drv_data->sample  >> 4U) * TMP108_TEMP_MULTIPLIER;
+	uval = ((int32_t)(drv_data->sample) * TMP108_TEMP_MULTIPLIER) >> 4U;
 	val->val1 = uval / 1000000U;
 	val->val2 = uval % 1000000U;
 
@@ -202,6 +199,7 @@ static int tmp108_attr_set(const struct device *dev,
 	uint16_t mode = 0;
 	uint16_t reg_value = 0;
 	int result = 0;
+	int32_t uval;
 
 	if (chan != SENSOR_CHAN_AMBIENT_TEMP && chan != SENSOR_CHAN_ALL) {
 		return -ENOTSUP;
@@ -209,6 +207,10 @@ static int tmp108_attr_set(const struct device *dev,
 
 	switch ((int) attr) {
 	case SENSOR_ATTR_HYSTERESIS:
+#if DT_PROP(DT_INST(0, ti_tmp108), variant_as621x)
+		LOG_WRN("AS621x Series lacks Hysterisis setttings");
+		break;
+#endif
 		if (val->val1 < 1) {
 			mode = TI_TMP108_HYSTER_0_C;
 		} else if (val->val1 < 2) {
@@ -238,14 +240,16 @@ static int tmp108_attr_set(const struct device *dev,
 		break;
 
 	case SENSOR_ATTR_LOWER_THRESH:
-		reg_value = (val->val1 << 8) | (0x00FF & val->val2);
+		uval = val->val1 * 1000000 + val->val2;
+		reg_value = (uval << 4U) / TMP108_TEMP_MULTIPLIER;
 		result = tmp108_reg_write(dev,
 					  TI_TMP108_REG_LOW_LIMIT,
 					  reg_value);
 		break;
 
 	case SENSOR_ATTR_UPPER_THRESH:
-		reg_value = (val->val1 << 8) | (0x00FF & val->val2);
+		uval = val->val1 * 1000000 + val->val2;
+		reg_value = (uval << 4U) / TMP108_TEMP_MULTIPLIER;
 		result = tmp108_reg_write(dev,
 					  TI_TMP108_REG_HIGH_LIMIT,
 					  reg_value);
