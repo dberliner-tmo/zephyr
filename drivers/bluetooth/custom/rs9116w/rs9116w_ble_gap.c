@@ -272,6 +272,8 @@ void complete_disconnect(rsi_ble_event_disconnect_t *resp_disconnect, uint16_t r
 	if (conn == NULL) {
 		return;
 	}
+	BT_DBG("Disconnect; Reason = %04X", reason);
+	conn->err = reason - 0x4E00;
 	bt_conn_set_state(conn, BT_CONN_DISCONNECT_COMPLETE);
 	notify_disconnected(conn);
 	bt_conn_unref(conn);
