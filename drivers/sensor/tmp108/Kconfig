@@ -1,13 +1,15 @@
 # TMP108 temperature sensor configuration options
 
 # Copyright (c) 2021 Jimmy Johnson <catch22@fastmail.net>
+# Copyright (c) 2022 T-Mobile USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig TMP108
 	bool "TMP108 Temperature Sensor"
 	depends on I2C
 	help
-	  Enable driver for the TMP108 temperature sensor.
+	  Enable driver for the TMP108 temperature sensor or clones such as the
+	  AMS AS621x series.
 
 if TMP108
 
