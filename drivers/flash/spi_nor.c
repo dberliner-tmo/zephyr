@@ -1047,10 +1047,10 @@ static int spi_nor_configure(const struct device *dev)
 	 */
 
 	if (memcmp(jedec_id, cfg->jedec_id, sizeof(jedec_id)) != 0) {
-		LOG_ERR("Device id %02x %02x %02x does not match config %02x %02x %02x",
+		LOG_WRN("Device id %02x %02x %02x does not match config %02x %02x %02x",
 			jedec_id[0], jedec_id[1], jedec_id[2],
 			cfg->jedec_id[0], cfg->jedec_id[1], cfg->jedec_id[2]);
-		return -EINVAL;
+//		return -EINVAL;
 	}
 #endif
 
