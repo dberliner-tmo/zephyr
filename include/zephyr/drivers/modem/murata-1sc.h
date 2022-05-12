@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2022 T-Mobile USA, Inc.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #pragma once
 
 #include <net/buf.h>
@@ -25,18 +31,23 @@
 #define MDM_MANUFACTURER_LENGTH		  40
 #define MDM_MODEL_LENGTH		  16
 #define MDM_REVISION_LENGTH		  32
+#define MDM_SIM_INFO_LENGTH		  64
 #define MDM_IMEI_LENGTH			  16
 #define MDM_IMSI_LENGTH			  16
 #define MDM_ICCID_LENGTH		  32
-#define MDM_APN_LENGTH			  32
+#define MDM_APN_LENGTH			  64
 #define RSSI_TIMEOUT_SECS		  30
-#define MDM_IP_LENGTH             16
-#define MDM_GW_LENGTH             16
-#define MDM_MASK_LENGTH           16
-#define MDM_PHN_LENGTH            16
-#define MDM_CARRIER_LENGTH        16
-#define CHKSUM_ABILITY_MAX_LEN    64
-#define CMD_FULL_ACCESS_MAX_LEN   64
+#define MDM_IP_LENGTH                     16
+#define MDM_GW_LENGTH                     16
+#define MDM_MASK_LENGTH                   16
+#define MDM_PHN_LENGTH                    16
+#define MDM_CARRIER_LENGTH                16
+#define CHKSUM_ABILITY_MAX_LEN            64
+#define CMD_FULL_ACCESS_MAX_LEN           64
+#define MAX_CARRIER_RESP_SIZE	          256
+#define MAX_SIGSTR_RESP_SIZE              256
+#define MAX_IP_RESP_SIZE                  256
+
 
 /**
  * this is for tmo_shell to call for overriding the wifi dns_offload
@@ -74,4 +85,5 @@ enum murata_1sc_io_ctl {
 	INIT_FW_UPGRADE,
 	GET_CHKSUM_ABILITY,
 	GET_FILE_MODE,
+	RESET_MODEM,
 };

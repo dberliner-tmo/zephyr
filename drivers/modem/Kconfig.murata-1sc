@@ -33,27 +33,10 @@ config MODEM_MURATA_1SC_RX_WORKQ_STACK_SIZE
 
 config MODEM_MURATA_1SC_APN
         string "APN for establishing network connection"
-        default "internet"
+        default ""
         help
           This setting is used to set the APN name for the network connection
-          context.  This value is specific to the network provider and may
-          need to be changed.
-
-config MODEM_MURATA_1SC_USERNAME
-        string "Username for establishing network connection"
-        default ""
-        help
-          This setting is used to set the User name for the network connection
-          context.  This value is specific to the network provider and may
-          need to be changed.
-
-config MODEM_MURATA_1SC_PASSWORD
-        string "Password for establishing network connection"
-        default ""
-        help
-          This setting is used to set the Password for the network connection
-          context.  This value is specific to the network provider and may
-          need to be changed.
+          context. This value is specific to the network provider
 
 config MODEM_MURATA_1SC_INIT_PRIORITY
         int "MURATA_1SC driver init priority"
@@ -98,6 +81,13 @@ config USER_CA_FILE
         default ""
         help
           This is for a user to specify a server's CA file
+
+config USER_CA_DER_FILE
+        string "app-specific CA file in ..der.inc format"
+        default ""
+        help
+          Same prefix as USER_CA_FILE, but with a suffix of .der.inc
+          Note that this is a build bi-product, not a source file
 
 config USER_CERT_FILE
         string "app-specific cert file in .pem format"
