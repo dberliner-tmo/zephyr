@@ -184,7 +184,7 @@ int tsl2540_attr_set(const struct device *dev,
 	}
 #endif
 	if (chan == SENSOR_CHAN_IR || chan == SENSOR_CHAN_LIGHT) {
-	  if (attr == (enum sensor_attribute)SENSOR_ATTR_GAIN) {
+		if (attr == (enum sensor_attribute) SENSOR_ATTR_GAIN) {
 			switch (val->val1) {
 				case TSL2540_SENSOR_GAIN_1_2:
 					if (tsl2540_reg_write(dev, TSL2540_REG_CFG_1,
@@ -275,7 +275,7 @@ int tsl2540_attr_set(const struct device *dev,
 					goto exit;
 			}
 		}
-	  if (attr == (enum sensor_attribute)SENSOR_ATTR_INTEGRATION_TIME) {
+		if (attr == (enum sensor_attribute) SENSOR_ATTR_INTEGRATION_TIME) {
 			double it = sensor_value_to_double(val);
 			it /= 2.81;
 			if (it < 1 || it > 256) {
