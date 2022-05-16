@@ -1,6 +1,18 @@
 include:
   - project: 'tmobile/templates'
     file: '/gitlab-ci/.tmo.global.common.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.coding-guidelines.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.coding-guidelines-check-warns.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.compliance.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.compliance-check-warns.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.native-posix-twister.gitlab-ci.yml'
+  - project: 'tmobile/suhwdev/firmware/gitlab-templates'
+    file: '/gitlab-ci/.tmo.suhwdev.git-merge.gitlab-ci.yml'
 
 stages:
   - tmo
@@ -9,206 +21,7 @@ stages:
 variables:
   ZEPHYR_BASE: ${CI_PROJECT_DIR}
   TMO_SECRETS_CHECK: 'False'
-
-coding-guidelines:
-  image: ubuntu:20.04
-  stage: test
-  cache:
-    key: guidelines
-    paths:
-      - output.txt
-  artifacts:
-    paths:
-      - output.txt
-  script:
-    - apt update
-    - apt-get install python3-pip git wget python2 -y
-    - pip3 install unidiff
-    - pip3 install wheel
-    - pip3 install sh
-    - apt-get install ocaml-base-nox
-    - wget https://launchpad.net/~npalix/+archive/ubuntu/coccinelle/+files/coccinelle_1.0.8~20.04npalix1_amd64.deb
-    - dpkg -i coccinelle_1.0.8~20.04npalix1_amd64.deb
-    - source zephyr-env.sh
-    - ls -la
-    - git log  --pretty=oneline | head -n 10 || true
-    - ./scripts/ci/guideline_check.py --output output.txt -c origin/${CI_COMMIT_REF_NAME}..
-
-coding-guidelines-check-warns:
-  stage: test
-  image: ubuntu:latest
-  needs:
-    - coding-guidelines
-  script:
-    if [[ -s "output.txt" ]]; then
-      errors=$(cat output.txt)
-      errors="${errors//'%'/'%25'}"
-      errors="${errors//$'\n'/'%0A'}"
-      errors="${errors//$'\r'/'%0D'}"
-      echo "::error file=output.txt::$errors"
-      exit 1;
-    fi
-
-compliance:
-  stage: test
-  image: ubuntu:latest
-  variables:
-    ZEPHYR_BASE: ${CI_PROJECT_DIR}
-  artifacts:
-    paths:
-      - compliance.xml
-      - Nits.txt
-      - checkpatch.txt
-      - Identity.txt
-      - pylint.txt
-      - Devicetree.txt
-      - Kconfig.txt
-    when: always
-  script:
-    # begin ssh config
-    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY"
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - cat ~/.ssh/known_hosts
-    - git config --global user.email "ryan.hagen3@t-mobile.com"
-    - git config --global user.name "Ryan Hagen"
-    - ssh-add -l
-    # end ssh config
-    - apt-get install python3 python3-pip libmagic1 -y
-    - pip3 install setuptools
-    - pip3 install wheel
-    - pip3 install python-magic junitparser==1.6.3 gitlint pylint pykwalify
-    - pip3 install west
-    - west init -l . || true
-    - west manifest --validate
-    - west -vvv update
-    - git log  --pretty=oneline | head -n 10 || true
-    - ./scripts/ci/check_compliance.py -m Devicetree -m Identity -m Nits -m pylint -m checkpatch -m Kconfig -c origin/${CI_COMMIT_REF_NAME}..
-
-compliance-check-warns:
-  image: ubuntu:latest
-  stage: test
-  needs: 
-    - compliance
-  script:
-    - ls -la
-    - | 
-      if [[ ! -s "compliance.xml" ]]; then
-        exit 1;
-      fi
-      for file in Nits.txt checkpatch.txt Identity.txt pylint.txt Devicetree.txt Kconfig.txt
-      do
-        if [[ -s $file ]]; then
-          errors=$(cat $file)
-          errors="${errors//'%'/'%25'}"
-          errors="${errors//$'\n'/'%0A'}"
-          errors="${errors//$'\r'/'%0D'}"
-          echo "::error file=${file}::$errors"
-          exit=1
-        fi
-      done
-      if [ ${exit} == 1 ]; then
-        exit 1;
-      fi
-
-twister:
-  image: zephyrprojectrtos/ci:v0.18.4
-  stage: test
-  variables:
-    DEBIAN_FRONTEND: noninteractive
-    ZEPHYR_TOOLCHAIN_VARIANT: llvm
-    ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.13.1
-    CLANG_ROOT_DIR: /usr/lib/llvm-12
-  cache:
-    key: results
-    paths:
-      - twister-out/twister.xml
-  artifacts:
-    reports:
-      junit: twister-out/twister.xml
-    paths:
-      - twister-out/twister.xml
-  parallel:
-    matrix:
-      - SUBSET:
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-  retry: 1
-  script:
-    - 'command -v ssh-agent >/dev/null || ( apt update && apt install -y openssh-client git )'
-    - eval $(ssh-agent -s)
-    - echo "$SSH_PRIVATE_KEY"
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - cat ~/.ssh/known_hosts
-    - git config --global user.email "ryan.hagen3@t-mobile.com"
-    - git config --global user.name "Ryan Hagen"
-    - ssh-add -l
-    - west init -l . || true
-    - west manifest --validate
-    - west -vvv update
-    - ./scripts/twister --inline-logs -M -N -v -p native_posix --subset ${SUBSET}/5 --retry-failed 3
-  timeout: 90 minutes
-
-git-merge:
-  image: alpine:latest
-  stage: test
-  variables:
-    MAIN_DEST_BRANCH: tmo-main
-    MAIN_SRC_BRANCH: main
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-  script:
-    ##
-    ## Install ssh-agent if not already installed, it is required by Docker.
-    ## (change apt-get to yum if you use an RPM-based image)
-    ##
-    - 'command -v ssh-agent >/dev/null || ( apk update && apk add openssh-client git )'
-
-    ##
-    ## Run ssh-agent (inside the build environment)
-    ##
-    - eval $(ssh-agent -s)
-
-    ##
-    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-    ## We're using tr to fix line endings which makes ed25519 keys work
-    ## without extra base64 encoding.
-    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
-    ##
-    - echo "$SSH_PRIVATE_KEY"
-    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-
-    ##
-    ## Create the SSH directory and give it the right permissions
-    ##
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ls -la ~/.ssh
-    - echo "$SSH_KNOWN_HOSTS" >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    ##
-    ## Optionally, if you will be using any Git commands, set the user name and
-    ## and email.
-    ##
-    - git config --global user.email "ryan.hagen3@t-mobile.com"
-    - git config --global user.name "Ryan Hagen Pipeline"
-    - ssh-add -l
-    - ls -la ~/.ssh
-    - printenv
-    - url_host=$(echo "${CI_REPOSITORY_URL}" | sed -e 's|https\?://gitlab-ci-token:.*@|ssh://git@|g')
-    - echo "${url_host}"
-    - git config pull.rebase false
-    - git pull $CI_REPOSITORY_URL $MAIN_SRC_BRANCH
-    - git push $url_host HEAD:$MAIN_DEST_BRANCH
+  MAIN_DEST_BRANCH: tmo-main
+  MAIN_SRC_BRANCH: main
+  DEBIAN_FRONTEND: noninteractive
+  ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.13.2
