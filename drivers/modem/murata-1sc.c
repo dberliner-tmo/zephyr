@@ -2736,15 +2736,20 @@ static int offload_setsockopt(void *obj, int level, int optname,
  *
  * @return OK or ERROR
  *
- * send_buf = 'AT%FILECMD="PUT","' + str(rfile) + '",1'
+ * send_buf = 'AT%FILECMD="PUT","' + str(rfile) + '",1,' + str(len(csbuffer)) + ',"' + str(cksum) + '"'
  */
-static int init_fw_xfer(const char *file)
+static int init_fw_xfer(struct init_fw_data_t *ifd)
 {
 	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1", file);
+
+	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1, %d, \"%d\"", ifd->imagename, ifd->imagesize, ifd->imagecrc);
+
+	LOG_DBG("init_fw_xfer: at cmd = %s", buf);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, buf, &mdata.sem_response, K_SECONDS(1));
+
+	LOG_DBG("init_fw_xfer: ret = %d", ret);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
@@ -2826,8 +2831,9 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 		MODEM_CMD("%FILEDATA:", on_cmd_filedata, 1U, "")
 	};
 
-	if (sfd->len <= 0 || sfd->len > MDM_MAX_DATA_LENGTH)
-		return -1;
+	if (sfd->len <= 0 || sfd->len > MDM_MAX_DATA_LENGTH) {
+                return -1;
+	}
 
 	k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
 
@@ -2840,12 +2846,21 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 	/* Finish the command */
 	snprintk(&mdata.xlate_buf[i + sfd->len * 2], sizeof(mdata.xlate_buf), "\"");
 
+	LOG_DBG("Cmd %s\n", (char*) mdata.xlate_buf);
+	if (sfd->more == 0) {
+		LOG_DBG("Done Cmd %s\n", (char*) mdata.xlate_buf);
+	}
+
 	/* Send the command */
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
 			&mdata.sem_response, K_SECONDS(4));
 
 	k_sem_give(&mdata.sem_xlate_buf);
+
+	if (sfd->more == 0) {
+		LOG_DBG("Done Cmd results %d\n", ret);
+	}
 
 	return ret;
 }
@@ -2876,9 +2891,13 @@ static int init_fw_upgrade(const char *file)
 	char buf[64];
 	snprintk(buf, sizeof(buf), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
 
+        LOG_DBG("1. init_fw_upgrade: at cmd = %s", buf);
+
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), buf,
 			&mdata.sem_response, K_SECONDS(1));
+
+	LOG_DBG("2. Ret %d", ret);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
@@ -3035,7 +3054,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 			break;
 
 		case INIT_FW_XFER:
-			ret = init_fw_xfer((char *)va_arg(args, char *));
+			ret = init_fw_xfer((struct init_fw_data_t *)va_arg(args, struct init_fw_data_t *));
 			va_end(args);
 			break;
 
