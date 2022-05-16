@@ -83,7 +83,7 @@ config USER_CA_FILE
           This is for a user to specify a server's CA file
 
 config USER_CA_DER_FILE
-        string "app-specific CA file in ..der.inc format"
+        string "app-specific CA file in .der.inc format"
         default ""
         help
           Same prefix as USER_CA_FILE, but with a suffix of .der.inc

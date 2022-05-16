@@ -64,6 +64,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #undef IPPROTO_TCP
 #undef IPPROTO_UDP
 
+#define MAX_PAYLOAD_SIZE 1450
 
 #define FAILED (-1)
 
@@ -701,8 +702,10 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 	struct rsi_sockaddr_in6 rsi_addr_in6;
 	rsi_socklen_t rsi_addrlen;
 
+	len = MIN(len, MAX_PAYLOAD_SIZE);
+
 	/* 1k to account for TLS overhead */
-	size_t per_rcv = 1460;
+	size_t per_rcv = MAX_PAYLOAD_SIZE;
 	if (rsi_socket_pool[sd].sock_bitmap & RSI_SOCKET_FEAT_SSL){
 		per_rcv -= RSI_SSL_HEADER_SIZE;
 	}
@@ -743,10 +746,6 @@ static ssize_t rs9116w_recvfrom(void *obj, void *buf, size_t len, int flags,
 	} else if (flags & ZSOCK_MSG_WAITALL) {
 		waitall = true;
 	}
-
-	// if (is_udp) {
-	// 	per_rcv = 1460;
-	// }
 
 	size_t vlen = MIN(len, per_rcv);
 
@@ -813,18 +812,15 @@ static ssize_t rs9116w_sendto(void *obj, const void *buf, size_t len,
 	struct rsi_sockaddr_in rsi_addr_in;
 	struct rsi_sockaddr_in6 rsi_addr_in6;
 	rsi_socklen_t rsi_addrlen;
-	size_t per_send = 1460;
+	size_t per_send = MAX_PAYLOAD_SIZE;
 
 	if (!buf || !len) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	// bool is_udp = (rsi_socket_pool[sd].sock_type & 0xF) == SOCK_DGRAM;
+	len = MIN(len, MAX_PAYLOAD_SIZE);
 
-	// if (is_udp) {
-	// 	per_send = 1460;
-	// }
 	if (rsi_socket_pool[sd].sock_bitmap & RSI_SOCKET_FEAT_SSL){
 		per_send -= RSI_SSL_HEADER_SIZE;
 	}
