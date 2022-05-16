@@ -70,6 +70,12 @@ struct socket_read_data {
 	uint16_t	 recv_read_len;
 };
 
+struct init_fw_data_t {
+        char *imagename;
+        uint32_t imagesize;
+        uint32_t imagecrc;
+};
+
 struct send_fw_data_t {
 	char *data;
 	int more;
