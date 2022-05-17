@@ -937,6 +937,11 @@ static int rs9116w_ioctl(void *obj, unsigned int request, va_list args)
 		return rs9116w_poll(fds, nfds, timeout);
 	}
 
+	case ZFD_IOCTL_SET_LOCK: {
+		// TBD: Verify this (handle or ignore?)
+		return -EOPNOTSUPP;
+	}
+
 	default: {
 		int sd = OBJ_TO_SD(obj);
 		return rs9116w_fnctl(sd, request, args);
