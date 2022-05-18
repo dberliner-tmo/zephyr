@@ -2742,14 +2742,15 @@ static int init_fw_xfer(struct init_fw_data_t *ifd)
 {
 	char buf[64];
 
-	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1, %d, \"%d\"", ifd->imagename, ifd->imagesize, ifd->imagecrc);
+	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1, %u, \"%u\"",
+		ifd->imagename, (uint32_t)ifd->imagesize, (uint32_t)ifd->imagecrc);
 
-	LOG_DBG("init_fw_xfer: at cmd = %s", buf);
+	LOG_DBG("\tinit_fw_xfer: at cmd = %s", buf);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, buf, &mdata.sem_response, K_SECONDS(1));
 
-	LOG_DBG("init_fw_xfer: ret = %d", ret);
+	LOG_DBG("\tinit_fw_xfer: ret = %d", ret);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
@@ -2797,6 +2798,8 @@ static int send_fw_header(const char *data)
 
 	/* Finish the command */
 	snprintk(&mdata.xlate_buf[i + FW_HEADER_SIZE * 2], sizeof(mdata.xlate_buf), "\"");
+
+	LOG_DBG("Header => %s\n", (char*) mdata.xlate_buf);
 
 	/* Send the command */
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
@@ -2849,6 +2852,8 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 	LOG_DBG("Cmd %s\n", (char*) mdata.xlate_buf);
 	if (sfd->more == 0) {
 		LOG_DBG("Done Cmd %s\n", (char*) mdata.xlate_buf);
+	} else {
+		LOG_DBG("Cmd %s\n", (char*) mdata.xlate_buf);
 	}
 
 	/* Send the command */
@@ -2860,6 +2865,8 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 
 	if (sfd->more == 0) {
 		LOG_DBG("Done Cmd results %d\n", ret);
+	} else {
+		LOG_DBG("Cmd results %d\n", ret);
 	}
 
 	return ret;
@@ -2891,13 +2898,13 @@ static int init_fw_upgrade(const char *file)
 	char buf[64];
 	snprintk(buf, sizeof(buf), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
 
-        LOG_DBG("1. init_fw_upgrade: at cmd = %s", buf);
+        LOG_DBG("init_fw_upgrade: at cmd = %s", buf);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), buf,
 			&mdata.sem_response, K_SECONDS(1));
 
-	LOG_DBG("2. Ret %d", ret);
+	LOG_DBG("Ret %d", ret);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
