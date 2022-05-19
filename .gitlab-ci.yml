@@ -23,5 +23,3 @@ variables:
   TMO_SECRETS_CHECK: 'False'
   MAIN_DEST_BRANCH: tmo-main
   MAIN_SRC_BRANCH: main
-  DEBIAN_FRONTEND: noninteractive
-  ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.13.2
