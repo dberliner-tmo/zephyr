@@ -233,8 +233,7 @@ static int murata_1sc_atoi(const char *s, const int err_value,
 
 	ret = (int)strtol(s, &endptr, 10);
 	if (!endptr || *endptr != '\0') {
-		LOG_ERR("bad %s '%s' in %s", log_strdup(s), log_strdup(desc),
-				log_strdup(func));
+		LOG_ERR("bad %s '%s' in %s", s, desc, func);
 		return err_value;
 	}
 
@@ -347,7 +346,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	/* Send the command */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
-			&mdata.sem_response, K_SECONDS(4));
+			&mdata.sem_response, K_SECONDS(6));
 
 	k_sem_give(&mdata.sem_xlate_buf);
 
@@ -376,8 +375,6 @@ static int on_cmd_sockread_common(int socket_fd,
 	struct modem_socket	 *sock = NULL;
 	struct socket_read_data	 *sock_data;
 	int ret = 0;
-
-	LOG_DBG("In on_cmd_sockread_common, socket_data_length = %d, len = %d", socket_data_length, len);
 
 	sock = modem_socket_from_fd(&mdata.socket_config, socket_fd);
 	if (!sock) {
@@ -505,7 +502,7 @@ MODEM_CMD_DEFINE(on_cmd_get_manufacturer)
 			sizeof(mdata.mdm_manufacturer) - 1,
 			data->rx_buf, 0, len);
 	mdata.mdm_manufacturer[out_len] = '\0';
-	LOG_DBG("Manufacturer: %s", log_strdup(mdata.mdm_manufacturer));
+	LOG_DBG("Manufacturer: %s", mdata.mdm_manufacturer);
 	return 0;
 }
 
@@ -520,22 +517,7 @@ MODEM_CMD_DEFINE(on_cmd_get_model)
 	mdata.mdm_model[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("Model: %s", log_strdup(mdata.mdm_model));
-	return 0;
-}
-
-/**
- * @brief Handler for revision
- */
-MODEM_CMD_DEFINE(on_cmd_get_revision)
-{
-	size_t out_len = net_buf_linearize(mdata.mdm_revision,
-			sizeof(mdata.mdm_revision) - 1,
-			data->rx_buf, 0, len);
-	mdata.mdm_revision[out_len] = '\0';
-
-	/* Log the received information. */
-	LOG_DBG("Revision: RK_%s", log_strdup(mdata.mdm_revision));
+	LOG_DBG("Model: %s", mdata.mdm_model);
 	return 0;
 }
 
@@ -550,7 +532,7 @@ MODEM_CMD_DEFINE(on_cmd_get_imei)
 	mdata.mdm_imei[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("IMEI: %s", log_strdup(mdata.mdm_imei));
+	LOG_DBG("IMEI: %s", mdata.mdm_imei);
 	return 0;
 }
 
@@ -566,7 +548,7 @@ MODEM_CMD_DEFINE(on_cmd_get_imsi)
 	mdata.mdm_imsi[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("IMSI: %s", log_strdup(mdata.mdm_imsi));
+	LOG_DBG("IMSI: %s", mdata.mdm_imsi);
 	return 0;
 }
 
@@ -581,7 +563,7 @@ MODEM_CMD_DEFINE(on_cmd_get_iccid)
 	mdata.mdm_iccid[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("ICCID: %s", log_strdup(mdata.mdm_iccid));
+	LOG_DBG("ICCID: %s", mdata.mdm_iccid);
 	return 0;
 }
 #endif //defined(CONFIG_MODEM_SIM_NUMBERS)
@@ -600,28 +582,13 @@ MODEM_CMD_DEFINE(on_cmd_get_bands)
 	bandstr[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("BANDS - %s", log_strdup(bandstr));
+	LOG_DBG("BANDS - %s", bandstr);
 
 	needto_set_bands = false;
 	if (strcmp(bandstr, "  2 ,4 ,12") != 0) {
-		LOG_WRN("BANDS - %s", log_strdup(bandstr));
+		LOG_WRN("BANDS - %s", bandstr);
 		needto_set_bands = true;
 	}
-	return 0;
-}
-
-/**
- * @brief Handler for USIM info
- */
-MODEM_CMD_DEFINE(on_cmd_get_usim)
-{
-	size_t out_len = net_buf_linearize(mdata.mdm_sim_info,
-			sizeof(mdata.mdm_sim_info) - 1,
-			data->rx_buf, 0, len);
-	mdata.mdm_sim_info[out_len] = '\0';
-
-	/* Log the received information. */
-	LOG_DBG("USIM: %s", log_strdup(mdata.mdm_sim_info));
 	return 0;
 }
 
@@ -642,7 +609,7 @@ MODEM_CMD_DEFINE(on_cmd_get_acfg)
 	if (strcmp(autoconnmode_str, "false") == 0) {
 		needto_set_autoconn_to_true = true;
 	} else {
-		LOG_DBG("Auto Conn Mode: %s", log_strdup(autoconnmode_str));
+		LOG_DBG("Auto Conn Mode: %s", autoconnmode_str);
 	}
 	return 0;
 }
@@ -661,7 +628,7 @@ MODEM_CMD_DEFINE(on_cmd_get_cfun)
 	cfun_resp_str[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("CFUN: %s", log_strdup(cfun_resp_str));
+	LOG_DBG("CFUN: %s", cfun_resp_str);
 	return 0;
 }
 
@@ -678,7 +645,7 @@ MODEM_CMD_DEFINE(on_cmd_get_cereg)
 	cereg_resp_str[out_len] = '\0';
 
 	/* Log the received information. */
-	LOG_DBG("CEREG: %s", log_strdup(cereg_resp_str));
+	LOG_DBG("CEREG: %s", cereg_resp_str);
 	return 0;
 }
 #endif
@@ -695,6 +662,93 @@ static char *get_4_octet(char *buf)
 
 	}
 	return ptr-1;
+}
+
+/**
+ * @brief Set auto-connection mode on
+ */
+static int set_autoconn_on(void)
+{
+	const char at_cmd[] = "AT\%SETACFG=modem_apps.Mode.AutoConnectMode,\"true\"";
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	LOG_WRN("autoconnect is set to false, will now set to true");
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(2));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+}
+
+/**
+ * @brief Set BANDs to 2,4, 12 (T-Mobile)
+ */
+static int set_bands(void)
+{
+	const char at_cmd[] = "AT\%SETCFG=\"BAND\",\"2\",\"4\",\"12\"";
+	LOG_WRN("Setting bands to 2, 4, 12");
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(2));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+}
+
+/**
+ * @brief Set CFUN to 1 (on) or 0 (off)
+ *
+ * @param on Value of 1 sets CFUN=1 (turns modem on)
+ *           Value of 0 sets CFUN=0 (turns modem off)
+ */
+static int set_cfun(int on)
+{
+	char at_cmd[32];
+	// struct modem_socket *sock = (struct modem_socket *)obj;
+
+	snprintk(at_cmd, sizeof(at_cmd), "AT+CFUN=%d", on);
+	LOG_DBG("%s",at_cmd);
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(6));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+}
+
+/**
+ * @brief Use the PDNSET command to set APN and IP type
+ */
+static int set_pdnset(void)
+{
+	int ret = 0;
+
+	// Use CONFIG_MODEM_MURATA_1SC_APN if defined and not blank
+#if defined(CONFIG_MODEM_MURATA_1SC_APN)
+	if (strlen(CONFIG_MODEM_MURATA_1SC_APN)) {
+		char at_cmd[128];
+#if defined(CONFIG_NET_IPV6)
+		LOG_INF("Setting APN to %s and IPV4V6", CONFIG_MODEM_MURATA_1SC_APN);
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%PDNSET=1,\"%s\",\"IPV4V6\",\"\",\"\"", CONFIG_MODEM_MURATA_1SC_APN);
+#else
+		LOG_INF("Setting APN to %s and IPV4", CONFIG_MODEM_MURATA_1SC_APN);
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%PDNSET=1,\"%s\",\"IP\",\"\",\"\"", CONFIG_MODEM_MURATA_1SC_APN);
+#endif
+		LOG_DBG("%s",at_cmd);
+		int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+				NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(3));
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+		}
+	}
+	else {
+		LOG_DBG("No APN configuration found");
+	}
+#else
+		LOG_DBG("No CONFIG_MODEM_MURATA_1SC_APN setting found");
+#endif
+	return ret;
 }
 
 /**
@@ -718,21 +772,24 @@ static int parse_ipgwmask(const char *buf, char *p1, char *p2, char *p3)
 	if (pend) {
 		*pend = 0;
 		len = pend - pstr - 1;
-		len = MIN(len, MDM_IP_LENGTH);
+		len = MIN(len, MDM_IP_LENGTH-1);
+		memset(p1, 0, MDM_IP_LENGTH);
 		strncpy(p1, pstr+1, len);
 		pstr = pend+1;
 		pend = strchr(pstr, ',');
 		if (pend) {
 			*pend = 0;
 			len = pend - pstr;
-			len = MIN(len, MDM_GW_LENGTH);
+			len = MIN(len, MDM_GW_LENGTH-1);
+			memset(p2, 0, MDM_GW_LENGTH);
 			strncpy(p2, pstr, len);
 			pstr = pend+1;
 			pend = strchr(pstr, ',');
 			if (pend) {
 				*pend = 0;
 				len = pend - pstr;
-				len = MIN(len, MDM_MASK_LENGTH);
+				len = MIN(len, MDM_MASK_LENGTH-1);
+				memset(p3, 0, MDM_MASK_LENGTH);
 				strncpy(p3, pstr, len);
 				LOG_DBG("IP: %s, MASK: %s, GW: %s\n", p1, p2, p3);
 				ret = 0;
@@ -773,151 +830,28 @@ MODEM_CMD_DEFINE(on_cmd_ipgwmask)
 			ret = parse_ipgwmask(buf, mdata.mdm_ip, mdata.mdm_nmask, mdata.mdm_gw);
 
 			/* Log the received information. */
-			LOG_DBG("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
+			LOG_DBG("IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
 		}
 	}
 	return ret;
 }
 
 /**
- * @brief Set auto-connection mode on
- */
-static int set_autoconn_on(void)
-{
-	char buf[64];
-	// struct modem_socket *sock = (struct modem_socket *)obj;
-
-	LOG_WRN("autoconnect is set to false, will now set to true");
-	snprintk(buf, sizeof(buf), "AT%%SETACFG=modem_apps.Mode.AutoConnectMode,\"true\"");
-	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, buf, &mdata.sem_response, K_SECONDS(2));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-	}
-	return ret;
-}
-
-/**
- * @brief Set BANDs to 2,4, 12 (T-Mobile)
- */
-static int set_bands(void)
-{
-	char buf[64];
-	LOG_WRN("Setting bands to 2, 4, 12");
-	snprintk(buf, sizeof(buf), "AT%%SETCFG=\"BAND\",\"2\",\"4\",\"12\"");
-	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, buf, &mdata.sem_response, K_SECONDS(2));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-	}
-	return ret;
-}
-
-/**
- * @brief Set CFUN to 1 (on) or 0 (off)
- *
- * @param on Value of 1 sets CFUN=1 (turns modem on)
- *           Value of 0 sets CFUN=0 (turns modem off)
- */
-static int set_cfun(int on)
-{
-	char buf[64];
-	// struct modem_socket *sock = (struct modem_socket *)obj;
-
-	snprintk(buf, sizeof(buf), "AT+CFUN=%d", on);
-	LOG_DBG("%s",buf);
-	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, buf, &mdata.sem_response, K_SECONDS(6));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-	}
-	return ret;
-}
-
-/**
- * @brief Handler for "%PDNSET?"
- *
- * expected format (for IPv4):
- * %PDNSET: 1,CATM.T-MOBILE.COM,IP,,,,,0,0,0
- * for both IPv4 and IPv6:
- * %PDNSET: 1,CATM.T-MOBILE.COM,IPV4V6,,,,,0,0,0
- */
-MODEM_CMD_DEFINE(on_cmd_pdnset)
-{
-	int ret = -1;
-
-#define MAX_PDNSET_STR_SZ	128
-	char resp_str[MAX_PDNSET_STR_SZ];
-	size_t out_len = net_buf_linearize(resp_str, sizeof(resp_str) - 1,
-			data->rx_buf, 0, len);
-	resp_str[out_len] = '\0';
-
-	/* Log the received information. */
-	LOG_DBG("PDNSET: %s", log_strdup(resp_str));
-
-	char *p1 = strchr(resp_str, ',');
-	if (p1) {
-		char *p2 = strchr(++p1, ',');
-		if (p2) {
-			len = MIN(p2 - p1, MDM_APN_LENGTH - 1);
-			memcpy(mdata.mdm_apn, p1, len);
-			mdata.mdm_apn[len] = '\0';
-			ret = 0;
-		}
-	}
-	return ret;
-}
-
-/**
- * @brief Use the PDNSET command to set APN and IP type
- */
-static int set_pdnset(void)
-{
-	int ret = 0;
-
-	// Use CONFIG_MODEM_MURATA_1SC_APN if defined and not blank
-#if defined(CONFIG_MODEM_MURATA_1SC_APN)
-	if (strlen(CONFIG_MODEM_MURATA_1SC_APN)) {
-		char buf[128];
-#if defined(CONFIG_NET_IPV6)
-		LOG_INF("Setting APN to %s and IPV4V6", CONFIG_MODEM_MURATA_1SC_APN);
-		snprintk(buf, sizeof(buf), "AT%%PDNSET=1,\"%s\",\"IPV4V6\",\"\",\"\"", CONFIG_MODEM_MURATA_1SC_APN);
-#else
-		LOG_INF("Setting APN to %s and IPV4", CONFIG_MODEM_MURATA_1SC_APN);
-		snprintk(buf, sizeof(buf), "AT%%PDNSET=1,\"%s\",\"IP\",\"\",\"\"", CONFIG_MODEM_MURATA_1SC_APN);
-#endif
-		LOG_DBG("%s",buf);
-		int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0, buf, &mdata.sem_response, K_MSEC(3000));
-		if (ret < 0) {
-			LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		}
-	}
-	else {
-		LOG_WRN("No APN configuration found");
-	}
-#else
-		LOG_ERR("No CONFIG_MODEM_MURATA_1SC_APN setting found");
-#endif
-	return ret;
-}
-
-/**
- * @brief Use the PDNRDP command to get IPv4 config info from modem
+ * @brief Use AT%PDNRDP=1 to get IP settings from modem
  */
 static int get_ipv4_config(void)
 {
+	const char at_cmd[] = "AT\%PDNRDP=1";
+
 	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("%PDNRDP", on_cmd_ipgwmask, 0U, ":"),
-		MODEM_CMD("ERROR", on_cmd_error, 0U, "")
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%PDNRDP", on_cmd_ipgwmask, 0U, ":")
 	};
 
-	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%PDNRDP=1");
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 	return ret;
 }
@@ -1014,7 +948,7 @@ MODEM_CMD_DEFINE(on_cmd_dnsrslv)
  */
 static int get_dns_ip(const char *dn)
 {
-	char buf[64];
+	char at_cmd[64];
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
@@ -1022,12 +956,12 @@ static int get_dns_ip(const char *dn)
 		MODEM_CMD("%DNSRSLV:", on_cmd_dnsrslv, 0U, ""),
 	};
 
-	snprintk(buf, sizeof(buf), "AT%%DNSRSLV=0,\"%s\"", dn);
-	LOG_DBG("%s", buf);
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%DNSRSLV=0,\"%s\"", dn);
+	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_MSEC(2000));
+			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(2));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	if (strncmp(dn, CONFIG_TLS_SNI_HOSTNAME, sizeof(CONFIG_TLS_SNI_HOSTNAME)) == 0) {
@@ -1039,35 +973,32 @@ static int get_dns_ip(const char *dn)
 	return ret;
 }
 
-/* Handler to read data from socket
-   %SOCKETDATA:<socket_id>[0],<length>[1],<moreData>[2],
-   "<data>", <src_ip>, <src_port> */
-
-/* prototype for this function:
-   static int name_(struct modem_cmd_handler_data *data, uint16_t len, \
-   uint8_t **argv, uint16_t argc)
-   */
+/**
+ * @brief Handler to read data from socket
+ * @param argv[0] sock_id
+ * @param argv[1] data_len length of data
+ * @param argv[2] more indicates whether more data is available
+ * @param argv[3] data (but not necessarily contiguous)
+ *
+ * %SOCKETDATA:<socket_id>[0],<length>[1],<moreData>[2],
+ * "<data>", <src_ip>, <src_port>
+ *
+ * prototype for this function:
+ * static int name_(struct modem_cmd_handler_data *data, uint16_t len, \
+ * uint8_t **argv, uint16_t argc)
+ */
 MODEM_CMD_DEFINE(on_cmd_sock_readdata)
 {
-	LOG_INF("In on_cmd_sock_readdata, argc: %d", argc);
-
-	// We need 4 parameters. Less than 4 causes an error like this:
+	// We need at least 3 parameters. Less than 3 causes an error like this:
 	// <err> modem_cmd_handler: process cmd [%SOCKETDATA:] (len:16, ret:-22)
 	// Returning 0 here prevents the error
-	if (argc < 4) {
+	if (argc < 3) {
 		return 0;
 	}
 
 	// int sock_id = (int)strtol(argv[0], NULL, 10);
 	// int data_len = (int)strtol(argv[1], NULL, 10);
 	int more = (int)strtol(argv[2], NULL, 10);
-
-	// printk("len: %d, sock_id: %d, data_len: %d, more: %d data: %s\n",
-	//     len, sock_id, data_len, more, argv[3]);
-
-	// Examples of output from above statement for http request:
-	// len: 2, sock_id: 1, data_len: 0, more: 0 data: ""
-	// len: 1058, sock_id: 1, data_len: 528, more: 0 data: "485454502<...>"
 
 	int ret = on_cmd_sockread_common(mdata.sock_fd, data, ATOI(argv[1], 0, "length"), len);
 	LOG_DBG("on_cmd_sockread_common returned %d", ret);
@@ -1105,34 +1036,6 @@ MODEM_CMD_DEFINE(on_cmd_sockopen)
 	return 0;
 }
 
-static bool got_pdn_flg;
-/**
- * @brief Handler for CGCONTRDP
- *
- * Sample response:
- *
- * AT at%pdnrdp=1
- * %PDNRDP: 1,5,"iot.catm.mnc882.mcc311.gprs",25.181.129.55.255.255.255.240,25.181.129.49,10.177.0.34,10.177.0.210,,,,,,,,,
- */
-MODEM_CMD_DEFINE(on_cmd_get_cgcontrdp)
-{
-#define PDN_BUF_SZ	256
-	char pdn_buf[PDN_BUF_SZ];
-	size_t out_len;
-	int ret = 0;
-
-	if (!got_pdn_flg) {
-		got_pdn_flg = true;
-		out_len = net_buf_linearize(pdn_buf, PDN_BUF_SZ-1, data->rx_buf, 0, len);
-		pdn_buf[out_len] = '\0';
-		LOG_DBG("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
-		ret = parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_nmask, mdata.mdm_gw);
-		/* Log the received information. */
-		LOG_DBG("IP: %s, GW: %s, NMASK: %s", log_strdup(mdata.mdm_ip), log_strdup(mdata.mdm_gw), log_strdup(mdata.mdm_nmask));
-	}
-	return ret;
-}
-
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 #define CLIENT_CA_CERTIFICATE_TAG	1
 static int offload_setsockopt(void *obj, int level, int optname,
@@ -1156,6 +1059,7 @@ MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
 	return 0;
 }
 
+static bool got_pdn_flg;
 /**
  * @brief check whether filename exists in modem's D:CERTS/USER/ folder
  * @return 0 if file exists on modem; -1 if not
@@ -1163,18 +1067,18 @@ MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
 static int check_mdm_store_file(char *filename)
 {
 	int ret = 0;
-	char buf[60];
+	char at_cmd[60];
 	got_pdn_flg = false;
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("%CERTCMD:", on_cmd_atcmd_file_read, 0U, ""),
 	};
 
-	snprintk(buf, sizeof(buf), "AT%%CERTCMD=\"READ\",\"%s\"", filename);
-	LOG_DBG("%s", buf);
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%CERTCMD=\"READ\",\"%s\"", filename);
+	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(2));
+			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(2));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
 	}
 
@@ -1232,6 +1136,9 @@ static int post_mdm_init(void)
 }
 #endif
 
+/**
+ * @brief Handler for AT+COPS?
+ */
 MODEM_CMD_DEFINE(on_cmd_cops)
 {
 	char buf[32];
@@ -1256,16 +1163,15 @@ MODEM_CMD_DEFINE(on_cmd_cops)
 static int get_carrier(char *rbuf)
 {
 	int ret;
-	char buf[64];
+	const char at_cmd[] = "AT+COPS?";
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("+COPS:", on_cmd_cops, 0U, ","),
 	};
 
-	snprintk(buf, sizeof(buf), "AT+COPS?");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
 	}
 	snprintk(rbuf, MAX_CARRIER_RESP_SIZE, "%s", mdata.mdm_carrier);
@@ -1277,10 +1183,9 @@ static int get_carrier(char *rbuf)
  */
 static int reset_modem()
 {
-	char buf[8];
-	snprintk(buf, sizeof(buf), "ATZ");
+	const char at_cmd[] = "ATZ";
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-		NULL, 0, buf, &mdata.sem_response, K_SECONDS(2));
+		NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
 		LOG_ERR("error rebooting modem");
 	} else {
@@ -1291,106 +1196,31 @@ static int reset_modem()
 }
 
 /**
- * @brief Initial setup of the modem
- */
-static int murata_1sc_setup(void)
-{
-	modem_pin_write(&mctx, MDM_WAKE_MDM, 1);
-	k_sleep(MDM_BOOT_DELAY);
-
-	const struct setup_cmd setup_cmds[] = {
-		SETUP_CMD_NOHANDLE("ATQ0"),
-		SETUP_CMD_NOHANDLE("ATE0"),
-		SETUP_CMD_NOHANDLE("ATV1"),
-		SETUP_CMD_NOHANDLE("AT%CSDH=1"),
-		SETUP_CMD_NOHANDLE("AT+CNMI=2,1,2,1,0"),
-		// SETUP_CMD_NOHANDLE("AT+COPS=3,1"),
-		SETUP_CMD("AT+CGMI", "", on_cmd_get_manufacturer, 0U, ""),
-		SETUP_CMD("AT+CGMM", "", on_cmd_get_model, 0U, ""),
-		SETUP_CMD("AT+CGMR", "RK_", on_cmd_get_revision, 0U, ""),
-		SETUP_CMD("AT+CGSN", "", on_cmd_get_imei, 0U, ""),
-#if defined(CONFIG_MODEM_SIM_NUMBERS)
-		SETUP_CMD("AT+CIMI", "", on_cmd_get_imsi, 0U, ""),
-		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_get_iccid, 0U, " "),
-#endif
-		SETUP_CMD("AT%GETACFG=modem_apps.Mode.AutoConnectMode", "", on_cmd_get_acfg, 0U, ""),
-		SETUP_CMD("AT%GETCFG=\"BAND\"", "Bands:", on_cmd_get_bands, 0U, ""),
-#ifdef VERIFY_INIT_MODEM_STATE
-		SETUP_CMD("AT%STATUS=\"USIM\"", "USIM:", on_cmd_get_usim, 0U, ""),
-		SETUP_CMD("AT+CFUN?", "+CFUN:", on_cmd_get_cfun, 0U, ""),
-		SETUP_CMD("AT+CEREG?", "+CEREG:", on_cmd_get_cereg, 0U, ""),
-		SETUP_CMD("AT+CGCONTRDP", "+CGCONTRDP:", on_cmd_get_cgcontrdp, 0U, ""),
-#endif
-#if defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
-		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
-#endif
-	};
-
-top: ;
-	/* Run setup commands on the modem. */
-	int ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
-			setup_cmds, ARRAY_SIZE(setup_cmds),
-			&mdata.sem_response, MDM_REGISTRATION_TIMEOUT);
-	if (ret < 0) {
-		LOG_ERR("modem_cmd_handler_setup_cmds error");
-	}
-
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	ret = post_mdm_init();
-	if (ret < 0) {
-		LOG_ERR("post modem_cmd_init error");
-	}
-#endif
-	set_pdnset();
-		
-	bool needto_reset_modem = false;
-	if (needto_set_autoconn_to_true) {
-		set_autoconn_on();
-		needto_reset_modem = true;
-	}
-
-	if (needto_set_bands) {
-		set_bands();
-		needto_reset_modem = true;
-	}
-
-	if (needto_reset_modem) {
-		reset_modem();
-		goto top;
-	}
-
-#if !defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
-	k_sleep(K_MSEC(CONFIG_MODEM_ON_DELAY));
-	set_cfun(1);
-#endif
-
-	return ret;
-}
-
-/**
  * @brief Close the given socket
  */
 static void socket_close(struct modem_socket *sock)
 {
-	char buf[40];
+	char at_cmd[40];
 	int  ret;
 
-	/* Tell the modem to close the socket. */
-	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"DEACTIVATE\",%d", sock->sock_fd);
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
+	if (sock->is_connected) {
 
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-	}
+		/* Tell the modem to close the socket. */
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"DEACTIVATE\",%d", sock->sock_fd);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+				NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 
-	/* Tell the modem to delete the socket. */
-	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"DELETE\",%d", sock->sock_fd);
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf,
-			&mdata.sem_response, K_MSEC(0));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+		}
+
+		/* Tell the modem to delete the socket. */
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"DELETE\",%d", sock->sock_fd);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+				NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+		}
 	}
 
 	modem_socket_put(&mdata.socket_config, sock->sock_fd);
@@ -1402,22 +1232,22 @@ static void socket_close(struct modem_socket *sock)
 static int send_sms_msg(void *obj, const struct sms_out *sms)
 {
 	/* The "+ 20" is to account for AT+CMGS plus a bit extra */
-	char buf[sizeof(struct sms_out) + 20];
+	char at_cmd[sizeof(struct sms_out) + 20];
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
-	snprintk(buf, sizeof(buf), "AT+CMGF=1");
+	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
+			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 
-	snprintk(buf, sizeof(buf), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
+	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
+			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 
 	return ret;
@@ -1514,7 +1344,7 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
  */
 static int recv_sms_msg(void *obj, struct sms_in *sms)
 {
-	char buf[64];
+	char at_cmd[64];
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 	int count = 0;
@@ -1527,23 +1357,23 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 		MODEM_CMD("+CMGL:", on_cmd_readsms, 6U, ",")
 	};
 
-	snprintk(buf, sizeof(buf), "AT+CMGF=1");
+	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf, &mdata.sem_response, K_MSEC(5000));
+			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 	if (ret < 0) {
 		LOG_DBG("recv_sms_msg error 1\n");
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 
 	// Set pointer to struct which is populated in on_cmd_sockreadsms
 	mdata.sms = sms;
 
 	while (count <= 1) {
-		snprintk(buf, sizeof(buf), "AT+CMGL=\"ALL\"");
+		snprintk(at_cmd, sizeof(at_cmd), "AT+CMGL=\"ALL\"");
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				data_cmd, ARRAY_SIZE(data_cmd), buf, &mdata.sem_response, K_MSEC(5000));
+				data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(5));
 		if (ret < 0) {
-			LOG_ERR("recv_sms_msg error 2, %s ret = %d\n", log_strdup(buf), ret);
+			LOG_ERR("recv_sms_msg error 2, %s ret = %d\n", at_cmd, ret);
 		}
 
 		else {
@@ -1552,12 +1382,12 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 				LOG_DBG("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
 
 				// Delete the message from the modem
-				snprintk(buf, sizeof(buf), "AT+CMGD=%d", mdata.sms_index);
+				snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_index);
 				ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-						NULL, 0U, buf, &mdata.sem_response, K_MSEC(0));
+						NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 				if (ret < 0) {
 					LOG_DBG("recv_sms_msg error 3\n");
-					LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+					LOG_ERR("%s ret:%d", at_cmd, ret);
 				}
 
 				ret = mdata.sms_index;
@@ -1595,7 +1425,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	/* Modem command to read the data. */
 	struct modem_cmd data_cmd[] = { 
 		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
-		MODEM_CMD("%SOCKETDATA:", on_cmd_sock_readdata, 4U, ",")
+		MODEM_CMD("%SOCKETDATA:", on_cmd_sock_readdata, 3U, ",")
 	};
 
 	LOG_DBG("IN offload_recvfrom, flags = 0x%x", flags);
@@ -1658,7 +1488,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	/* Tell the modem to give us data (%SOCKETDATA:socket_id,len,0,data). */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
-			K_SECONDS(4));
+			K_SECONDS(6));
 
 	LOG_DBG("Returned from modem_cmd_send with ret=%d", ret);
 	LOG_DBG("rec_len = %d", sock_data.recv_read_len);
@@ -1718,7 +1548,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	struct modem_socket *sock     = (struct modem_socket *) obj;
 	uint16_t dst_port  = 0;
 	char protocol[5];
-	char buf[100];
+	char at_cmd[100];
 	int  ret;
 	int sd = -1;
 
@@ -1788,23 +1618,22 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 #endif
 	/* Formulate the string to allocate socket. */
 	if (sd != 0) {
-		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
 				protocol, ip_addr, dst_port);
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	} else {
-		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
 				protocol, sni_hostname, dst_port);
 #endif
 	}
 
-	LOG_DBG("%s", buf);
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			cmd, ARRAY_SIZE(cmd), buf,
+			cmd, ARRAY_SIZE(cmd), at_cmd,
 			&mdata.sem_response, K_SECONDS(1));
 
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 		LOG_ERR("Closing the socket!!!");
 		socket_close(sock);
 		errno = -ret;
@@ -1829,14 +1658,14 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		} else
 			profileID = CONFIG_SNI_SLOT;
 
-		snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"SSLALLOC\",%d,1,%d", sock->sock_fd, profileID);
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"SSLALLOC\",%d,1,%d", sock->sock_fd, profileID);
 
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, buf,
+				NULL, 0U, at_cmd,
 				&mdata.sem_response, K_SECONDS(8));
-		LOG_DBG("%s", buf);
+		LOG_DBG("%s", at_cmd);
 		if (ret < 0) {
-			LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+			LOG_ERR("%s ret: %d", at_cmd, ret);
 			LOG_ERR("Closing the socket!!!");
 			socket_close(sock);
 			errno = -ret;
@@ -1844,15 +1673,15 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		}
 	}
 
-	snprintk(buf, sizeof(buf), "AT%%SOCKETCMD=\"ACTIVATE\",%d", sock->sock_fd);
-	LOG_DBG("%s", log_strdup(buf));
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ACTIVATE\",%d", sock->sock_fd);
+	LOG_DBG("%s", at_cmd);
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf,
+			NULL, 0U, at_cmd,
 			&mdata.sem_response, K_SECONDS(8));
 
 	if (ret < 0) {
-		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+		LOG_ERR("%s ret: %d", at_cmd, ret);
 		LOG_ERR("Closing the socket!!!");
 		socket_close(sock);
 		errno = -ret;
@@ -1978,9 +1807,7 @@ static int offload_close(void *obj)
 	}
 #endif
 	/* Close the socket only if it is connected. */
-	// 	if (sock->is_connected) {
 	socket_close(sock);
-	//	}
 
 	return 0;
 }
@@ -2020,22 +1847,13 @@ static ssize_t offload_sendmsg(void *obj, const struct msghdr *msg, int flags)
 	return (ssize_t) sent;
 }
 
-struct zsock_addrinfo zsai[2];
-struct sockaddr_in6 zai_addr[2];
-static int ai_idx = 0;
+static struct zsock_addrinfo zsai[2] = {0};
+static struct sockaddr_in6 zai_addr[2] = {0};
 
 static void murata_1sc_freeaddrinfo(struct zsock_addrinfo *res)
 {
-	struct zsock_addrinfo *next = res;
-	while (next) {
-		memset(next, 0, sizeof(struct zsock_addrinfo));
-		if (next->ai_addr) {
-			memset(next->ai_addr, 0, sizeof(struct sockaddr_in6));
-		}
-		LOG_DBG("freeaddinfo, node= %p; nxt-ptr: %p\n", next, next->ai_next);
-		next = next->ai_next;
-	}
-	ai_idx = 0;
+	/* No need to free static memory. */
+	res = NULL;
 }
 
 static inline uint32_t qtupletouint(uint8_t *ia) {return *(uint32_t*)ia;}
@@ -2047,10 +1865,10 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 	struct sockaddr *ai_addr;
 	int retval = 0;
 
-	if (ai_idx == 2) {
-		LOG_ERR("too many zsock_addrinfo!");
-		return -1;
-	}
+	int ai_idx = 0;
+	memset(zsai, 0, sizeof(zsai));
+	memset(zai_addr, 0, sizeof(zai_addr));
+
 	ai = &zsai[ai_idx];
 	ai_addr = (struct sockaddr *)&zai_addr[ai_idx];
 	ai_idx++;
@@ -2122,8 +1940,7 @@ static int murata_1sc_getaddrinfo(const char *node, const char *service,
 #endif
 
 	if (retval4 < 0 && retval6 < 0) {
-		LOG_ERR("Could not resolve name: %s, retval: %d",
-				node, retval);
+		LOG_ERR("Could not resolve name: %s, retval: %d", node, retval);
 		retval = DNS_EAI_NONAME;
 		goto exit;
 	}
@@ -2133,22 +1950,292 @@ static int murata_1sc_getaddrinfo(const char *node, const char *service,
 	retval = set_addr_info((uint8_t *)&mdm_dns_ip.ipv4.sin_addr.s_addr, false, type, (uint16_t)port, res);
 	if (retval < 0) {
 		murata_1sc_freeaddrinfo(*res);
-		LOG_ERR("Unable to set address info, retval: %d",
-				retval);
+		LOG_ERR("Unable to set address info, retval: %d", retval);
 		goto exit;
 	}
 #if defined(CONFIG_NET_IPV6)
 	retval = set_addr_info(mdm_dns_ip.ipv6.sin6_addr.s6_addr, true, type, (uint16_t)port, res);
 	if (retval < 0) {
 		murata_1sc_freeaddrinfo(*res);
-		LOG_ERR("Unable to set address info, retval: %d",
-				retval);
+		LOG_ERR("Unable to set address info, retval: %d", retval);
 		goto exit;
 	}
 #endif
 
 exit:
 	return retval;
+}
+
+static int sigStrength;
+#define MIN_SS	-113
+/**
+ * @brief Handle the response to AT%CSQ
+ *
+ * Response format:
+ * <RSSI (-113 + 2*n>,<BER>,<RSRQ>
+ */
+MODEM_CMD_DEFINE(on_cmd_csq)
+{
+	char buf[MAX_SIGSTR_RESP_SIZE];
+	char *endp;
+	int ret;
+	size_t out_len = net_buf_linearize(buf, MAX_SIGSTR_RESP_SIZE-1,
+			data->rx_buf, 0, len);
+	buf[out_len] = '\0';
+
+	for (int i = 0; i < MAX_SIGSTR_RESP_SIZE-1; i++) {
+		if (buf[i] == ',') {
+			buf[i] = 0;
+			break;
+		}
+	}
+	ret = (int)strtol(buf, &endp, 10);
+	sigStrength = MIN_SS + 2 * ret;
+	/* Log the received information. */
+	LOG_DBG("signal strength: %d dBm", ret);
+	return 0;
+}
+
+/**
+ * @brief Get signal strength
+ */
+static int get_sigstrength(char *rbuf)
+{
+	const char at_cmd[] = "AT\%CSQ";
+	int  ret;
+
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("%CSQ:", on_cmd_csq, 0U, ""),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(1));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	snprintk(rbuf, MAX_SIGSTR_RESP_SIZE, "%d dBm", sigStrength);
+
+	return ret;
+}
+
+/**
+ * @brief Handle response to AT+CNUM
+ *
+ * +CNUM: ,"16186961148",129
+ */
+MODEM_CMD_DEFINE(on_cmd_cnum)
+{
+	char buf[32];
+	int strlen = 0;
+	size_t out_len = net_buf_linearize(buf, 31,
+			data->rx_buf, 0, len);
+	buf[out_len] = '\0';
+
+	strlen = get_str_in_quotes(buf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
+
+	/* Log the received information. */
+	//LOG_INF("got cnum: %s, str_len = %d", mdata.mdm_phn, strlen);
+	return 0;
+}
+
+/**
+ * @brief Get phone number
+ */
+static int get_cnum(char *rbuf)
+{
+	int ret;
+	const char at_cmd[] = "AT+CNUM";
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("+CNUM:", on_cmd_cnum, 0U, ","),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	memcpy(rbuf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
+	return ret;
+}
+
+/**
+ * @brief Handler for CGCONTRDP
+ *
+ * Sample response:
+ *
+ * AT at%pdnrdp=1
+ * %PDNRDP: 1,5,"iot.catm.mnc882.mcc311.gprs",25.181.129.55.255.255.255.240,25.181.129.49,10.177.0.34,10.177.0.210,,,,,,,,,
+ */
+MODEM_CMD_DEFINE(on_cmd_get_cgcontrdp)
+{
+#define PDN_BUF_SZ	256
+	char pdn_buf[PDN_BUF_SZ];
+	size_t out_len;
+	int ret = 0;
+
+	if (!got_pdn_flg) {
+		got_pdn_flg = true;
+		out_len = net_buf_linearize(pdn_buf, PDN_BUF_SZ-1, data->rx_buf, 0, len);
+		pdn_buf[out_len] = '\0';
+		LOG_DBG("PDNRDP-data (len=%d, strlen=%d, dat: %s\n", len, out_len, pdn_buf);
+		ret = parse_ipgwmask(pdn_buf, mdata.mdm_ip, mdata.mdm_nmask, mdata.mdm_gw);
+		/* Log the received information. */
+		LOG_DBG("IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
+	}
+	return ret;
+}
+
+/**
+ * @brief Get ip/mask/gw
+ */
+static int get_ip(char *rbuf)
+{
+	int ret;
+	const char at_cmd[] = "AT+CGCONTRDP";
+	got_pdn_flg = false;
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("+CGCONTRDP:", on_cmd_get_cgcontrdp, 0U, ","),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	snprintk(rbuf, MAX_IP_RESP_SIZE, "IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
+
+	return ret;
+}
+
+/**
+ * @brief Handler for modem firmware version
+ */
+MODEM_CMD_DEFINE(on_cmd_get_revision)
+{
+	size_t out_len = net_buf_linearize(mdata.mdm_revision,
+			sizeof(mdata.mdm_revision) - 1,
+			data->rx_buf, 0, len);
+	mdata.mdm_revision[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_DBG("Revision: RK_%s", mdata.mdm_revision);
+	return 0;
+}
+
+/**
+ * @brief Get modem firmware version
+ */
+static int get_version(char *rbuf)
+{
+	int ret;
+	const char at_cmd[] = "AT+CGMR";
+
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("RK_", on_cmd_get_revision, 0U, ""),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(2));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	memcpy(rbuf,"RK_", 3);
+	memcpy(rbuf+3, mdata.mdm_revision, sizeof(mdata.mdm_revision)-3);
+	return ret;
+}
+
+/**
+ * @brief Handler for USIM info
+ */
+MODEM_CMD_DEFINE(on_cmd_get_usim)
+{
+	size_t out_len = net_buf_linearize(mdata.mdm_sim_info,
+			sizeof(mdata.mdm_sim_info) - 1,
+			data->rx_buf, 0, len);
+	mdata.mdm_sim_info[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_DBG("USIM: %s", mdata.mdm_sim_info);
+	return 0;
+}
+
+/**
+ * @brief Get SIM info
+ */
+static int get_sim_info(char *rbuf)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("USIM:", on_cmd_get_usim, 0U, ""),
+	};
+
+	const char at_cmd[] = "AT\%STATUS=\"USIM\"";
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	memcpy(rbuf, mdata.mdm_sim_info, sizeof(mdata.mdm_sim_info));
+	return ret;
+}
+
+/**
+ * @brief Handler for "%PDNSET?"
+ *
+ * expected format (for IPv4):
+ * %PDNSET: 1,CATM.T-MOBILE.COM,IP,,,,,0,0,0
+ * for both IPv4 and IPv6:
+ * %PDNSET: 1,CATM.T-MOBILE.COM,IPV4V6,,,,,0,0,0
+ */
+MODEM_CMD_DEFINE(on_cmd_pdnset)
+{
+	int ret = -1;
+
+#define MAX_PDNSET_STR_SZ	128
+	char resp_str[MAX_PDNSET_STR_SZ];
+	size_t out_len = net_buf_linearize(resp_str, sizeof(resp_str) - 1,
+			data->rx_buf, 0, len);
+	resp_str[out_len] = '\0';
+
+	/* Log the received information. */
+	LOG_DBG("PDNSET: %s", resp_str);
+
+	char *p1 = strchr(resp_str, ',');
+	if (p1) {
+		char *p2 = strchr(++p1, ',');
+		if (p2) {
+			len = MIN(p2 - p1, MDM_APN_LENGTH - 1);
+			memcpy(mdata.mdm_apn, p1, len);
+			mdata.mdm_apn[len] = '\0';
+			ret = 0;
+		}
+	}
+	return ret;
+}
+
+/**
+ * @brief Get APN
+ */
+static int get_apn(char *rbuf)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("%PDNSET:", on_cmd_pdnset, 0U, ""),
+	};
+
+	const char at_cmd[] = "AT\%PDNSET?";
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(2));
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	} else {
+		memcpy(rbuf, mdata.mdm_apn, sizeof(mdata.mdm_apn));
+	}
+	return ret;
 }
 
 const struct socket_dns_offload murata_dns_ops = {
@@ -2175,185 +2262,6 @@ enum mdmdata_e {
 	apn_e,
 	invalid
 } mdmdata_e;
-
-static int sigStrength;
-MODEM_CMD_DEFINE(on_cmd_csq)
-{
-#define MIN_SS	-113
-	char buf[16];
-	char *endp;
-	int ret;
-	size_t out_len = net_buf_linearize(buf,
-			15,
-			data->rx_buf, 0, len);
-	buf[out_len] = '\0';
-
-	for (int i = 0; i < 15; i++) {
-		if (buf[i] == ',') {
-			buf[i] = 0;
-			break;
-		}
-	}
-	ret = (int)strtol(buf, &endp, 10);
-	sigStrength = MIN_SS + 2 * ret;
-	/* Log the received information. */
-	//LOG_INF("signal strength: %d dBm", ret);
-	return 0;
-}
-
-MODEM_CMD_DEFINE(on_cmd_cnum)
-{
-	char buf[32];
-	int strlen = 0;
-	size_t out_len = net_buf_linearize(buf,
-			31,
-			data->rx_buf, 0, len);
-	buf[out_len] = '\0';
-
-	strlen = get_str_in_quotes(buf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
-
-	/* Log the received information. */
-	//LOG_INF("got cnum: %s, str_len = %d", mdata.mdm_phn, strlen);
-	return 0;
-}
-
-/**
- * @brief Get signal strength
- */
-static int get_sigstrength(char *rbuf)
-{
-	char buf[64];
-	int  ret;
-	// struct modem_socket *sock = (struct modem_socket *)obj;
-
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("%CSQ:", on_cmd_csq, 0U, ""),
-	};
-
-	snprintk(buf, sizeof(buf), "AT%%CSQ");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(1));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	}
-	snprintk(rbuf, MAX_SIGSTR_RESP_SIZE, "%d dBm", sigStrength);
-
-	return ret;
-}
-
-/**
- * @brief Get phone number
- */
-static int get_cnum(char *rbuf)
-{
-	int ret;
-	char buf[16];
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("+CNUM:", on_cmd_cnum, 0U, ","),
-	};
-
-	snprintk(buf, sizeof(buf), "AT+CNUM");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(1));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	}
-	memcpy(rbuf, mdata.mdm_phn, sizeof(mdata.mdm_phn));
-	return ret;
-}
-
-/**
- * @brief Get ip/mask/gw
- */
-static int get_ip(char *rbuf)
-{
-	int ret;
-	char buf[16];
-	got_pdn_flg = false;
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("+CGCONTRDP:", on_cmd_get_cgcontrdp, 0U, ","),
-	};
-
-	snprintk(buf, sizeof(buf), "AT+CGCONTRDP");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-		data_cmd, 1, buf, &mdata.sem_response, K_MSEC(200));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	}
-	snprintk(rbuf, MAX_IP_RESP_SIZE, "IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
-
-	return ret;
-}
-
-/**
- * @brief Get version
- */
-static int get_version(char *rbuf)
-{
-	int ret;
-	char buf[32];
-
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("RK_", on_cmd_get_revision, 0U, ""),
-	};
-
-	snprintk(buf, sizeof(buf), "AT+CGMR");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(2));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	}
-	memcpy(rbuf,"RK_", 3);
-	memcpy(rbuf+3, mdata.mdm_revision, sizeof(buf)-3);
-	return ret;
-}
-
-/**
- * @brief Get SIM info
- */
-static int get_sim_info(char *rbuf)
-{
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("USIM:", on_cmd_get_usim, 0U, ""),
-	};
-
-	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%STATUS=\"USIM\"");
-	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(2));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	}
-	memcpy(rbuf, mdata.mdm_sim_info, sizeof(mdata.mdm_sim_info));
-	return ret;
-}
-
-/**
- * @brief Get APN
- */
-static int get_apn(char *rbuf)
-{
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("%PDNSET:", on_cmd_pdnset, 0U, ""),
-	};
-
-	char buf[128];
-	snprintk(buf, sizeof(buf), "AT%%PDNSET?");
-	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, buf, &mdata.sem_response, K_SECONDS(2));
-	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
-		ret = -1;
-	} else {
-		memcpy(rbuf, mdata.mdm_apn, sizeof(mdata.mdm_apn));
-	}
-	return ret;
-}
 
 static int ioctl_query(enum mdmdata_e idx, void *buf)
 {
@@ -2740,20 +2648,20 @@ static int offload_setsockopt(void *obj, int level, int optname,
  */
 static int init_fw_xfer(struct init_fw_data_t *ifd)
 {
-	char buf[64];
+	char at_cmd[64];
 
-	snprintk(buf, sizeof(buf), "AT%%FILECMD=\"PUT\",\"%s\",1, %u, \"%u\"",
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%FILECMD=\"PUT\",\"%s\",1, %u, \"%u\"",
 		ifd->imagename, (uint32_t)ifd->imagesize, (uint32_t)ifd->imagecrc);
 
-	LOG_DBG("\tinit_fw_xfer: at cmd = %s", buf);
+	LOG_DBG("\tinit_fw_xfer: at cmd = %s", at_cmd);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, buf, &mdata.sem_response, K_SECONDS(1));
+			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
 
 	LOG_DBG("\tinit_fw_xfer: ret = %d", ret);
 
 	if (ret < 0) {
-		LOG_ERR("%s ret:%d", log_strdup(buf), ret);
+		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 	return ret;
 }
@@ -2895,19 +2803,19 @@ static int init_fw_upgrade(const char *file)
 		MODEM_CMD("%UPGCMD:", on_cmd_upgcmd, 1U, "")
 	};
 
-	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
+	char at_cmd[64];
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
 
-        LOG_DBG("init_fw_upgrade: at cmd = %s", buf);
+        LOG_DBG("init_fw_upgrade: at cmd = %s", at_cmd);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
 			&mdata.sem_response, K_SECONDS(1));
 
 	LOG_DBG("Ret %d", ret);
 
 	if (ret < 0) {
-		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+		LOG_ERR("%s ret: %d", at_cmd, ret);
 	}
 	return ret;
 }
@@ -2937,16 +2845,15 @@ static int get_file_chksum_ability(char *response)
 		MODEM_CMD("", on_cmd_chksum, 1U, "")
 	};
 
-	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%GETACFG=filemgr.file.put_fcksum");
+	const char at_cmd[] = "AT\%GETACFG=filemgr.file.put_fcksum";
 
 	chksum[0] = '\0';
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
 			&mdata.sem_response, K_SECONDS(1));
 
 	if (ret < 0) {
-		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+		LOG_ERR("%s ret: %d", at_cmd, ret);
 	}
 	else {
 		snprintk(response, CHKSUM_ABILITY_MAX_LEN, "%s", chksum);
@@ -2979,19 +2886,95 @@ static int get_file_mode(char *response)
 		MODEM_CMD("", on_cmd_file_cmd_full_access, 1U, "")
 	};
 
-	char buf[64];
-	snprintk(buf, sizeof(buf), "AT%%GETACFG=admin.services.file_cmd_full_access");
+	char at_cmd[] = "AT\%GETACFG=admin.services.file_cmd_full_access";
 
 	file_cmd_full_access[0] = '\0';
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), buf,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
 			&mdata.sem_response, K_SECONDS(1));
 
 	if (ret < 0) {
-		LOG_ERR("%s ret: %d", log_strdup(buf), ret);
+		LOG_ERR("%s ret: %d", at_cmd, ret);
 	} else {
 		snprintk(response, CMD_FULL_ACCESS_MAX_LEN, "%s", file_cmd_full_access);
 	}
+	return ret;
+}
+
+/**
+ * @brief Initial setup of the modem
+ */
+static int murata_1sc_setup(void)
+{
+	modem_pin_write(&mctx, MDM_WAKE_MDM, 1);
+	k_sleep(MDM_BOOT_DELAY);
+
+	const struct setup_cmd setup_cmds[] = {
+		SETUP_CMD_NOHANDLE("ATQ0"),
+		SETUP_CMD_NOHANDLE("ATE0"),
+		SETUP_CMD_NOHANDLE("ATV1"),
+		SETUP_CMD_NOHANDLE("AT%CSDH=1"),
+		SETUP_CMD_NOHANDLE("AT+CNMI=2,1,2,1,0"),
+		// SETUP_CMD_NOHANDLE("AT+COPS=3,1"),
+		SETUP_CMD("AT+CGMI", "", on_cmd_get_manufacturer, 0U, ""),
+		SETUP_CMD("AT+CGMM", "", on_cmd_get_model, 0U, ""),
+		SETUP_CMD("AT+CGMR", "RK_", on_cmd_get_revision, 0U, ""),
+		SETUP_CMD("AT+CGSN", "", on_cmd_get_imei, 0U, ""),
+#if defined(CONFIG_MODEM_SIM_NUMBERS)
+		SETUP_CMD("AT+CIMI", "", on_cmd_get_imsi, 0U, ""),
+		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_get_iccid, 0U, " "),
+#endif
+		SETUP_CMD("AT%GETACFG=modem_apps.Mode.AutoConnectMode", "", on_cmd_get_acfg, 0U, ""),
+		SETUP_CMD("AT%GETCFG=\"BAND\"", "Bands:", on_cmd_get_bands, 0U, ""),
+#ifdef VERIFY_INIT_MODEM_STATE
+		SETUP_CMD("AT%STATUS=\"USIM\"", "USIM:", on_cmd_get_usim, 0U, ""),
+		SETUP_CMD("AT+CFUN?", "+CFUN:", on_cmd_get_cfun, 0U, ""),
+		SETUP_CMD("AT+CEREG?", "+CEREG:", on_cmd_get_cereg, 0U, ""),
+		SETUP_CMD("AT+CGCONTRDP", "+CGCONTRDP:", on_cmd_get_cgcontrdp, 0U, ""),
+#endif
+#if defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
+		SETUP_CMD_NOHANDLE("AT+CFUN=0"),
+#endif
+	};
+
+top: ;
+	/* Run setup commands on the modem. */
+	int ret = modem_cmd_handler_setup_cmds(&mctx.iface, &mctx.cmd_handler,
+			setup_cmds, ARRAY_SIZE(setup_cmds),
+			&mdata.sem_response, MDM_REGISTRATION_TIMEOUT);
+	if (ret < 0) {
+		LOG_ERR("modem_cmd_handler_setup_cmds error");
+	}
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	ret = post_mdm_init();
+	if (ret < 0) {
+		LOG_ERR("post modem_cmd_init error");
+	}
+#endif
+	set_pdnset();
+		
+	bool needto_reset_modem = false;
+	if (needto_set_autoconn_to_true) {
+		set_autoconn_on();
+		needto_reset_modem = true;
+	}
+
+	if (needto_set_bands) {
+		set_bands();
+		needto_reset_modem = true;
+	}
+
+	if (needto_reset_modem) {
+		reset_modem();
+		goto top;
+	}
+
+#if !defined(CONFIG_MODEM_DEMO_LOW_POWERMODE)
+	k_sleep(K_MSEC(CONFIG_MODEM_ON_DELAY));
+	set_cfun(1);
+#endif
+
 	return ret;
 }
 

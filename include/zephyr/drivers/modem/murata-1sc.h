@@ -44,8 +44,8 @@
 #define MDM_CARRIER_LENGTH                16
 #define CHKSUM_ABILITY_MAX_LEN            64
 #define CMD_FULL_ACCESS_MAX_LEN           64
-#define MAX_CARRIER_RESP_SIZE	          256
-#define MAX_SIGSTR_RESP_SIZE              256
+#define MAX_CARRIER_RESP_SIZE	          64
+#define MAX_SIGSTR_RESP_SIZE              32
 #define MAX_IP_RESP_SIZE                  256
 
 
