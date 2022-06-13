@@ -80,9 +80,8 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
     struct rs9116w_device *rs9116w_dev = dev->data;
 
     /*
-     * 9.1.1 int32_t rsi_wlan_scan(uint8_t *ssid, uint8_t chno, rsi_rsp_scan_t *result,uint32_t length)
+     * 9.1.1 int32_t rsi_wlan_scan(uint8_t *ssid, uint8_t chno, rsi_rsp_scan_t *result, uint32_t length)
      */
-    printk("Got to rs9116w_mgmt_scan\n");
     rsi_wlan_req_radio(1);
     ret = rsi_wlan_scan(NULL, 0, &(rs9116w_dev->scan_results), sizeof(rsi_rsp_scan_t));
     if (ret) {
@@ -111,35 +110,24 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
         // channel
         z_result.channel = r_result->rf_channel;
 
-        // security
-        // typedef enum rsi_security_mode_e {
-        // // open mode
-        // RSI_OPEN = 0,
-        // // WPA security with PSK
-        // RSI_WPA,
-        // // WPA2 security with PSK
-        // RSI_WPA2,
-        // // WEP security
-        // RSI_WEP,
-        // // Enterprise WPA security
-        // RSI_WPA_EAP,
-        // // Enterprise WPA2 security
-        // RSI_WPA2_EAP,
-        // // Enterprise WPA2/WPA security
-        // RSI_WPA_WPA2_MIXED,
-        // // WPA security with PMK
-        // RSI_WPA_PMK,
-        // // WPA2 security with PMK
-        // RSI_WPA2_PMK,
-        // // WPS pin method
-        // RSI_WPS_PIN,
-        // // WPS generated pin method
-        // RSI_USE_GENERATED_WPSPIN,
-        // // WPS push button method
-        // RSI_WPS_PUSH_BUTTON,
-        //
-        // } rsi_security_mode_t;
-        //
+        /* Security modes supported by RS9116W
+	 * (from WiseConnect sapi/include/rsi_wlan_apis.h)
+         * typedef enum rsi_security_mode_e {
+         * RSI_OPEN = 0,             // open mode
+         * RSI_WPA,                  // WPA security with PSK
+         * RSI_WPA2,                 // WPA2 security with PSK
+         * RSI_WEP,                  // WEP security
+         * RSI_WPA_EAP,              // Enterprise WPA security
+         * RSI_WPA2_EAP,             // Enterprise WPA2 security
+         * RSI_WPA_WPA2_MIXED,       // Enterprise WPA2/WPA security
+         * RSI_WPA_PMK,              // WPA security with PMK
+         * RSI_WPA2_PMK,             // WPA2 security with PMK
+         * RSI_WPS_PIN,              // WPS pin method
+         * RSI_USE_GENERATED_WPSPIN, // WPS generated pin method
+         * RSI_WPS_PUSH_BUTTON,      // WPS push button method
+         * } rsi_security_mode_t;
+	 */
+
         if (r_result->security_mode == RSI_OPEN) {
             z_result.security = WIFI_SECURITY_TYPE_NONE;
         } else if (r_result->security_mode == RSI_WPA2) {
@@ -162,7 +150,8 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
         // Inform Zephyr about the AP
         cb(rs9116w_dev->net_iface, 0, &z_result);
     }
-    // Inform Zephyr there are no more APs, should generate a SCAN COMPLETE message
+    // Inform Zephyr there are no more APs,
+    // should generate a SCAN COMPLETE message
     cb(rs9116w_dev->net_iface, 0, NULL);
 
     LOG_DBG("Reinitializing WLAN radio");
@@ -172,8 +161,8 @@ static int rs9116w_mgmt_scan(const struct device *dev, scan_result_cb_t cb)
 }
 #define Z_PF_INET         1          /**< IP protocol family version 4. */
 #define Z_PF_INET6        2          /**< IP protocol family version 6. */
-#define Z_AF_INET        Z_PF_INET     /**< IP protocol family version 4. */
-#define Z_AF_INET6       Z_PF_INET6    /**< IP protocol family version 6. */
+#define Z_AF_INET        Z_PF_INET   /**< IP protocol family version 4. */
+#define Z_AF_INET6       Z_PF_INET6  /**< IP protocol family version 6. */
 
 /****************************************************************************/
 static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_req_params *params)
@@ -280,7 +269,6 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
         LOG_ERR("rsi_config_ipaddress error: %d", ret);
         return ret;
     }
-
 
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.gateway, 4);
 #if IS_ENABLED(CONFIG_NET_NATIVE_IPV4)
@@ -463,7 +451,6 @@ static int rs9116w_init(const struct device *dev)
     struct rs9116w_device *rs9116w_dev = dev->data;
     uint8_t mac[6];
 
-
     // Initialize SPI bus
     //
     // config
@@ -497,7 +484,6 @@ static int rs9116w_init(const struct device *dev)
         LOG_ERR("rs9116w_init: rsi_driver_init error: %d", status);
         return status;
     }
-
 
     // Initialize the device
     /*
@@ -535,8 +521,7 @@ static int rs9116w_init(const struct device *dev)
     if (status)
         LOG_ERR("RS9116W WiFi driver failed to initialize, status = %d", status);
     else
-        LOG_INF("RS9116W WiFi driver Initialized");
-
+        LOG_INF("RS9116W WiFi driver initialized");
 
     // Get the FW version
     status = rsi_get_fw_version(rs9116w_dev->fw_version, sizeof(rs9116w_dev->fw_version));
@@ -573,4 +558,3 @@ NET_DEVICE_DT_INST_OFFLOAD_DEFINE(
         CONFIG_WIFI_INIT_PRIORITY,  // priority
         &rs9116w_api,               // api fcn table
         MAX_PER_PACKET_SIZE);       // MTU
-

@@ -606,9 +606,10 @@ MODEM_CMD_DEFINE(on_cmd_get_acfg)
 	autoconnmode_str[out_len] = '\0';
 
 	/* Log the received information. */
-	if (strcmp(autoconnmode_str, "false") == 0) {
+	if (strncmp(autoconnmode_str, "false", strlen("false")) == 0) {
 		needto_set_autoconn_to_true = true;
 	} else {
+		needto_set_autoconn_to_true = false;
 		LOG_DBG("Auto Conn Mode: %s", autoconnmode_str);
 	}
 	return 0;
