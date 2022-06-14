@@ -3173,9 +3173,7 @@ static int murata_1sc_init(const struct device *dev)
 	mctx.pins[MDM_RESET].init_flags = gpflg | GPIO_OUTPUT_HIGH;
 	mctx.pins[MDM_RESET].gpio_port_dev = device_get_binding(mctx.pins[MDM_RESET].dev_name);
 	LOG_DBG("MDM_RESET_PIN -> ASSERTED");
-	if (strcmp(CONFIG_BOARD, "tmo_tracker_v2") != 0) {
-		modem_pin_config(&mctx, MDM_RESET, true);
-	}
+	modem_pin_config(&mctx, MDM_RESET, true);
 	k_sleep(K_MSEC(20));
 
 	mctx.pins[MDM_RESET].init_flags = gpflg | GPIO_OUTPUT_LOW;

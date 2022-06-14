@@ -5,4 +5,4 @@ sample:
 tests:
   sample.basic.gecko_rtcc:
     build_only: false
-    platform_allow: efm32pg_stk3402a tmo_hwg_dev_kit tmo_dev_edge
+    platform_allow: efm32pg_stk3402a tmo_dev_edge
