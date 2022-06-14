@@ -52,7 +52,7 @@ static struct rs9116w_config rs9116w_conf = {
 };
 
 // TBD: Make GLOBAL_BUFF_LEN a config param
-#define GLOBAL_BUFF_LEN 15000
+#define GLOBAL_BUFF_LEN 10000
 uint8_t global_buf[GLOBAL_BUFF_LEN];
 
 struct rs9116w_device *rs9116w_by_iface_idx(uint8_t iface_idx) {
@@ -424,7 +424,6 @@ static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
 // called after device init fcn
 static void rs9116w_iface_init(struct net_if *iface)
 {
-    s_rs9116w_dev[0].iface_idx = 0;
     s_rs9116w_dev[0].net_iface = iface;
 
     net_if_set_link_addr(iface, s_rs9116w_dev[0].mac, sizeof(s_rs9116w_dev[0].mac), NET_LINK_ETHERNET);
