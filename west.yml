@@ -251,8 +251,9 @@ manifest:
       revision: 12bfe3f0a9fcbfe3edab7eabc9678b6c62875d34
     - name: wiseconnect
       path:  modules/hal/silabs_wiseconnect
-      url: https://project_32648894_bot:glpat-BVKkdxMGs_QxfWyzUoXZ@gitlab.com/tmobile/suhwdev/firmware/zephyr-wiseconnect.git
-      revision: 480d6265bdad2dd8c4ddbb07b221cd2631770ae2
+      url: https://project_37122317_bot:glpat-BVKkdxMGs_QxfWyzUoXZ@gitlab.com/tmobile/suhwdev/firmware/zephyr-wiseconnect.git
+      revision: 35ca9a0686b72b0cb735ba9b6405cd4d0fb9d684
+
       groups:
         - hal
 
