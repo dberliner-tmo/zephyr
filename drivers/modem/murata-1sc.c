@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #endif
 
 #define MAX_FILENAME_LEN         32
-#define MDM_BOOT_DELAY	         (K_SECONDS(6))
+#define MDM_BOOT_DELAY	         6
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 
@@ -1190,8 +1190,8 @@ static int reset_modem()
 	if (ret < 0) {
 		LOG_ERR("error rebooting modem");
 	} else {
-		LOG_WRN("rebooting modem...");
-		k_sleep(MDM_BOOT_DELAY);
+		LOG_INF("Waiting %d secs for modem to boot...", MDM_BOOT_DELAY);
+		k_sleep(K_SECONDS(MDM_BOOT_DELAY));
 	}
 	return ret;
 }
@@ -2908,7 +2908,8 @@ static int get_file_mode(char *response)
 static int murata_1sc_setup(void)
 {
 	modem_pin_write(&mctx, MDM_WAKE_MDM, 1);
-	k_sleep(MDM_BOOT_DELAY);
+	LOG_INF("Waiting %d secs for modem to boot...", MDM_BOOT_DELAY);
+	k_sleep(K_SECONDS(MDM_BOOT_DELAY));
 
 	const struct setup_cmd setup_cmds[] = {
 		SETUP_CMD_NOHANDLE("ATQ0"),
