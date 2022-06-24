@@ -10,9 +10,9 @@
 
 #include <stdint.h>
 
-#include <drivers/sensor.h>
-#include <drivers/gpio.h>
-#include <drivers/sensor/tmp108.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/sensor/tmp108.h>
 
 #if DT_PROP(DT_INST(0, ti_tmp108), variant_as621x)
 #include "as621x_defs.h"

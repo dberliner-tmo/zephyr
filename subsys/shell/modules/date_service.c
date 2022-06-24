@@ -5,14 +5,14 @@
  */
 
 #include <stdlib.h>
-#include <shell/shell.h>
-#include <init.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/init.h>
 #include <string.h>
-#include <posix/time.h>
-#include <sys/timeutil.h>
-#include <drivers/counter.h>
+#include <zephyr/posix/time.h>
+#include <zephyr/sys/timeutil.h>
+#include <zephyr/drivers/counter.h>
 #if defined(CONFIG_TIME_GECKO_RTCC)
-#include <em_rtcc.h>
+#include <zephyr/em_rtcc.h>
 #endif
 
 #define HELP_NONE      "[none]"

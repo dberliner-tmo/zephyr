@@ -50,7 +50,7 @@
 		compatible = "gpio-keys";
 		user_button: button_0 {
 			label = "User SW8";
-			gpios = <&gpio5 0 GPIO_ACTIVE_LOW>;
+			gpios = <&gpio5 0 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 		};
 	};
 
@@ -133,6 +133,8 @@ arduino_serial: &lpuart3 {
 		ahb-write-wait-unit = <2>;
 		ahb-write-wait-interval = <20>;
 		status = "okay";
+		erase-block-size = <4096>;
+		write-block-size = <16>;
 
 		partitions {
 			compatible = "fixed-partitions";
@@ -268,7 +270,6 @@ zephyr_udc0: &usb1 {
 	mmc {
 		compatible = "zephyr,sdmmc-disk";
 		status = "okay";
-		label = "SDMMC_0";
 	};
 };
 

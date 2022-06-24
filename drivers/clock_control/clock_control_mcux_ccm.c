@@ -7,13 +7,13 @@
 #define DT_DRV_COMPAT nxp_imx_ccm
 #include <errno.h>
 #include <soc.h>
-#include <sys/util.h>
-#include <drivers/clock_control.h>
-#include <dt-bindings/clock/imx_ccm.h>
+#include <zephyr/sys/util.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/dt-bindings/clock/imx_ccm.h>
 #include <fsl_clock.h>
 
 #define LOG_LEVEL CONFIG_CLOCK_CONTROL_LOG_LEVEL
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(clock_control);
 
 #ifdef CONFIG_SPI_MCUX_LPSPI
@@ -168,19 +168,25 @@ static int mcux_ccm_get_subsys_rate(const struct device *dev,
 		break;
 #endif
 
+#ifdef CONFIG_COUNTER_MCUX_QTMR
+	case IMX_CCM_QTMR_CLK:
+		*rate = CLOCK_GetIpgFreq();
+		break;
+#endif
+
 #ifdef CONFIG_I2S_MCUX_SAI
 	case IMX_CCM_SAI1_CLK:
-		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk) / 8
+		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk)
 				/ (CLOCK_GetDiv(kCLOCK_Sai1PreDiv) + 1)
 				/ (CLOCK_GetDiv(kCLOCK_Sai1Div) + 1);
 		break;
 	case IMX_CCM_SAI2_CLK:
-		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk) / 8
+		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk)
 				/ (CLOCK_GetDiv(kCLOCK_Sai2PreDiv) + 1)
 				/ (CLOCK_GetDiv(kCLOCK_Sai2Div) + 1);
 		break;
 	case IMX_CCM_SAI3_CLK:
-		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk) / 8
+		*rate = CLOCK_GetFreq(kCLOCK_AudioPllClk)
 				/ (CLOCK_GetDiv(kCLOCK_Sai3PreDiv) + 1)
 				/ (CLOCK_GetDiv(kCLOCK_Sai3Div) + 1);
 		break;

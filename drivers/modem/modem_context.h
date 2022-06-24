@@ -15,11 +15,11 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_MODEM_MODEM_CONTEXT_H_
 #define ZEPHYR_INCLUDE_DRIVERS_MODEM_MODEM_CONTEXT_H_
 
-#include <kernel.h>
-#include <net/buf.h>
-#include <net/net_ip.h>
-#include <sys/ring_buffer.h>
-#include <drivers/gpio.h>
+#include <zephyr/kernel.h>
+#include <zephyr/net/buf.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/sys/ring_buffer.h>
+#include <zephyr/drivers/gpio.h>
 #include "modem_sms.h"
 
 #ifdef __cplusplus
@@ -49,13 +49,6 @@ struct modem_cmd_handler {
 
 	/* implementation data */
 	void *cmd_handler_data;
-};
-
-struct modem_pin {
-	const struct device *gpio_port_dev;
-	char *dev_name;
-	gpio_pin_t pin;
-	gpio_flags_t init_flags;
 };
 
 struct modem_context {
@@ -142,12 +135,6 @@ struct modem_context *modem_context_from_iface_dev(const struct device *dev);
  * @retval 0 if ok, < 0 if error.
  */
 int modem_context_register(struct modem_context *ctx);
-
-/* pin config functions */
-int modem_pin_read(struct modem_context *ctx, uint32_t pin);
-int modem_pin_write(struct modem_context *ctx, uint32_t pin, uint32_t value);
-int modem_pin_config(struct modem_context *ctx, uint32_t pin, bool enable);
-int modem_pin_init(struct modem_context *ctx);
 
 #ifdef __cplusplus
 }

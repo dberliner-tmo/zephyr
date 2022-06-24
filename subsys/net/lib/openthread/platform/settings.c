@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <kernel.h>
-#include <logging/log.h>
-#include <settings/settings.h>
-#include <random/rand32.h>
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/random/rand32.h>
 
 #include <openthread/platform/settings.h>
 
@@ -54,11 +54,11 @@ static int ot_setting_delete_cb(const char *key, size_t len,
 		       key ? "/" : "", key ? key : "");
 	__ASSERT(ret < sizeof(path), "Setting path buffer too small.");
 
-	LOG_DBG("Removing: %s", log_strdup(path));
+	LOG_DBG("Removing: %s", path);
 
 	ret = settings_delete(path);
 	if (ret != 0) {
-		LOG_ERR("Failed to remove setting %s, ret %d", log_strdup(path),
+		LOG_ERR("Failed to remove setting %s, ret %d", path,
 			ret);
 		__ASSERT_NO_MSG(false);
 	}

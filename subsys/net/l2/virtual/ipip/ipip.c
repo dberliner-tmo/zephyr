@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <logging/log.h>
+#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_virtual_ipip, CONFIG_NET_L2_IPIP_LOG_LEVEL);
 
-#include <zephyr.h>
-#include <device.h>
+#include <zephyr/zephyr.h>
+#include <zephyr/device.h>
 #include <errno.h>
 
-#include <net/net_core.h>
-#include <net/net_ip.h>
-#include <net/virtual.h>
+#include <zephyr/net/net_core.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/virtual.h>
 
 #include "ipv4.h"
 #include "ipv6.h"
@@ -415,7 +415,7 @@ static int interface_attach(struct net_if *iface, struct net_if *lower_iface)
 					      0);
 		if (!ifaddr) {
 			NET_ERR("Cannot add %s address to interface %p",
-				log_strdup(net_sprint_ipv6_addr(&iid)),
+				net_sprint_ipv6_addr(&iid),
 				iface);
 		}
 	}
@@ -456,7 +456,7 @@ static int interface_set_config(struct net_if *iface,
 
 			NET_DBG("Interface %d peer address %s attached to %d",
 				net_if_get_by_iface(iface),
-				log_strdup(addr_str),
+				addr_str,
 				net_if_get_by_iface(ctx->attached_to));
 
 			ctx->my4addr = NULL;
@@ -485,7 +485,7 @@ static int interface_set_config(struct net_if *iface,
 
 			NET_DBG("Interface %d peer address %s attached to %d",
 				net_if_get_by_iface(iface),
-				log_strdup(addr_str),
+				addr_str,
 				net_if_get_by_iface(ctx->attached_to));
 
 			ctx->my6addr = NULL;

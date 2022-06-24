@@ -6,10 +6,10 @@
 
 #include <ctype.h>
 #include <stdlib.h>
-#include <sys/atomic.h>
-#include <shell/shell.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/shell/shell.h>
 #if defined(CONFIG_SHELL_BACKEND_DUMMY)
-#include <shell/shell_dummy.h>
+#include <zephyr/shell/shell_dummy.h>
 #endif
 #include "shell_ops.h"
 #include "shell_help.h"
@@ -1413,7 +1413,9 @@ int shell_start(const struct shell *shell)
 		z_shell_vt100_color_set(shell, SHELL_NORMAL);
 	}
 
-	z_shell_raw_fprintf(shell->fprintf_ctx, "\n\n");
+	if (z_shell_strlen(shell->default_prompt) > 0) {
+		z_shell_raw_fprintf(shell->fprintf_ctx, "\n\n");
+	}
 	state_set(shell, SHELL_STATE_ACTIVE);
 
 	k_mutex_unlock(&shell->ctx->wr_mtx);
