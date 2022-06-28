@@ -12,7 +12,7 @@
 #include <zephyr/sys/timeutil.h>
 #include <zephyr/drivers/counter.h>
 #if defined(CONFIG_TIME_GECKO_RTCC)
-#include <zephyr/em_rtcc.h>
+#include <em_rtcc.h>
 #endif
 
 #define HELP_NONE      "[none]"

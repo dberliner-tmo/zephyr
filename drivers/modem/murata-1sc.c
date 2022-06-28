@@ -177,26 +177,13 @@ struct murata_1sc_data {
 	recv_sms_func_t recv_sms;
 }; 
 
-/* Modem pins - Power, Reset & others. */
-static struct modem_pin murata_1sc_pins[] = {
-	/* MDM_WAKE_HOST */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_wake_host_gpios),
-			DT_INST_GPIO_PIN(0, mdm_wake_host_gpios),
-			DT_INST_GPIO_FLAGS(0, mdm_wake_host_gpios) | GPIO_OUTPUT_LOW),
-
-	/* MDM_WAKE_MODEM */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_wake_mdm_gpios),
-			DT_INST_GPIO_PIN(0, mdm_wake_mdm_gpios),
-			DT_INST_GPIO_FLAGS(0, mdm_wake_mdm_gpios) | GPIO_OUTPUT_LOW),
-
-	/* MDM_RESET */
-	MODEM_PIN(DT_INST_GPIO_LABEL(0, mdm_reset_gpios),
-			DT_INST_GPIO_PIN(0, mdm_reset_gpios),
-			DT_INST_GPIO_FLAGS(0, mdm_reset_gpios) | GPIO_OUTPUT_LOW),
-};
+/* Modem pins - Wake Host, Wake Modem, Reset, and Reset Done */
+static const struct gpio_dt_spec wake_host_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wake_host_gpios);
+static const struct gpio_dt_spec wake_mdm_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wake_mdm_gpios);
+static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
+static const struct gpio_dt_spec rst_done_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_rst_done_gpios);
 
 static struct k_thread	       modem_rx_thread;
-//static struct k_work_q       modem_workq;
 static struct murata_1sc_data  mdata;
 static struct modem_context    mctx;
 static const struct socket_op_vtable offload_socket_fd_op_vtable;
@@ -205,9 +192,7 @@ static void socket_close(struct modem_socket *sock);
 
 /* RX thread structures */
 static K_KERNEL_STACK_DEFINE(modem_rx_stack, CONFIG_MODEM_MURATA_1SC_RX_STACK_SIZE);
-//static K_KERNEL_STACK_DEFINE(modem_workq_stack, CONFIG_MODEM_QUECTEL_BG9X_RX_WORKQ_STACK_SIZE);
 NET_BUF_POOL_DEFINE(mdm_recv_pool, MDM_RECV_MAX_BUF, MDM_RECV_BUF_SIZE, 0, NULL);
-
 
 /**
  * @brief Thread to process all messages received from the Modem.
@@ -2907,7 +2892,7 @@ static int get_file_mode(char *response)
  */
 static int murata_1sc_setup(void)
 {
-	modem_pin_write(&mctx, MDM_WAKE_MDM, 1);
+	gpio_pin_set_dt(&wake_mdm_gpio, 1);
 	LOG_INF("Waiting %d secs for modem to boot...", MDM_BOOT_DELAY);
 	k_sleep(K_SECONDS(MDM_BOOT_DELAY));
 
@@ -3110,7 +3095,6 @@ static const struct socket_op_vtable offload_socket_fd_op_vtable = {
 static int murata_1sc_init(const struct device *dev)
 {
 	int ret = 0;
-	gpio_flags_t gpflg;
 
 	ARG_UNUSED(dev);
 
@@ -3160,30 +3144,44 @@ static int murata_1sc_init(const struct device *dev)
 	mctx.data_revision = mdata.mdm_revision;
 	mctx.data_imei = mdata.mdm_imei;
 
-	/* pin setup */
-	mctx.pins = murata_1sc_pins;
-	mctx.pins_len = ARRAY_SIZE(murata_1sc_pins);
-
 	/* SMS functions */
 	mctx.send_sms = send_sms_msg;
 	mctx.recv_sms = recv_sms_msg;
 	mctx.driver_data = &mdata;
 
-	gpflg = mctx.pins[MDM_RESET].init_flags;
-	gpflg &= ~(GPIO_OUTPUT_HIGH | GPIO_OUTPUT_LOW);
-	mctx.pins[MDM_RESET].init_flags = gpflg | GPIO_OUTPUT_HIGH;
-	mctx.pins[MDM_RESET].gpio_port_dev = device_get_binding(mctx.pins[MDM_RESET].dev_name);
-	LOG_DBG("MDM_RESET_PIN -> ASSERTED");
-	modem_pin_config(&mctx, MDM_RESET, true);
-	k_sleep(K_MSEC(20));
+	/* pin setup */
+	ret = gpio_pin_configure_dt(&wake_host_gpio, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "wake_host");
+		goto error;
+	}
 
-	mctx.pins[MDM_RESET].init_flags = gpflg | GPIO_OUTPUT_LOW;
-	LOG_DBG("MDM_RESET_PIN -> UNASSERTED");
-	mctx.pins[MDM_RESET].gpio_port_dev = device_get_binding(mctx.pins[MDM_RESET].dev_name);
+	ret = gpio_pin_configure_dt(&wake_mdm_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "wake_mdm");
+		goto error;
+	}
+
+	ret = gpio_pin_configure_dt(&reset_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "reset");
+		goto error;
+	}
+
+	ret = gpio_pin_configure_dt(&rst_done_gpio, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "reset done");
+		goto error;
+	}
+
+	gpio_pin_set_dt(&reset_gpio, 1);
+	k_sleep(K_MSEC(20));
+	gpio_pin_set_dt(&reset_gpio, 0);
+
 	ret = modem_context_register(&mctx);
 	if (ret < 0) {
 		LOG_ERR("Error registering modem context: %d", ret);
-		// goto error;
+		goto error;
 	}
 
 	/* start RX thread */
@@ -3193,6 +3191,8 @@ static int murata_1sc_init(const struct device *dev)
 			NULL, NULL, NULL, K_PRIO_COOP(7), 0, K_NO_WAIT);
 
 	murata_1sc_setup();
+
+error:
 	return 0;
 }
 
