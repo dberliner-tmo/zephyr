@@ -21,6 +21,10 @@ bt_ready_cb_t ready_cb;
 
 ATOMIC_DEFINE(bt_dev_flags, 8);
 
+static void init_work(struct k_work *work);
+
+struct k_work bt_dev_init = Z_WORK_INITIALIZER(init_work);
+
 uint8_t rsi_bt_random_addr[6];
 
 K_THREAD_STACK_DEFINE(rsi_bt_rx_thread_stack, 2048);
@@ -47,12 +51,29 @@ static int bt_init(void)
 	}
 
 	if (IS_ENABLED(CONFIG_BT_CONN)) {
+		uint8_t locaddr[6];
+		err = rsi_bt_get_local_device_address(locaddr);
+		BT_DBG("Device MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+			locaddr[5], locaddr[4], locaddr[3], locaddr[2], locaddr[1], locaddr[0]
+			);
 		err = bt_conn_init();
 		if (err) {
 			return err;
 		}
 	}
+	
+	atomic_set_bit_to(bt_dev_flags, BT_DEV_READY, true);
 	return 0;
+}
+
+static void init_work(struct k_work *work)
+{
+	int err;
+
+	err = bt_init();
+	if (ready_cb) {
+		ready_cb(err);
+	}
 }
 
 int32_t device_init(void);
@@ -81,19 +102,15 @@ int bt_enable(bt_ready_cb_t cb)
 			NULL, NULL, NULL, K_PRIO_COOP(8), 0, K_NO_WAIT
 			);
 
+	ready_cb = cb;
 	/* TODO: Use proper kwork event for the callback */
 	if (!cb) {
 		int status = bt_init();
-		if (!status) {
-			atomic_set_bit_to(bt_dev_flags, BT_DEV_READY, true);
-		}
 		return status;
-	} else {
-		ready_cb = cb;
-		return 0;
 	}
-	// k_work_submit(&bt_dev.init);
-	// return 0;
+		
+	k_work_submit(&bt_dev_init);
+	return 0;
 }
 
 
@@ -233,7 +250,6 @@ int bt_set_name(const char *name)
 {
 	#if defined(CONFIG_BT_DEVICE_NAME_DYNAMIC)
 	size_t len = strlen(name);
-	int err;
 
 	if (len > CONFIG_BT_DEVICE_NAME_MAX) {
 		return -ENOMEM;
@@ -243,7 +259,7 @@ int bt_set_name(const char *name)
 		return 0;
 	}
 
-	return rsi_bt_set_local_name(name);
+	return rsi_bt_set_local_name((uint8_t*)name);
 
 #else
 	return -ENOMEM;
@@ -290,9 +306,6 @@ void rsi_bt_rx_thread(void *a, void *b, void *c)
 	ARG_UNUSED(c);
 
 	while (!atomic_test_bit(bt_dev_flags, BT_DEV_READY)) {
-		if (ready_cb != NULL) {
-			ready_cb(bt_init());
-		}
 		k_msleep(100);
 	}
 

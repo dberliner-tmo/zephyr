@@ -5,7 +5,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
+#include <sys/types.h>
 #include "rs9116w_ble_gap.h"
 #include <rsi_common_apis.h>
 #include <rsi_bt_common.h>
@@ -18,6 +18,12 @@
 struct bt_le_ext_adv dev_adv;
 
 rsi_ble_req_adv_t adv_params;
+
+enum adv_name_type {
+	ADV_NAME_TYPE_NONE,
+	ADV_NAME_TYPE_AD,
+	ADV_NAME_TYPE_SD,
+};
 
 enum {
 	RSI_EVT_NONE = 0,
@@ -53,6 +59,37 @@ static rsi_gap_event_t *get_event_slot()
 		return NULL;
 	}
 	return target_event;
+}
+
+enum adv_name_type get_adv_name_type(const struct bt_le_ext_adv *adv)
+{
+	if (atomic_test_bit(adv->flags, BT_ADV_INCLUDE_NAME_SD)) {
+		return ADV_NAME_TYPE_SD;
+	}
+
+	if (atomic_test_bit(adv->flags, BT_ADV_INCLUDE_NAME_AD)) {
+		return ADV_NAME_TYPE_AD;
+	}
+
+	return ADV_NAME_TYPE_NONE;
+}
+
+enum adv_name_type get_adv_name_type_param(const struct bt_le_adv_param *param)
+{
+	if (param->options & BT_LE_ADV_OPT_USE_NAME) {
+		if (param->options & BT_LE_ADV_OPT_FORCE_NAME_IN_AD) {
+			return ADV_NAME_TYPE_AD;
+		}
+
+		if ((param->options & BT_LE_ADV_OPT_EXT_ADV) &&
+		    !(param->options & BT_LE_ADV_OPT_SCANNABLE)) {
+			return ADV_NAME_TYPE_AD;
+		}
+
+		return ADV_NAME_TYPE_SD;
+	}
+
+	return ADV_NAME_TYPE_NONE;
 }
 
 /**
@@ -303,6 +340,45 @@ struct bt_ad {
 	size_t len;
 };
 
+static int set_data_add_complete(uint8_t *set_data, uint8_t set_data_len_max,
+			const struct bt_ad *ad, size_t ad_len, uint8_t *data_len)
+{
+	uint8_t set_data_len = 0;
+
+	for (size_t i = 0; i < ad_len; i++) {
+		const struct bt_data *data = ad[i].data;
+
+		for (size_t j = 0; j < ad[i].len; j++) {
+			size_t len = data[j].data_len;
+			uint8_t type = data[j].type;
+
+			/* Check if ad fit in the remaining buffer */
+			if ((set_data_len + len + 2) > set_data_len_max) {
+				ssize_t shortened_len = set_data_len_max -
+							(set_data_len + 2);
+
+				if (!(type == BT_DATA_NAME_COMPLETE &&
+				      shortened_len > 0)) {
+					BT_ERR("Too big advertising data");
+					return -EINVAL;
+				}
+
+				type = BT_DATA_NAME_SHORTENED;
+				len = shortened_len;
+			}
+
+			set_data[set_data_len++] = len + 1;
+			set_data[set_data_len++] = type;
+
+			memcpy(&set_data[set_data_len], data[j].data, len);
+			set_data_len += len;
+		}
+	}
+
+	*data_len = set_data_len;
+	return 0;
+}
+
 /**
  * @brief Set the advertisement payload and parameters to be utilized
  *
@@ -314,28 +390,20 @@ struct bt_ad {
 static int set_ad(struct bt_le_ext_adv *adv, const struct bt_ad *ad,
 		  size_t ad_len)
 {
-	size_t required_buffer = 0;
+	uint8_t buf[BT_GAP_ADV_MAX_ADV_DATA_LEN];
+	uint8_t data_len;
+	int err;
+	uint16_t required_buffer;
 
-	for (int i = 0; i < ad_len; i++) {
-		const struct bt_ad *cur_ad = &ad[i];
-		for (int j = 0; j < cur_ad->len; j++) {
-			required_buffer += cur_ad[j].data->data_len;
-			required_buffer += 2;
-		}
+	err = set_data_add_complete(buf, BT_GAP_ADV_MAX_ADV_DATA_LEN,
+					ad, ad_len, &data_len);
+	
+	if (err) {
+		return err;
 	}
-	uint8_t buf[required_buffer];
-	uint8_t *buf_traverse = buf;
-	for (int i = 0; i < ad_len; i++) {
-		const struct bt_ad *cur_ad = &ad[i];
-		for (int j = 0; j < cur_ad->len; j++) {
-			*buf_traverse = cur_ad[j].data->data_len + 1;
-			buf_traverse++;
-			*buf_traverse = cur_ad[j].data->type;
-			buf_traverse++;
-			memcpy(buf_traverse, cur_ad[j].data->data, cur_ad[j].data->data_len);
-			buf_traverse += cur_ad[j].data->data_len;
-		}
-	}
+
+	required_buffer = data_len;
+
 	return rsi_ble_set_advertise_data(buf, required_buffer);
 }
 
@@ -350,28 +418,20 @@ static int set_ad(struct bt_le_ext_adv *adv, const struct bt_ad *ad,
 static int set_sd(struct bt_le_ext_adv *adv, const struct bt_ad *sd,
 		  size_t sd_len)
 {
-	size_t required_buffer = 0;
+	uint8_t buf[BT_GAP_ADV_MAX_ADV_DATA_LEN];
+	uint8_t data_len;
+	int err;
+	uint16_t required_buffer;
 
-	for (int i = 0; i < sd_len; i++) {
-		const struct bt_ad *cur_sd = &sd[i];
-		for (int j = 0; j < cur_sd->len; j++) {
-			required_buffer += cur_sd[j].data->data_len;
-			required_buffer += 2;
-		}
+	err = set_data_add_complete(buf, BT_GAP_ADV_MAX_ADV_DATA_LEN,
+					sd, sd_len, &data_len);
+	
+	if (err) {
+		return err;
 	}
-	uint8_t buf[required_buffer];
-	uint8_t *buf_traverse = buf;
-	for (int i = 0; i < sd_len; i++) {
-		const struct bt_ad *cur_sd = &sd[i];
-		for (int j = 0; j < cur_sd->len; j++) {
-			*buf_traverse = cur_sd[j].data->data_len + 1;
-			buf_traverse++;
-			*buf_traverse = cur_sd[j].data->type;
-			buf_traverse++;
-			memcpy(buf_traverse, cur_sd[j].data->data, cur_sd[j].data->data_len);
-			buf_traverse += cur_sd[j].data->data_len;
-		}
-	}
+
+	required_buffer = data_len;
+	
 	return rsi_ble_set_scan_response_data(buf, required_buffer);
 }
 
@@ -412,15 +472,15 @@ static inline bool ad_has_name(const struct bt_data *ad, size_t ad_len)
 static int le_adv_update(struct bt_le_ext_adv *adv,
 			 const struct bt_data *ad, size_t ad_len,
 			 const struct bt_data *sd, size_t sd_len,
-			 bool ext_adv, bool scannable, bool use_name,
-			 bool force_name_in_ad)
+			 bool ext_adv, bool scannable, 
+			 enum adv_name_type name_type)
 {
 	struct bt_ad d[2] = {};
 	struct bt_data data;
 	size_t d_len;
 	int err;
 
-	if (use_name) {
+	if (name_type != ADV_NAME_TYPE_NONE) {
 		const char *name = bt_get_name();
 
 		if ((ad && ad_has_name(ad, ad_len)) ||
@@ -434,12 +494,12 @@ static int le_adv_update(struct bt_le_ext_adv *adv,
 			name, strlen(name));
 	}
 
-	if (!(ext_adv && scannable) || force_name_in_ad) {
+	if (!(ext_adv && scannable)) {
 		d_len = 1;
 		d[0].data = ad;
 		d[0].len = ad_len;
 
-		if (use_name && (!scannable || force_name_in_ad)) {
+		if (name_type == ADV_NAME_TYPE_AD) {
 			d[1].data = &data;
 			d[1].len = 1;
 			d_len = 2;
@@ -456,7 +516,7 @@ static int le_adv_update(struct bt_le_ext_adv *adv,
 		d[0].data = sd;
 		d[0].len = sd_len;
 
-		if (use_name && !force_name_in_ad) {
+		if (name_type == ADV_NAME_TYPE_SD) {
 			d[1].data = &data;
 			d[1].len = 1;
 			d_len = 2;
@@ -489,7 +549,7 @@ int bt_le_adv_update_data(const struct bt_data *ad, size_t ad_len,
 			  const struct bt_data *sd, size_t sd_len)
 {
 	struct bt_le_ext_adv *adv = &dev_adv;
-	bool scannable, use_name, force_name_in_ad;
+	bool scannable;
 
 	if (!adv) {
 		return -EINVAL;
@@ -500,11 +560,9 @@ int bt_le_adv_update_data(const struct bt_data *ad, size_t ad_len,
 	}
 
 	scannable = atomic_test_bit(adv->flags, BT_ADV_SCANNABLE);
-	use_name = atomic_test_bit(adv->flags, BT_ADV_INCLUDE_NAME);
-	force_name_in_ad = atomic_test_bit(adv->flags, BT_ADV_FORCE_NAME_IN_AD);
 
 	return le_adv_update(adv, ad, ad_len, sd, sd_len, false, scannable,
-			     use_name, force_name_in_ad);
+			     get_adv_name_type(adv));
 }
 
 /**
@@ -617,8 +675,9 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 			   const struct bt_data *sd, size_t sd_len)
 {
 	rsi_ble_req_adv_t set_param;
-	bool dir_adv = (param->peer != NULL), scannable;
+	bool dir_adv = (param->peer != NULL), scannable = false;
 	int err;
+	enum adv_name_type name_type;
 
 	if (!atomic_test_bit(bt_dev_flags, BT_DEV_READY)) {
 		return -EAGAIN;
@@ -627,6 +686,11 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 	if (!valid_adv_param(param)) {
 		return -EINVAL;
 	}
+
+	/*todo*/
+	// if (atomic_test_bit(adv->flags, BT_ADV_ENABLED)) {
+	// 	return -EALREADY;
+	// }
 
 	(void)memset(&set_param, 0, sizeof(set_param));
 
@@ -643,9 +707,11 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 	} else {
 		bt_addr_le_copy(&adv->target_addr, BT_ADDR_LE_ANY);
 	}
+	
+	name_type = get_adv_name_type_param(param);
 
 	if (param->options & BT_LE_ADV_OPT_CONNECTABLE) {
-		scannable = true;
+		// scannable = true;
 
 		if (dir_adv) {
 			if (param->options & BT_LE_ADV_OPT_DIR_MODE_LOW_DUTY) {
@@ -657,13 +723,15 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 			memcpy(set_param.direct_addr, param->peer->a.val, 6);
 			set_param.direct_addr_type = param->peer->type;
 		} else {
+			scannable = true;
 			set_param.adv_type = UNDIR_CONN;
 		}
+	} else if ((param->options & BT_LE_ADV_OPT_SCANNABLE) || sd || 
+		   (name_type == ADV_NAME_TYPE_SD)){
+			scannable = true;
+			set_param.adv_type = UNDIR_SCAN;
 	} else {
-		scannable = sd || (param->options & BT_LE_ADV_OPT_USE_NAME);
-
-		set_param.adv_type = scannable ? UNDIR_SCAN :
-				     UNDIR_NON_CONN;
+		set_param.adv_channel_map = UNDIR_NON_CONN;
 	}
 
 	memcpy(&adv_params, &set_param, sizeof(set_param));
@@ -671,9 +739,7 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 
 	if (!dir_adv) {
 		err = le_adv_update(adv, ad, ad_len, sd, sd_len, false,
-				    scannable,
-				    param->options & BT_LE_ADV_OPT_USE_NAME,
-				    param->options & BT_LE_ADV_OPT_FORCE_NAME_IN_AD);
+				    scannable, name_type);
 		if (err) {
 			return err;
 		}
@@ -688,10 +754,10 @@ int bt_le_adv_start_legacy(struct bt_le_ext_adv *adv,
 	atomic_set_bit_to(adv->flags, BT_ADV_PERSIST, !dir_adv &&
 			  !(param->options & BT_LE_ADV_OPT_ONE_TIME));
 
-	atomic_set_bit_to(adv->flags, BT_ADV_INCLUDE_NAME,
+	atomic_set_bit_to(adv->flags, BT_ADV_INCLUDE_NAME_AD,
 			  param->options & BT_LE_ADV_OPT_USE_NAME);
 
-	atomic_set_bit_to(adv->flags, BT_ADV_FORCE_NAME_IN_AD,
+	atomic_set_bit_to(adv->flags, BT_ADV_INCLUDE_NAME_SD,
 			  param->options & BT_LE_ADV_OPT_FORCE_NAME_IN_AD);
 
 	atomic_set_bit_to(adv->flags, BT_ADV_CONNECTABLE,
