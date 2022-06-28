@@ -104,10 +104,10 @@ const char *bt_uuid_str_real(const struct bt_uuid *uuid);
 
 void rsi_connection_cleanup_task(void);
 
-#define bt_hex(buf, len) log_strdup(bt_hex_real(buf, len))
-#define bt_addr_str(addr) log_strdup(bt_addr_str_real(addr))
-#define bt_addr_le_str(addr) log_strdup(bt_addr_le_str_real(addr))
-#define bt_uuid_str(uuid) log_strdup(bt_uuid_str_real(uuid))
+#define bt_hex(buf, len) bt_hex_real(buf, len)
+#define bt_addr_str(addr) bt_addr_str_real(addr)
+#define bt_addr_le_str(addr) bt_addr_le_str_real(addr)
+#define bt_uuid_str(uuid) bt_uuid_str_real(uuid)
 
 
 void rsi_bt_raise_evt();

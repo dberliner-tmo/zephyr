@@ -212,7 +212,7 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     /*
      * 9.1.5 int32_t rsi_wlan_connect(int8_t *ssid, rsi_security_mode_t sec_type, void *secret_key)
      */
-    ret = rsi_wlan_connect(params->ssid, rsi_security, rsi_psk);
+    ret = rsi_wlan_connect((int8_t*)params->ssid, rsi_security, rsi_psk);
 
     wifi_mgmt_raise_connect_result_event(rs9116w_dev->net_iface, ret);
 
