@@ -17,7 +17,6 @@
 #define MDM_MAX_DATA_LENGTH		  1500
 #define MDM_RECV_MAX_BUF		  20
 #define MDM_RECV_BUF_SIZE		  1500
-#define MDM_MAX_SOCKETS			  5
 #define MDM_BASE_SOCKET_NUM		  0
 #define MDM_NETWORK_RETRY_COUNT		  10
 #define MDM_INIT_RETRY_COUNT		  10
