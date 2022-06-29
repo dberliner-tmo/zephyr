@@ -32,6 +32,8 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #include "tls_internal.h"
 #endif
 
+#define MDM_MAX_SOCKETS CONFIG_MODEM_MURATA_1SC_SOCKET_COUNT
+
 #define MAX_FILENAME_LEN         32
 #define MDM_BOOT_DELAY	         6
 

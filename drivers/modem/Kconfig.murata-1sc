@@ -47,6 +47,15 @@ config MODEM_MURATA_1SC_INIT_PRIORITY
           Note that the priority needs to be lower than the net stack
           so that it can start before the networking sub-system.
 
+config MODEM_MURATA_1SC_SOCKET_COUNT
+        int "MURATA_1SC Maximum concurrent sockets allowed"
+        range 1 5
+        default 5
+        help
+          This value sets the maximum number of allowed concurrent sockets 
+          for the 1sc modem.
+
+
 config AMAZON_CA_ROOT_SLOT
         int "Amazon Root CA slot"
         default 10
