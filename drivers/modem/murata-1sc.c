@@ -17,6 +17,7 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #include <device.h>
 #include <net/net_offload.h>
 #include <net/socket_offload.h>
+#include <fcntl.h>
 #include "drivers/modem/murata-1sc.h"
 #include "modem_context.h"
 #include "modem_receiver.h"
@@ -2261,7 +2262,6 @@ static int ioctl_query(enum mdmdata_e idx, void *buf)
 	}
 
 	switch(idx) {
-
 		case imei_e:
 		strcpy(buf, mdata.mdm_imei);
 		break;
@@ -2984,6 +2984,8 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 	// assuming one instance for now
 
 	switch (request) {
+		case F_GETFL:
+			return 0; //Always report that we're a blocking socket
 		case ZFD_IOCTL_POLL_PREPARE: {
 			struct zsock_pollfd *pfd;
 			struct k_poll_event **pev;
