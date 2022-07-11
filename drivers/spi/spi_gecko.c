@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(spi_gecko);
 #define CLOCK_USART(id) _CONCAT(cmuClock_USART, id)
 
 #define SPI_WORD_SIZE 8
+#define SPI_REF_MIN_DIVIDER 6
 
 /* Structure Declarations */
 
@@ -107,6 +108,36 @@ static int spi_config(const struct device *dev,
 	gecko_config->base->FRAME = usartDatabits8
 	    | USART_FRAME_STOPBITS_DEFAULT
 	    | USART_FRAME_PARITY_DEFAULT;
+
+	if (data->ctx.config != config) {
+		uint32_t ref_freq;
+#if defined(_SILICON_LABS_32B_SERIES_2)
+    	ref_freq = CMU_ClockFreqGet(cmuClock_PCLK);
+#else
+#if defined(_CMU_HFPERPRESCB_MASK)
+		if (usart == USART2) {
+			ref_freq = CMU_ClockFreqGet(cmuClock_HFPERB);
+		} else {
+			ref_freq = CMU_ClockFreqGet(cmuClock_HFPER);
+		}
+#else
+    	ref_freq = CMU_ClockFreqGet(cmuClock_HFPER);
+#endif
+#endif
+		const struct spi_gecko_config *gecko_config = dev->config;
+		uint32_t target_freq = config->frequency;
+		/* Lowest divider supported is 6 */
+		if (config->frequency > ref_freq / SPI_REF_MIN_DIVIDER) {
+			/* Frequency is higher than supported */
+			LOG_WRN("Target frequency of %uHz too high, setting frequency to highest available %uHz\n", target_freq, ref_freq>>1);
+			target_freq = ref_freq / SPI_REF_MIN_DIVIDER;
+
+		}
+		
+		USART_BaudrateSyncSet(gecko_config->base, 0, target_freq);
+		LOG_DBG("Actual frequency = %u\n", USART_BaudrateGet(gecko_config->base));
+		
+	}
 
 	/* At this point, it's mandatory to set this on the context! */
 	data->ctx.config = config;
