@@ -43,9 +43,11 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 
+#ifdef CONFIG_USER_CA_DER_ENABLED
 static const unsigned char ca_certificate[] = {
 #include CONFIG_USER_CA_DER_FILE
 };
+#endif
 
 #define CERTCMD_WRITE_SIZE 32+MAX_FILENAME_LEN // assume filename maxlen = 32
 #define PEM_BUFF_SIZE      6145	               // terminate with \" & 0
@@ -1160,6 +1162,9 @@ MODEM_CMD_DEFINE(on_cmd_sockopen)
 	return 0;
 }
 
+
+static bool got_pdn_flg;
+
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 #define CLIENT_CA_CERTIFICATE_TAG	1
 static int offload_setsockopt(void *obj, int level, int optname,
@@ -1183,7 +1188,6 @@ MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
 	return 0;
 }
 
-static bool got_pdn_flg;
 /**
  * @brief check whether filename exists in modem's D:CERTS/USER/ folder
  * @return 0 if file exists on modem; -1 if not
@@ -1210,6 +1214,7 @@ static int check_mdm_store_file(char *filename)
 
 }
 
+#ifdef CONFIG_USER_CA_DER_ENABLED
 /**
  * @brief Hard-code slot 10 for public CA
  */
@@ -1228,13 +1233,16 @@ static int set_cert_profile(void)
 	}
 	return ret;
 }
+#endif
 
 /**
  * @brief Misc init after normal mdm init
  */
 static int post_mdm_init(void)
 {
-	int ret;
+
+	int ret = 0;
+#ifdef CONFIG_USER_CA_DER_ENABLED
 	struct modem_socket sock;
 	ret = check_mdm_store_file(CONFIG_USER_CA_FILE);
 	if (ret != 0) {
@@ -1256,6 +1264,7 @@ static int post_mdm_init(void)
 	if (ret < 0) {
 		LOG_ERR("failed to setsockopt in post_mdm_init, ret = %d", ret);
 	}
+#endif
 	return ret;
 }
 #endif
@@ -3422,6 +3431,7 @@ static int murata_1sc_init(const struct device *dev)
 
 	murata_1sc_setup();
 
+
 error:
 	return 0;
 }
@@ -3457,6 +3467,7 @@ static void murata_1sc_net_iface_init(struct net_if *iface)
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
 	iface->if_dev->offload = &modem_net_offload;
 	iface->if_dev->socket_offload = offload_socket;
+	murata_socket_offload_init();
 #endif
 
 }
