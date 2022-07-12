@@ -2858,7 +2858,7 @@ static int init_fw_xfer(struct init_fw_data_t *ifd)
 	printk("\tinit_fw_xfer: at cmd = %s\n", at_cmd);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 
 	LOG_DBG("\tinit_fw_xfer: ret = %d", ret);
 
