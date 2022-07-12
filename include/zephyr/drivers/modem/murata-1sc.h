@@ -46,7 +46,7 @@
 #define MAX_CARRIER_RESP_SIZE	          64
 #define MAX_SIGSTR_RESP_SIZE              32
 #define MAX_IP_RESP_SIZE                  256
-
+#define MDM_GOLDEN_LEN			  16
 
 /**
  * this is for tmo_shell to call for overriding the wifi dns_offload

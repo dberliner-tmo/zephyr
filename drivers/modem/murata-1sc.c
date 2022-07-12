@@ -36,7 +36,10 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #define MDM_MAX_SOCKETS CONFIG_MODEM_MURATA_1SC_SOCKET_COUNT
 
 #define MAX_FILENAME_LEN         32
-#define MDM_BOOT_DELAY	         6
+#define MDM_BOOT_DELAY           6      // seconds
+#define MDM_WAKE_DELAY           5000    // milliseconds
+#define MDM_CMD_RSP_TIME         K_SECONDS(2)
+#define MDM_CMD_LONG_RSP_TIME    K_SECONDS(6)
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 
@@ -155,6 +158,7 @@ struct murata_1sc_data {
 	char mdm_phn[MDM_PHN_LENGTH];
 	char mdm_carrier[MDM_CARRIER_LENGTH];
 	char mdm_apn[MDM_APN_LENGTH];
+	bool is_awake;
 
 	/* Socket from which we are currently reading data. */
 	int sock_fd;
@@ -185,6 +189,8 @@ static const struct gpio_dt_spec wake_host_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_w
 static const struct gpio_dt_spec wake_mdm_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wake_mdm_gpios);
 static const struct gpio_dt_spec reset_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_reset_gpios);
 static const struct gpio_dt_spec rst_done_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_rst_done_gpios);
+static const struct gpio_dt_spec mdm_rx_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_rx_gpios);
+static const struct gpio_dt_spec mdm_tx_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_tx_gpios);
 
 static struct k_thread	       modem_rx_thread;
 static struct murata_1sc_data  mdata;
@@ -334,7 +340,7 @@ static ssize_t send_socket_data(struct modem_socket *sock,
 	/* Send the command */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
-			&mdata.sem_response, K_SECONDS(6));
+			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 
 	k_sem_give(&mdata.sem_xlate_buf);
 
@@ -559,7 +565,6 @@ MODEM_CMD_DEFINE(on_cmd_get_iccid)
 /**
  * @brief Handler for BAND info
  */
-static bool needto_set_bands = false;
 MODEM_CMD_DEFINE(on_cmd_get_bands)
 {
 #define MAX_BANDS_STR_SZ	64
@@ -572,11 +577,6 @@ MODEM_CMD_DEFINE(on_cmd_get_bands)
 	/* Log the received information. */
 	LOG_DBG("BANDS - %s", bandstr);
 
-	needto_set_bands = false;
-	if (strcmp(bandstr, "  2 ,4 ,12") != 0) {
-		LOG_WRN("BANDS - %s", bandstr);
-		needto_set_bands = true;
-	}
 	return 0;
 }
 
@@ -663,7 +663,7 @@ static int set_autoconn_on(void)
 
 	LOG_WRN("autoconnect is set to false, will now set to true");
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(2));
+			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
@@ -676,14 +676,33 @@ static int set_autoconn_on(void)
 static int set_bands(void)
 {
 	const char at_cmd[] = "AT\%SETCFG=\"BAND\",\"2\",\"4\",\"12\"";
-	LOG_WRN("Setting bands to 2, 4, 12");
+	LOG_INF("Setting bands to 2, 4, 12");
+	modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+
+	// Setting bands is disabled in golden images,
+	// but still needed for sample images, so
+	// ignore error returned from modem_cmd_send
+
+	return 0;
+}
+
+/**
+ * @brief Set boot delay to 0
+ */
+static int set_boot_delay(void)
+{
+	const char at_cmd[] = "AT\%SETBDELAY=0";
+	LOG_INF("Setting boot delay to 0");
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(2));
+		NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 	return ret;
 }
+
 
 /**
  * @brief Set CFUN to 1 (on) or 0 (off)
@@ -696,13 +715,93 @@ static int set_cfun(int on)
 	char at_cmd[32];
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
+	if (on && mdata.is_awake) {
+		LOG_WRN("Modem is already awake");
+	} else if (!on && !mdata.is_awake) {
+		LOG_WRN("Modem is already asleep");
+	}
+
+#if 0
+	if (on) {
+		LOG_WRN("TURNING MODEM ON");
+		// HIFC A Host Resume Handshake
+		gpio_pin_set_dt(&wake_mdm_gpio, 1);
+		gpio_pin_set_dt(&mdm_tx_gpio, 1);
+
+		k_sleep(K_MSEC(20));
+
+		gpio_pin_set_dt(&wake_mdm_gpio, 0);
+
+		int i = 0;
+		for (int i=0;i<50;i++) {
+			if (gpio_pin_get_dt(&mdm_rx_gpio) == 0) {
+				break;
+			}
+			k_sleep(K_MSEC(100));
+		}
+		if (i== 50) {
+			LOG_ERR("Modem rx did not go high");
+		}
+
+		gpio_pin_set_dt(&mdm_tx_gpio, 0);
+
+		for (int i=0;i<50;i++) {
+			if (gpio_pin_get_dt(&wake_host_gpio) == 0) {
+				break;
+			}
+			k_sleep(K_MSEC(100));
+		}
+		if (i== 50) {
+			LOG_ERR("Modem host did not go high!");
+		}
+	}
+#endif
 	snprintk(at_cmd, sizeof(at_cmd), "AT+CFUN=%d", on);
 	LOG_DBG("%s",at_cmd);
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(6));
+			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
+	} else {
+		mdata.is_awake = on;
 	}
+
+#if 0
+	if (!on) {
+		LOG_WRN("TURNING MODEM OFF!");
+
+		// HIFC A Host Resume Handshake
+		gpio_pin_set_dt(&wake_mdm_gpio, 0);
+		gpio_pin_set_dt(&mdm_tx_gpio, 0);
+
+		k_sleep(K_MSEC(20));
+
+		gpio_pin_set_dt(&wake_mdm_gpio, 1);
+
+		int i = 0;
+		for (int i=0;i<50;i++) {
+			if (gpio_pin_get_dt(&mdm_rx_gpio)) {
+				break;
+			}
+			k_sleep(K_MSEC(100));
+		}
+		if (i== 50) {
+			LOG_ERR("Modem rx did not go low");
+		}
+
+		gpio_pin_set_dt(&mdm_tx_gpio, 1);
+
+		for (int i=0;i<50;i++) {
+			if (gpio_pin_get_dt(&wake_host_gpio)) {
+				break;
+			}
+			k_sleep(K_MSEC(100));
+		}
+		if (i== 50) {
+			LOG_ERR("Modem host did not go low!");
+		}
+	}
+#endif
 	return ret;
 }
 
@@ -726,7 +825,7 @@ static int set_pdnset(void)
 #endif
 		LOG_DBG("%s",at_cmd);
 		int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(3));
+				NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 		if (ret < 0) {
 			LOG_ERR("%s ret:%d", at_cmd, ret);
 		}
@@ -737,6 +836,42 @@ static int set_pdnset(void)
 #else
 		LOG_DBG("No CONFIG_MODEM_MURATA_1SC_APN setting found");
 #endif
+	return ret;
+}
+
+/**
+ * @brief Enable or disable sleep mode
+ */
+static int enable_sleep_mode(bool enable)
+{
+	char at_cmd[256];
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%SETACFG=pm.conf.sleep_mode,%s", enable ? "enable" : "disable");
+	LOG_INF("%s sleep mode", enable ? "Enabling" : "Disabling");
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+}
+
+/**
+ * @brief Set max allowed (low) power mode
+ *
+ * @param pm_mode is string representing lowest power mode
+ *
+ * Supported modes are dh0, dh1, dh2, ds, and ls
+ */
+static int set_max_allowed_pm_mode(const char *pm_mode)
+{
+	char at_cmd[256];
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%SETACFG=pm.conf.max_allowed_pm_mode,%s", pm_mode);
+	LOG_INF("Setting max allowed PM mode to %s", pm_mode);
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
 	return ret;
 }
 
@@ -838,7 +973,7 @@ static int get_ipv4_config(void)
 	};
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
@@ -948,7 +1083,7 @@ static int get_dns_ip(const char *dn)
 	snprintk(at_cmd, sizeof(at_cmd), "AT%%DNSRSLV=0,\"%s\"", dn);
 	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(2));
+			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
@@ -1065,7 +1200,7 @@ static int check_mdm_store_file(char *filename)
 	snprintk(at_cmd, sizeof(at_cmd), "AT%%CERTCMD=\"READ\",\"%s\"", filename);
 	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(2));
+			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -1087,7 +1222,7 @@ static int set_cert_profile(void)
 	LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, cert_cmd_buf.cert_cmd_write,
-			&mdata.sem_response, K_SECONDS(5));
+			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("sendmdmcmd,ret = %d", ret);
 	}
@@ -1158,7 +1293,7 @@ static int get_carrier(char *rbuf)
 	};
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -1174,7 +1309,7 @@ static int reset_modem()
 {
 	const char at_cmd[] = "ATZ";
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-		NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(1));
+		NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("error rebooting modem");
 	} else {
@@ -1197,7 +1332,7 @@ static void socket_close(struct modem_socket *sock)
 		/* Tell the modem to close the socket. */
 		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"DEACTIVATE\",%d", sock->sock_fd);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+				NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 
 		if (ret < 0) {
 			LOG_ERR("%s ret:%d", at_cmd, ret);
@@ -1206,7 +1341,7 @@ static void socket_close(struct modem_socket *sock)
 		/* Tell the modem to delete the socket. */
 		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"DELETE\",%d", sock->sock_fd);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+				NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 		if (ret < 0) {
 			LOG_ERR("%s ret:%d", at_cmd, ret);
 		}
@@ -1227,14 +1362,14 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 
 	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 
 	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
@@ -1348,7 +1483,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 
 	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_DBG("recv_sms_msg error 1\n");
 		LOG_ERR("%s ret:%d", at_cmd, ret);
@@ -1360,7 +1495,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 	while (count <= 1) {
 		snprintk(at_cmd, sizeof(at_cmd), "AT+CMGL=\"ALL\"");
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(5));
+				data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret < 0) {
 			LOG_ERR("recv_sms_msg error 2, %s ret = %d\n", at_cmd, ret);
 		}
@@ -1373,7 +1508,7 @@ static int recv_sms_msg(void *obj, struct sms_in *sms)
 				// Delete the message from the modem
 				snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_index);
 				ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-						NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+						NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 				if (ret < 0) {
 					LOG_DBG("recv_sms_msg error 3\n");
 					LOG_ERR("%s ret:%d", at_cmd, ret);
@@ -1475,9 +1610,9 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
 
 	/* Tell the modem to give us data (%SOCKETDATA:socket_id,len,0,data). */
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
-			K_SECONDS(6));
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, data_cmd,
+			ARRAY_SIZE(data_cmd), sendbuf, &mdata.sem_response,
+			MDM_CMD_LONG_RSP_TIME);
 
 	LOG_DBG("Returned from modem_cmd_send with ret=%d", ret);
 	LOG_DBG("rec_len = %d", sock_data.recv_read_len);
@@ -1619,7 +1754,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			cmd, ARRAY_SIZE(cmd), at_cmd,
-			&mdata.sem_response, K_SECONDS(1));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
@@ -1651,7 +1786,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, at_cmd,
-				&mdata.sem_response, K_SECONDS(8));
+				&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		LOG_DBG("%s", at_cmd);
 		if (ret < 0) {
 			LOG_ERR("%s ret: %d", at_cmd, ret);
@@ -1667,7 +1802,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, at_cmd,
-			&mdata.sem_response, K_SECONDS(8));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", at_cmd, ret);
@@ -1998,7 +2133,7 @@ static int get_sigstrength(char *rbuf)
 	};
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, at_cmd, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -2040,7 +2175,7 @@ static int get_cnum(char *rbuf)
 	};
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -2089,7 +2224,7 @@ static int get_ip(char *rbuf)
 	};
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-		data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+		data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -2127,7 +2262,7 @@ static int get_version(char *rbuf)
 	};
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(2));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -2163,7 +2298,7 @@ static int get_sim_info(char *rbuf)
 
 	const char at_cmd[] = "AT\%STATUS=\"USIM\"";
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
@@ -2217,12 +2352,66 @@ static int get_apn(char *rbuf)
 
 	const char at_cmd[] = "AT\%PDNSET?";
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(2));
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
 	} else {
 		memcpy(rbuf, mdata.mdm_apn, sizeof(mdata.mdm_apn));
+	}
+	return ret;
+}
+
+/**
+ * @brief Check whether modem is awake
+ */
+static int murata_1sc_is_awake(char *rbuf)
+{
+	/* TBD: Sample an input pin depending on current lowest-power mode
+	 * For now, just return most recent action
+	 * int ret = gpio_pin_get_dt(&wake_host_gpio);
+	 */
+	int ret = mdata.is_awake;
+	if (ret) {
+		strcpy(rbuf, "AWAKE");
+	} else {
+		strcpy(rbuf, "ASLEEP");
+	}
+	return ret;
+}
+
+/**
+ * @brief Handler for AT%SETCFG="SC_STATE","1"
+ */
+MODEM_CMD_DEFINE(on_cmd_sc_state)
+{
+	return 0;
+}
+
+/**
+ * @brief check whether current FW image is golden
+ */
+static int is_golden(char *rbuf)
+{
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%GETSYSCFG:", on_cmd_sc_state, 1U, "")
+	};
+
+	char at_cmd[] = "AT\%SETCFG=\"SC_STATE\",\"1\"";
+
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
+
+	if (ret == -EIO) {
+		strcpy(rbuf, "GOLDEN");
+		return 0;
+	} else if (ret >= 0) {
+		strcpy(rbuf, "SAMPLE");
+		return 1;
+	} else {
+		LOG_WRN("is_golden returned %d", ret);
 	}
 	return ret;
 }
@@ -2239,16 +2428,20 @@ int murata_socket_offload_init(void)
 }
 
 enum mdmdata_e {
+	apn_e,
+	awake_e,
+	connsts_e,
+	golden_e,
+	iccid_e,
 	imei_e,
 	imsi_e,
-	iccid_e,
-	ssi_e,
-	msisdn_e,
-	connsts_e,
 	ip_e,
-	version_e,
+	msisdn_e,
 	sim_info_e,
-	apn_e,
+	sleep_e,
+	ssi_e,
+	version_e,
+	wake_e,
 	invalid
 } mdmdata_e;
 
@@ -2301,6 +2494,22 @@ static int ioctl_query(enum mdmdata_e idx, void *buf)
 		ret = get_apn(buf);
 		break;
 
+		case sleep_e:
+		ret = set_cfun(0);
+		break;
+
+		case wake_e:
+		ret = set_cfun(1);
+		break;
+
+		case awake_e:
+		ret = murata_1sc_is_awake(buf);
+		break;
+
+		case golden_e:
+		ret = is_golden(buf);
+		break;
+
 		default:
 		LOG_ERR("invalid request");
 		ret = -1;
@@ -2322,18 +2531,23 @@ struct mdmdata_cmd_t{
  */
 struct mdmdata_cmd_t cmd_pool[] = {
 	{"APN",      apn_e},
+	{"AWAKE",    awake_e},
 	{"CONN_STS", connsts_e},
 	{"CONN",     connsts_e},
+	{"GOLD",     golden_e},
+	{"GOLDEN",   golden_e},
 	{"ICCID",    iccid_e},
 	{"IMEI",     imei_e},
 	{"IMSI",     imsi_e},
 	{"IP",       ip_e},
 	{"MSISDN",   msisdn_e},
+	{"SLEEP",    sleep_e},
 	{"SSI",      ssi_e},
 	{"STAT",     connsts_e},
 	{"SIM",      sim_info_e},
 	{"VERSION",  version_e},
 	{"VER",      version_e},
+	{"WAKE",     wake_e},
 	{}
 };
 
@@ -2419,9 +2633,8 @@ static ssize_t send_cert(struct modem_socket *sock,
 				"AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type%2);
 		cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintk
 		LOG_DBG("sptr: %s", sptr);
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, sptr,
-				&mdata.sem_response, K_SECONDS(5));
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U,
+				sptr, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret < 0) {
 			if (ret == -116) {
 				ret = 0;	//fake good ret
@@ -2439,7 +2652,7 @@ static ssize_t send_cert(struct modem_socket *sock,
 		LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, cert_cmd_buf.cert_cmd_write,
-				&mdata.sem_response, K_SECONDS(5));
+				&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret < 0) {
 			LOG_ERR("failure, sendmdmcmd,ret = %d", ret);
 			goto exit;
@@ -2452,7 +2665,7 @@ static ssize_t send_cert(struct modem_socket *sock,
 		LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 				NULL, 0U, cert_cmd_buf.cert_cmd_write,
-				&mdata.sem_response, K_SECONDS(5));
+				&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret < 0) {
 			LOG_ERR("sendmdmcmd,ret = %d", ret);
 			goto exit;
@@ -2641,10 +2854,11 @@ static int init_fw_xfer(struct init_fw_data_t *ifd)
 	snprintk(at_cmd, sizeof(at_cmd), "AT%%FILECMD=\"PUT\",\"%s\",1, %u, \"%u\"",
 		ifd->imagename, (uint32_t)ifd->imagesize, (uint32_t)ifd->imagecrc);
 
-	LOG_DBG("\tinit_fw_xfer: at cmd = %s", at_cmd);
+	LOG_WRN("\tinit_fw_xfer: at cmd = %s", at_cmd);
+	printk("\tinit_fw_xfer: at cmd = %s\n", at_cmd);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, K_SECONDS(1));
+			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	LOG_DBG("\tinit_fw_xfer: ret = %d", ret);
 
@@ -2700,7 +2914,7 @@ static int send_fw_header(const char *data)
 	/* Send the command */
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
-			&mdata.sem_response, K_SECONDS(4));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	k_sem_give(&mdata.sem_xlate_buf);
 
@@ -2755,7 +2969,7 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 	/* Send the command */
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), mdata.xlate_buf,
-			&mdata.sem_response, K_SECONDS(4));
+			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 
 	k_sem_give(&mdata.sem_xlate_buf);
 
@@ -2798,7 +3012,7 @@ static int init_fw_upgrade(const char *file)
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
-			&mdata.sem_response, K_SECONDS(1));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	LOG_DBG("Ret %d", ret);
 
@@ -2838,7 +3052,7 @@ static int get_file_chksum_ability(char *response)
 	chksum[0] = '\0';
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
-			&mdata.sem_response, K_SECONDS(1));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", at_cmd, ret);
@@ -2879,7 +3093,7 @@ static int get_file_mode(char *response)
 	file_cmd_full_access[0] = '\0';
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
-			&mdata.sem_response, K_SECONDS(1));
+			&mdata.sem_response, MDM_CMD_RSP_TIME);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", at_cmd, ret);
@@ -2894,6 +3108,10 @@ static int get_file_mode(char *response)
  */
 static int murata_1sc_setup(void)
 {
+	gpio_pin_set_dt(&reset_gpio, 1);
+	k_sleep(K_MSEC(20));
+	gpio_pin_set_dt(&reset_gpio, 0);
+
 	gpio_pin_set_dt(&wake_mdm_gpio, 1);
 	LOG_INF("Waiting %d secs for modem to boot...", MDM_BOOT_DELAY);
 	k_sleep(K_SECONDS(MDM_BOOT_DELAY));
@@ -2942,15 +3160,14 @@ top: ;
 	}
 #endif
 	set_pdnset();
+	set_bands();
+	set_boot_delay();
+	enable_sleep_mode(false);
+	set_max_allowed_pm_mode("dh2");
 		
 	bool needto_reset_modem = false;
 	if (needto_set_autoconn_to_true) {
 		set_autoconn_on();
-		needto_reset_modem = true;
-	}
-
-	if (needto_set_bands) {
-		set_bands();
 		needto_reset_modem = true;
 	}
 
@@ -3067,6 +3284,7 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 		case RESET_MODEM:
 			ret = reset_modem();
 			break;
+
 		default:
 			errno = EINVAL;
 			ret = -1;
@@ -3178,9 +3396,17 @@ static int murata_1sc_init(const struct device *dev)
 		goto error;
 	}
 
-	gpio_pin_set_dt(&reset_gpio, 1);
-	k_sleep(K_MSEC(20));
-	gpio_pin_set_dt(&reset_gpio, 0);
+	ret = gpio_pin_configure_dt(&mdm_rx_gpio, GPIO_INPUT);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "mdm_rx");
+		goto error;
+	}
+
+	ret = gpio_pin_configure_dt(&mdm_tx_gpio, GPIO_OUTPUT_LOW);
+	if (ret < 0) {
+		LOG_ERR("Failed to configure %s pin", "reset");
+		goto error;
+	}
 
 	ret = modem_context_register(&mctx);
 	if (ret < 0) {
