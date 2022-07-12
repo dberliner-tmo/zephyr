@@ -61,6 +61,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 
 #undef s6_addr
+#undef s6_addr32
 #undef IPPROTO_TCP
 #undef IPPROTO_UDP
 
@@ -235,7 +236,10 @@ static struct rsi_sockaddr *translate_z_to_rsi_addrs(const struct sockaddr *addr
 		memcpy(rsi_addr_in6->sin6_addr._S6_un._S6_u32,
 		       z_sockaddr_in6->sin6_addr.s6_addr,
 		       sizeof(rsi_addr_in6->sin6_addr._S6_un._S6_u32));
-
+		rsi_addr_in6->sin6_addr._S6_un._S6_u32[0] = sys_be32_to_cpu(rsi_addr_in6->sin6_addr._S6_un._S6_u32[0]);
+		rsi_addr_in6->sin6_addr._S6_un._S6_u32[1] = sys_be32_to_cpu(rsi_addr_in6->sin6_addr._S6_un._S6_u32[1]);
+		rsi_addr_in6->sin6_addr._S6_un._S6_u32[2] = sys_be32_to_cpu(rsi_addr_in6->sin6_addr._S6_un._S6_u32[2]);
+		rsi_addr_in6->sin6_addr._S6_un._S6_u32[3] = sys_be32_to_cpu(rsi_addr_in6->sin6_addr._S6_un._S6_u32[3]);
 		rsi_addr = (struct rsi_sockaddr *)rsi_addr_in6;
 	}
 
@@ -276,6 +280,10 @@ static void translate_rsi_to_z_addr(struct rsi_sockaddr *rsi_addr,
 			memcpy(z_sockaddr_in6->sin6_addr.s6_addr,
 			       rsi_addr_in6->sin6_addr._S6_un._S6_u32,
 			       sizeof(z_sockaddr_in6->sin6_addr.s6_addr));
+			z_sockaddr_in6->sin6_addr.s6_addr32[0] = sys_cpu_to_be32(z_sockaddr_in6->sin6_addr.s6_addr32[0]);
+			z_sockaddr_in6->sin6_addr.s6_addr32[1] = sys_cpu_to_be32(z_sockaddr_in6->sin6_addr.s6_addr32[1]);
+			z_sockaddr_in6->sin6_addr.s6_addr32[2] = sys_cpu_to_be32(z_sockaddr_in6->sin6_addr.s6_addr32[2]);
+			z_sockaddr_in6->sin6_addr.s6_addr32[3] = sys_cpu_to_be32(z_sockaddr_in6->sin6_addr.s6_addr32[3]);
 			*addrlen = sizeof(struct sockaddr_in6);
 		} else {
 			*addrlen = rsi_addrlen;
@@ -476,10 +484,9 @@ static int rs9116w_poll(struct zsock_pollfd *fds, int nfds, int msecs)
 	return retval;
 }
 
-//Deal with TLS !TODO
 #if IS_ENABLED(CONFIG_NET_SOCKETS_SOCKOPT_TLS) && IS_ENABLED(CONFIG_RS9116W_TLS_OFFLOAD)
 #include <sys/base64.h>
-uint8_t pem[CONFIG_RS9116W_TLS_PEM_BUF_SZ]; /* Todo: Make size configurable */
+uint8_t pem[CONFIG_RS9116W_TLS_PEM_BUF_SZ];
 
 static uint8_t cert_idx_ca = 0, cert_idx_pkey = 0, cert_idx_crt = 0;
 
@@ -515,14 +522,14 @@ static int map_credentials(int sd, const void *optval, socklen_t optlen)
 				header = "-----BEGIN CERTIFICATE-----\n";
 				footer = "\n-----END CERTIFICATE-----\n";
 				cert_idx = cert_idx_ca;
-				cert_idx_ca++;
-				cert_idx_ca %= 2;
+				// cert_idx_ca++;
+				// cert_idx_ca %= 2;
 				break;
 			case TLS_CREDENTIAL_SERVER_CERTIFICATE: 
 				cert_type = RSI_SSL_CLIENT; //So server cert and client cert are the same in zephyr?
 				cert_idx = cert_idx_crt;
-				cert_idx_crt++;
-				cert_idx_crt %= 2;
+				// cert_idx_crt++;
+				// cert_idx_crt %= 2;
 				header = "-----BEGIN CERTIFICATE-----\n";
 				footer = "\n-----END CERTIFICATE-----\n";
 				// if (cert_idx_crt == 2) {
@@ -532,8 +539,8 @@ static int map_credentials(int sd, const void *optval, socklen_t optlen)
 			case TLS_CREDENTIAL_PRIVATE_KEY:
 				cert_type = RSI_SSL_CLIENT_PRIVATE_KEY; //Maybe server?
 				cert_idx = cert_idx_pkey;
-				cert_idx_pkey++;
-				cert_idx_pkey %= 2;
+				// cert_idx_pkey++;
+				// cert_idx_pkey %= 2;
 				header = "-----BEGIN RSA PRIVATE KEY-----\n";
 				footer = "\n-----END RSA PRIVATE KEY-----\n";
 				break;
@@ -1083,13 +1090,13 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 
 		net_sin6(ai_addr)->sin6_family = ai->ai_family;
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[0] =
-			rsi_bytes4R_to_uint32(&addr[0]);
+			sys_cpu_to_be32(rsi_bytes4R_to_uint32(&addr[0]));
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[1] =
-			rsi_bytes4R_to_uint32(&addr[4]);
+			sys_cpu_to_be32(rsi_bytes4R_to_uint32(&addr[4]));
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[2] =
-			rsi_bytes4R_to_uint32(&addr[8]);
+			sys_cpu_to_be32(rsi_bytes4R_to_uint32(&addr[8]));
 		net_sin6(ai_addr)->sin6_addr.s6_addr32[3] =
-			rsi_bytes4R_to_uint32(&addr[12]);
+			sys_cpu_to_be32(rsi_bytes4R_to_uint32(&addr[12]));
 		net_sin6(ai_addr)->sin6_port = htons(port);
 		ai->ai_addrlen = sizeof(struct sockaddr_in6);
 	}
@@ -1120,7 +1127,12 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 				  struct zsock_addrinfo **res)
 {
 	int32_t retval = -1, retval4 = -1, retval6 = -1;
-	rsi_rsp_dns_query_t qr4, qr6;
+#if IS_ENABLED(CONFIG_NET_IPV4)
+	rsi_rsp_dns_query_t qr4;
+#endif
+#if IS_ENABLED(CONFIG_NET_IPV6)
+	rsi_rsp_dns_query_t qr6;
+#endif
 	uint32_t port = 0;
 	uint8_t type = SOCK_STREAM;
 	if (service) {
@@ -1129,9 +1141,12 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 			return DNS_EAI_SERVICE;
 		}
 	}
-
+#if IS_ENABLED(CONFIG_NET_IPV4)
 	memset(&qr4, 0, sizeof(qr4));
+#endif
+#if IS_ENABLED(CONFIG_NET_IPV6)
 	memset(&qr6, 0, sizeof(qr6));
+#endif
 
 	/* Check args: */
 	if (!res) {
@@ -1161,34 +1176,45 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 	struct sockaddr v4_addresses[2];
 	struct sockaddr v6_addresses[2];
 	int a4i = 0, a6i = 0;
+#if IS_ENABLED(CONFIG_NET_IPV4)
 	for (int i = 0; i < DNS_SERVER_COUNT; i++) {
 		if (strcmp(dns_servers[i], "")) {
 			char *server = dns_servers[i];
 			struct sockaddr addr;
 			if (net_ipaddr_parse(server, strlen(server), &addr)) {
 				if (addr.sa_family == Z_AF_INET && a4i < 2) {
-					memcpy(&v4_addresses[i], &addr, sizeof(addr));
+					memcpy(&v4_addresses[a4i], &addr, sizeof(addr));
 					a4i++;
 				} else if (addr.sa_family == Z_AF_INET6 && a6i < 2) {
-					memcpy(&v6_addresses[i], &addr, sizeof(addr));
+					memcpy(&v6_addresses[a6i], &addr, sizeof(addr));
 					a6i++;
 				}
 			}
 		}
 	}
 	if (a4i > 0) {
-		dns4_1 = &v4_addresses[0];
+		dns4_1 = net_sin(&v4_addresses[0])->sin_addr.s4_addr;
 		if (a4i > 1) {
-			dns4_2 = &v4_addresses[1];
+			dns4_2 = net_sin(&v4_addresses[1])->sin_addr.s4_addr;
 		}
 	}
-
+#endif
+#if IS_ENABLED(CONFIG_NET_IPV6)
 	if (a6i > 0) {
-		dns6_1 = &v6_addresses[0];
+		dns6_1 = net_sin6(&v6_addresses[0])->sin6_addr.s6_addr;
+		((uint32_t*)dns6_1)[0] = sys_be32_to_cpu(((uint32_t*)dns6_1)[0]);
+		((uint32_t*)dns6_1)[1] = sys_be32_to_cpu(((uint32_t*)dns6_1)[1]);
+		((uint32_t*)dns6_1)[2] = sys_be32_to_cpu(((uint32_t*)dns6_1)[2]);
+		((uint32_t*)dns6_1)[3] = sys_be32_to_cpu(((uint32_t*)dns6_1)[3]);
 		if (a6i > 1) {
-			dns6_2 = &v6_addresses[1];
+			dns6_2 = net_sin6(&v6_addresses[1])->sin6_addr.s6_addr;
+			((uint32_t*)dns6_2)[0] = sys_be32_to_cpu(((uint32_t*)dns6_2)[0]);
+			((uint32_t*)dns6_2)[1] = sys_be32_to_cpu(((uint32_t*)dns6_2)[1]);
+			((uint32_t*)dns6_2)[2] = sys_be32_to_cpu(((uint32_t*)dns6_2)[2]);
+			((uint32_t*)dns6_2)[3] = sys_be32_to_cpu(((uint32_t*)dns6_2)[3]);
 		}
 	}
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_NET_IPV4)
@@ -1211,7 +1237,7 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 	}
 
 	*res = NULL;
-	
+#if IS_ENABLED(CONFIG_NET_IPV4)
 	for (int i = 0; i < rsi_bytes2R_to_uint16(qr4.ip_count); i++){
 		retval = set_addr_info(qr4.ip_address[i].ipv4_address, false,
 			type, (uint16_t)port, res);
@@ -1222,6 +1248,8 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 			goto exit;
 		}	
 	}
+#endif
+#if IS_ENABLED(CONFIG_NET_IPV6)
 	for (int i = 0; i < rsi_bytes2R_to_uint16(qr6.ip_count); i++){
 		retval = set_addr_info(qr6.ip_address[i].ipv6_address, true,
 			type, (uint16_t)port, res);
@@ -1232,6 +1260,7 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 			goto exit;
 		}	
 	}
+#endif
 exit:
 	return retval;
 }

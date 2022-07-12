@@ -32,6 +32,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "rsi_wlan_apis.h"
 
 #undef s6_addr
+#undef s6_addr32
 
 #define RSI_OPERMODE_WLAN_BLE 13
 
@@ -266,8 +267,8 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     ret = rsi_config_ipaddress(RSI_IP_VERSION_4, ipv4_mode, ipv4_addr, ipv4_mask, ipv4_gw, (uint8_t *) &rsi_rsp_ipv4_parmas, sizeof(rsi_rsp_ipv4_parmas), 0);
     if (ret != 0)
     {
-        LOG_ERR("rsi_config_ipaddress error: %d", ret);
-        return ret;
+        LOG_WRN("ipv4: rsi_config_ipaddress error: %d", ret);
+        ret = 0;
     }
 
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.gateway, 4);
@@ -308,18 +309,22 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     ret = rsi_config_ipaddress(RSI_IP_VERSION_6, ipv6_mode, ipv6_addr, NULL, NULL, (uint8_t *) &rsi_rsp_ipv6_parmas, sizeof(rsi_rsp_ipv6_parmas), 0);
     if (ret != 0)
     {
-        LOG_ERR("rsi_config_ipaddress error: %x", ret);
-        return ret;
+        LOG_WRN("ipv6: rsi_config_ipaddress error: %x", ret);
+        ret = 0;
     }
 
     memcpy(addr6.s6_addr, rsi_rsp_ipv6_parmas.ipaddr6, 16);
+    addr6.s6_addr32[0] = sys_cpu_to_be32(addr6.s6_addr32[0]);
+    addr6.s6_addr32[1] = sys_cpu_to_be32(addr6.s6_addr32[1]);
+    addr6.s6_addr32[2] = sys_cpu_to_be32(addr6.s6_addr32[2]);
+    addr6.s6_addr32[3] = sys_cpu_to_be32(addr6.s6_addr32[3]);
     // net_if_ipv6_prefix_add(rs9116w_dev->net_iface, &addr6, rsi_rsp_ipv6_parmas.prefixLength, 0);
 
     LOG_DBG("ip6 = %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
-            sys_be16_to_cpu(addr6.s6_addr16[0]), sys_be16_to_cpu(addr6.s6_addr16[1]),
-            sys_be16_to_cpu(addr6.s6_addr16[2]), sys_be16_to_cpu(addr6.s6_addr16[3]),
-            sys_be16_to_cpu(addr6.s6_addr16[4]), sys_be16_to_cpu(addr6.s6_addr16[5]),
-            sys_be16_to_cpu(addr6.s6_addr16[6]), sys_be16_to_cpu(addr6.s6_addr16[7])
+            addr6.s6_addr16[1], addr6.s6_addr16[0],
+            addr6.s6_addr16[3], addr6.s6_addr16[2],
+            addr6.s6_addr16[5], addr6.s6_addr16[4],
+            addr6.s6_addr16[7], addr6.s6_addr16[6]
     );
 #if IS_ENABLED(CONFIG_NET_NATIVE_IPV6)
     net_if_ipv6_addr_add(rs9116w_dev->net_iface, &addr6, NET_ADDR_DHCP, 0);
@@ -408,6 +413,10 @@ static int rs9116w_mgmt_status(const struct device *dev, status_result_cb_t cb)
         // winfo.ipv4_address
         memcpy(res.ip4.s4_addr, winfo.ipv4_address, 4);
         memcpy(res.ip6.s6_addr, winfo.ipv6_address, 16);
+        res.ip6.s6_addr32[0] = sys_cpu_to_be32(res.ip6.s6_addr32[0]);
+        res.ip6.s6_addr32[1] = sys_cpu_to_be32(res.ip6.s6_addr32[1]);
+        res.ip6.s6_addr32[2] = sys_cpu_to_be32(res.ip6.s6_addr32[2]);
+        res.ip6.s6_addr32[3] = sys_cpu_to_be32(res.ip6.s6_addr32[3]);
     } else {
         res.ssid = NULL;
         res.ssid_length = 0;
@@ -540,6 +549,7 @@ static int rs9116w_init(const struct device *dev)
     return 0;
 }
 
+// TODO: make these asynchronous
 static const struct net_wifi_mgmt_offload rs9116w_api = {
     .iface_api.init = rs9116w_iface_init, // called after device init fcn
     .scan           = rs9116w_mgmt_scan,
