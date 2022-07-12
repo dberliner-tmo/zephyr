@@ -129,7 +129,7 @@ static int spi_config(const struct device *dev,
 		/* Lowest divider supported is 6 */
 		if (config->frequency > ref_freq / SPI_REF_MIN_DIVIDER) {
 			/* Frequency is higher than supported */
-			LOG_WRN("Target frequency of %uHz too high, setting frequency to highest available %uHz\n", target_freq, ref_freq>>1);
+			LOG_WRN("Target frequency of %uHz too high, setting frequency to highest available %uHz\n", target_freq, ref_freq / SPI_REF_MIN_DIVIDER);
 			target_freq = ref_freq / SPI_REF_MIN_DIVIDER;
 
 		}
