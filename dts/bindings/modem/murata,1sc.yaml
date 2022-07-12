@@ -24,3 +24,11 @@ properties:
     mdm-rst-done-gpios:
       type: phandle-array
       required: false
+
+    mdm-rx-gpios:
+      type: phandle-array
+      required: true
+
+    mdm-tx-gpios:
+      type: phandle-array
+      required: true
