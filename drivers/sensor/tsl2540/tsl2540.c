@@ -67,6 +67,16 @@ static int tsl2540_sample_fetch(const struct device *dev,
 		if (ret < 0) {
 			LOG_ERR("Could not fetch ambient light (visible)");
 		}
+		ret = tsl2540_reg_read(dev, TSL2540_REG_VIS_LOW,
+				    (uint8_t*)&data->count_vis);
+		if (ret < 0) {
+			LOG_ERR("Could not fetch ambient light (visible)");
+		}
+		ret = tsl2540_reg_read(dev, TSL2540_REG_VIS_HI,
+				    ((uint8_t*)&data->count_vis) + 1);
+		if (ret < 0) {
+			LOG_ERR("Could not fetch ambient light (visible)");
+		}
 		data->count_vis = sys_be16_to_cpu(data->count_vis);
 	}
 	if (chan == SENSOR_CHAN_ALL || chan == SENSOR_CHAN_IR) {
