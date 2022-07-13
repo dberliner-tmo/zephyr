@@ -32,6 +32,7 @@ struct bt_smp_hdr {
 #define BT_SMP_ERR_NUMERIC_COMP_FAILED		0x0c
 #define BT_SMP_ERR_BREDR_PAIRING_IN_PROGRESS	0x0d
 #define BT_SMP_ERR_CROSS_TRANSP_NOT_ALLOWED	0x0e
+#define BT_SMP_ERR_KEY_REJECTED			0x0f
 
 #define BT_SMP_IO_DISPLAY_ONLY			0x00
 #define BT_SMP_IO_DISPLAY_YESNO			0x01
@@ -182,6 +183,7 @@ int bt_smp_irk_get(uint8_t *ir, uint8_t *irk);
 
 #if defined(CONFIG_BT_SMP) //|| defined(CONFIG_BT_BREDR)
 extern const struct bt_conn_auth_cb *bt_auth;
+extern sys_slist_t bt_auth_info_cbs;
 #endif
 
 #endif

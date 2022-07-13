@@ -177,6 +177,37 @@ static struct bt_smp bt_smp_pool[CONFIG_BT_MAX_CONN];
 rsi_smp_event_t smp_event_queue[CONFIG_RSI_BT_EVENT_QUEUE_SIZE] = { 0 };
 int smp_event_ptr;
 
+
+static enum bt_security_err security_err_get(uint8_t smp_err)
+{
+	switch (smp_err) {
+	case BT_SMP_ERR_PASSKEY_ENTRY_FAILED:
+	case BT_SMP_ERR_DHKEY_CHECK_FAILED:
+	case BT_SMP_ERR_NUMERIC_COMP_FAILED:
+	case BT_SMP_ERR_CONFIRM_FAILED:
+		return BT_SECURITY_ERR_AUTH_FAIL;
+	case BT_SMP_ERR_OOB_NOT_AVAIL:
+		return BT_SECURITY_ERR_OOB_NOT_AVAILABLE;
+	case BT_SMP_ERR_AUTH_REQUIREMENTS:
+	case BT_SMP_ERR_ENC_KEY_SIZE:
+		return BT_SECURITY_ERR_AUTH_REQUIREMENT;
+	case BT_SMP_ERR_PAIRING_NOTSUPP:
+	case BT_SMP_ERR_CMD_NOTSUPP:
+		return BT_SECURITY_ERR_PAIR_NOT_SUPPORTED;
+	case BT_SMP_ERR_REPEATED_ATTEMPTS:
+	case BT_SMP_ERR_BREDR_PAIRING_IN_PROGRESS:
+	case BT_SMP_ERR_CROSS_TRANSP_NOT_ALLOWED:
+		return BT_SECURITY_ERR_PAIR_NOT_ALLOWED;
+	case BT_SMP_ERR_INVALID_PARAMS:
+		return BT_SECURITY_ERR_INVALID_PARAM;
+	case BT_SMP_ERR_KEY_REJECTED:
+		return BT_SECURITY_ERR_KEY_REJECTED;
+	case BT_SMP_ERR_UNSPECIFIED:
+	default:
+		return BT_SECURITY_ERR_UNSPECIFIED;
+	}
+}
+
 // static unsigned int fixed_passkey = BT_PASSKEY_INVALID;
 
 /**
@@ -615,6 +646,17 @@ void bt_smp_process()
 						bt_auth->cancel(selected_conn);
 					}
 				}
+				if (current_event->status) {
+					struct bt_conn_auth_info_cb *listener, *next;
+					enum bt_security_err security_err = security_err_get(current_event->status & 0xFF);
+					SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&bt_auth_info_cbs,
+							  listener, next,
+							  node) {
+						if (listener->pairing_failed) {
+							listener->pairing_failed(selected_conn, security_err);
+						}
+					}
+				}
 
 				//check exists first
 				// bt_auth_info_cbs->pairing_failed(selected_conn, current_event->status);
@@ -675,6 +717,15 @@ void bt_smp_process()
 
 					if (old_sec_level != selected_conn->sec_level){
 						security_changed(selected_conn, current_event->status);
+						struct bt_conn_auth_info_cb *listener, *next;
+						enum bt_security_err security_err = security_err_get(current_event->status & 0xFF);
+						SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&bt_auth_info_cbs,
+								listener, next,
+								node) {
+							if (listener->pairing_complete) {
+								listener->pairing_complete(selected_conn, security_err);
+							}
+						}
 					}
 					
 					/* Todo: check if theres a more proper way */
