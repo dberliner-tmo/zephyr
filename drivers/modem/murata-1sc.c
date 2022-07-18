@@ -2100,12 +2100,17 @@ exit:
 }
 
 static int sigStrength;
-#define MIN_SS	-113
+#define MIN_SS	    -113 // dBm
+#define NO_SIG_RAW  99
+#define NO_SIG_RET  -120
 /**
  * @brief Handle the response to AT%CSQ
  *
  * Response format:
  * <RSSI (-113 + 2*n>,<BER>,<RSRQ>
+ * n = 0 to 31 (-113 to -51 dBm)
+ * OR 99 if not known or detectable
+ * return NO_SIG_RET for this case
  */
 MODEM_CMD_DEFINE(on_cmd_csq)
 {
@@ -2123,8 +2128,11 @@ MODEM_CMD_DEFINE(on_cmd_csq)
 		}
 	}
 	ret = (int)strtol(buf, &endp, 10);
-	sigStrength = MIN_SS + 2 * ret;
-	/* Log the received information. */
+	if (ret == NO_SIG_RAW) {
+		sigStrength = NO_SIG_RET;
+	} else {
+		sigStrength = MIN_SS + 2 * ret;
+	}
 	LOG_DBG("signal strength: %d dBm", ret);
 	return 0;
 }
