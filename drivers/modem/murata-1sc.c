@@ -1811,7 +1811,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	/* Send out the command. */
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, at_cmd,
-			&mdata.sem_response, MDM_CMD_RSP_TIME);
+			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 
 	if (ret < 0) {
 		LOG_ERR("%s ret: %d", at_cmd, ret);
