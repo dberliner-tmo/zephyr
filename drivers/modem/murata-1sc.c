@@ -155,6 +155,7 @@ struct murata_1sc_data {
 	char mdm_iccid[MDM_ICCID_LENGTH];
 #endif /* #if defined(CONFIG_MODEM_SIM_NUMBERS) */
 	char mdm_ip[MDM_IP_LENGTH];
+	char mdm_ip6[MDM_IP6_LENGTH];
 	char mdm_gw[MDM_GW_LENGTH];
 	char mdm_nmask[MDM_MASK_LENGTH];
 	char mdm_phn[MDM_PHN_LENGTH];
@@ -1024,7 +1025,6 @@ static int parse_dnsresp(char *buf, struct mdm_dns_resp_t *dns_resp)
 		len = get_str_in_quotes(buf, ip, IP_STR_LEN);
 		ip[len] = 0;
 		dns_resp->ipv4.sin_family = AF_INET;
-		inet_pton(AF_INET, ip, &dns_resp->ipv4.sin_addr.s_addr);
 		LOG_DBG("dns-ipv4: %s\n", ip);
 	}
 #if defined(CONFIG_NET_IPV6)
@@ -1032,7 +1032,6 @@ static int parse_dnsresp(char *buf, struct mdm_dns_resp_t *dns_resp)
 		len = get_str_in_quotes(buf, ip, IP_STR_LEN);
 		ip[len] = 0;
 		dns_resp->ipv6.sin6_family = AF_INET6;
-		inet_pton(AF_INET6, ip, &dns_resp->ipv6.sin6_addr.s6_addr);
 		LOG_DBG("dns-ipv6: %s\n", ip);
 	}
 #endif
@@ -1081,11 +1080,11 @@ static int get_dns_ip(const char *dn)
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("%DNSRSLV:", on_cmd_dnsrslv, 0U, ""),
 	};
-
+	memset(&mdm_dns_ip, 0, sizeof(mdm_dns_ip));
 	snprintk(at_cmd, sizeof(at_cmd), "AT%%DNSRSLV=0,\"%s\"", dn);
 	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
@@ -1737,7 +1736,11 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	k_sem_reset(&mdata.sem_sock_conn);
 
 	// get IP and save to buffer
-	char ip_addr[30];
+#if CONFIG_NET_IPV6
+	char ip_addr[NET_IPV6_ADDR_LEN];
+#else
+	char ip_addr[NET_IPV4_ADDR_LEN];
+#endif
 	modem_context_sprint_ip_addr(addr, ip_addr, sizeof(ip_addr));
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
@@ -1991,6 +1994,8 @@ static void murata_1sc_freeaddrinfo(struct zsock_addrinfo *res)
 
 static inline uint32_t qtupletouint(uint8_t *ia) {return *(uint32_t*)ia;}
 
+int ai_idx = 0;
+
 static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t port,
 		struct zsock_addrinfo **res)
 {
@@ -1998,13 +2003,24 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 	struct sockaddr *ai_addr;
 	int retval = 0;
 
-	int ai_idx = 0;
-	memset(zsai, 0, sizeof(zsai));
-	memset(zai_addr, 0, sizeof(zai_addr));
+	if (ipv6) {
+		if (!(qtupletouint(&addr[0]) || qtupletouint(&addr[4]) 
+			 || qtupletouint(&addr[8]) || qtupletouint(&addr[12]))) {
+			return 0;
+		}
+	} else {
+		if (!qtupletouint(addr)) {
+			return 0;
+		}
+	}
+
 
 	ai = &zsai[ai_idx];
 	ai_addr = (struct sockaddr *)&zai_addr[ai_idx];
+	memset(ai, 0, sizeof(struct zsock_addrinfo));
+	memset(ai_addr, 0, sizeof(struct sockaddr));
 	ai_idx++;
+	ai_idx %= ARRAY_SIZE(zsai);
 
 	ai->ai_family = (ipv6 ? AF_INET6 : AF_INET);
 	ai->ai_socktype = socktype;
@@ -2039,7 +2055,7 @@ static int murata_1sc_getaddrinfo(const char *node, const char *service,
 		const struct zsock_addrinfo *hints,
 		struct zsock_addrinfo **res)
 {
-	int32_t retval = -1, retval4 = -1, retval6 = -1;
+	int32_t retval = DNS_EAI_FAIL;
 	uint32_t port = 0;
 	uint8_t type = SOCK_STREAM;
 	if (service) {
@@ -2066,35 +2082,36 @@ static int murata_1sc_getaddrinfo(const char *node, const char *service,
 		type = hints->ai_socktype;
 	}
 
-#if IS_ENABLED(CONFIG_NET_IPV4)
-	if (v4) {
-		retval4 = get_dns_ip(node);
-	}
-#endif
+	retval = get_dns_ip(node);
 
-	if (retval4 < 0 && retval6 < 0) {
+	if (retval < 0) {
 		LOG_ERR("Could not resolve name: %s, retval: %d", node, retval);
 		retval = DNS_EAI_NONAME;
 		goto exit;
 	}
 
 	*res = NULL;
-
-	retval = set_addr_info((uint8_t *)&mdm_dns_ip.ipv4.sin_addr.s_addr, false, type, (uint16_t)port, res);
-	if (retval < 0) {
-		murata_1sc_freeaddrinfo(*res);
-		LOG_ERR("Unable to set address info, retval: %d", retval);
-		goto exit;
+	if (v4) {
+		retval = set_addr_info((uint8_t *)&mdm_dns_ip.ipv4.sin_addr.s_addr, false, type, (uint16_t)port, res);
+		if (retval < 0) {
+			murata_1sc_freeaddrinfo(*res);
+			LOG_ERR("Unable to set address info, retval: %d", retval);
+			goto exit;
+		}
 	}
 #if defined(CONFIG_NET_IPV6)
-	retval = set_addr_info(mdm_dns_ip.ipv6.sin6_addr.s6_addr, true, type, (uint16_t)port, res);
-	if (retval < 0) {
-		murata_1sc_freeaddrinfo(*res);
-		LOG_ERR("Unable to set address info, retval: %d", retval);
-		goto exit;
+	if (v6) {
+		retval = set_addr_info(mdm_dns_ip.ipv6.sin6_addr.s6_addr, true, type, (uint16_t)port, res);
+		if (retval < 0) {
+			murata_1sc_freeaddrinfo(*res);
+			LOG_ERR("Unable to set address info, retval: %d", retval);
+			goto exit;
+		}
 	}
 #endif
-
+	if (!*res) {
+		retval = DNS_EAI_NONAME;
+	}
 exit:
 	return retval;
 }
@@ -2247,6 +2264,58 @@ static int get_ip(char *rbuf)
 		ret = -1;
 	}
 	snprintk(rbuf, MAX_IP_RESP_SIZE, "IP: %s, GW: %s, NMASK: %s", mdata.mdm_ip, mdata.mdm_gw, mdata.mdm_nmask);
+
+	return ret;
+}
+
+/**
+ * @brief Handler for CGCONTRDP
+ *
+ * @param argv[0] cid
+ * @param argv[1] ipv4 addr
+ * @param argv[2] ipv6 addr
+ * 
+ * Sample response:
+ *
+ * AT at+CGPADDR
+ * +CGPADDR: 1,"33.28.8.237","38.7.251.144.95.233.90.246.90.237.97.39.90.237.97.39"
+ */
+MODEM_CMD_DEFINE(on_cmd_get_cgpaddr)
+{
+	if (argc < 3) {
+		return -EAGAIN;
+	}
+	char *buf = argv[2];
+	for (int i = 0; i < 16; i++) {
+		if (*buf)
+			mdata.mdm_ip6[i] = strtol(buf + 1, &buf, 10);
+	}
+
+	return 0;
+}
+
+/**
+ * @brief Get ipv6 addr
+ */
+static int get_ip6(char *rbuf)
+{
+	int ret;
+	const char at_cmd[] = "AT+CGPADDR";
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD_ARGS_MAX("+CGPADDR:", on_cmd_get_cgpaddr, 0, 4U, ","),
+	};
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+		data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+		ret = -1;
+	}
+	struct in6_addr addr;
+	memcpy(addr.s6_addr, mdata.mdm_ip6, sizeof(mdata.mdm_ip6));
+	char addr_buf[NET_IPV6_ADDR_LEN];
+	net_addr_ntop(AF_INET6, &addr, addr_buf, sizeof(addr_buf));
+	snprintk(rbuf, MAX_IP_RESP_SIZE, "IP6: %s", addr_buf);
 
 	return ret;
 }
@@ -2453,6 +2522,7 @@ enum mdmdata_e {
 	imei_e,
 	imsi_e,
 	ip_e,
+	ip6_e,
 	msisdn_e,
 	sim_info_e,
 	sleep_e,
@@ -2497,6 +2567,10 @@ static int ioctl_query(enum mdmdata_e idx, void *buf)
 
 		case ip_e:
 		ret = get_ip(buf);
+		break;
+
+		case ip6_e:
+		ret = get_ip6(buf);
 		break;
 
 		case version_e:
@@ -2557,6 +2631,7 @@ struct mdmdata_cmd_t cmd_pool[] = {
 	{"IMEI",     imei_e},
 	{"IMSI",     imsi_e},
 	{"IP",       ip_e},
+	{"IP6",      ip6_e},
 	{"MSISDN",   msisdn_e},
 	{"SLEEP",    sleep_e},
 	{"SSI",      ssi_e},
@@ -2575,7 +2650,7 @@ static int get_mdmdata_resp(char* io_str)
 	char *cmdStr;
 	while (cmd_pool[idx].str != NULL) {
 		cmdStr = cmd_pool[idx].str;
-		if (strncmp(io_str, cmdStr, strlen(cmdStr)) == 0)
+		if (strncmp(io_str, cmdStr, strlen(io_str)) == 0)
 			break;
 		++idx;
 	}

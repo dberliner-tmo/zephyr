@@ -37,6 +37,7 @@
 #define MDM_APN_LENGTH			  64
 #define RSSI_TIMEOUT_SECS		  30
 #define MDM_IP_LENGTH                     16
+#define MDM_IP6_LENGTH                    16
 #define MDM_GW_LENGTH                     16
 #define MDM_MASK_LENGTH                   16
 #define MDM_PHN_LENGTH                    16
