@@ -2423,10 +2423,10 @@ static int is_golden(char *rbuf)
 
 	if (ret == -EIO) {
 		strcpy(rbuf, "GOLDEN");
-		return 0;
+		return 1;
 	} else if (ret >= 0) {
 		strcpy(rbuf, "SAMPLE");
-		return 1;
+		return 0;
 	} else {
 		LOG_WRN("is_golden returned %d", ret);
 	}
