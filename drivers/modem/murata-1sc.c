@@ -1364,7 +1364,7 @@ static void socket_close(struct modem_socket *sock)
 static int send_sms_msg(void *obj, const struct sms_out *sms)
 {
 	/* The "+ 20" is to account for AT+CMGS plus a bit extra */
-	char at_cmd[sizeof(struct sms_out) + 20];
+	char at_cmd[sizeof(struct sms_out) + 21];
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
@@ -1375,7 +1375,7 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
 
-	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGS=\"%s\"\r%s\x1a", sms->phone, sms->msg);
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%CMGSC=\"%s\"\r%s\x1a", sms->phone, sms->msg);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
