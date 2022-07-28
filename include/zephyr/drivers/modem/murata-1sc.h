@@ -48,6 +48,11 @@
 #define MAX_SIGSTR_RESP_SIZE              32
 #define MAX_IP_RESP_SIZE                  256
 #define MDM_GOLDEN_LEN			  16
+#define MAX_PSM_RESP_SIZE                 128
+#define MAX_EDRX_RESP_SIZE                128
+#define MDM_EDRX_LENGTH                   128
+#define MDM_PSM_LENGTH                    128
+#define PSM_TIME_LEN                      11
 
 /**
  * this is for tmo_shell to call for overriding the wifi dns_offload
@@ -83,7 +88,7 @@ struct send_fw_data_t {
 };
 
 enum murata_1sc_io_ctl {
-	GET_IPV4_CONF = 0x10,
+	GET_IPV4_CONF = 0x200,
 	GET_ATCMD_RESP,
 	INIT_FW_XFER,
 	SEND_FW_HEADER,
@@ -91,5 +96,31 @@ enum murata_1sc_io_ctl {
 	INIT_FW_UPGRADE,
 	GET_CHKSUM_ABILITY,
 	GET_FILE_MODE,
-	RESET_MODEM,
+        RESET_MODEM,
+        AT_MODEM_CFUN_SET,
+        AT_MODEM_PSM_SET,
+        AT_MODEM_PSM_GET,
+        AT_MODEM_EDRX_SET,
+        AT_MODEM_EDRX_GET
+};
+
+struct set_cpsms_params  {
+        uint8_t mode;
+        uint8_t t3312_mask;
+        uint8_t t3314_mask;
+        uint8_t t3412_mask;
+        uint8_t t3324_mask;
+};
+
+struct set_cedrxs_params  {
+        uint8_t mode;
+        uint8_t act_type;
+        uint8_t time_mask;
+};
+
+union params_cmd {
+        char cfun;
+        struct set_cpsms_params psm;
+        struct set_cedrxs_params edrx;
+        char response[128];
 };

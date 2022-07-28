@@ -26,7 +26,6 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #include "modem_cmd_handler.h"
 #include "modem_sms.h"
 #include "strnstr.h"
-
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 #include <net/tls_credentials.h>
 #include <sys/base64.h>
@@ -82,6 +81,9 @@ static int find_valid_sni()
 }
 #endif
 
+/**
+ * @brief Convert a series of uint8_t or byte to ascii hex value in a string
+ */
 static size_t data_to_hex_str(const void* input_buf, size_t input_len,
                               char* output_buf, size_t output_len)
 {
@@ -94,6 +96,9 @@ static size_t data_to_hex_str(const void* input_buf, size_t input_len,
 	return i * 2;
 }
 
+/**
+ * @brief Convert ascii hex number representation to uint8_t representation
+ */
 static uint8_t nibble_to_data(char nibble)
 {
 	if (nibble >= '0' && nibble <= '9')
@@ -106,11 +111,17 @@ static uint8_t nibble_to_data(char nibble)
 	return 0;
 }
 
+/**
+ * @brief Convert uint8_t or byte to a ascii hex number representation.
+ */
 static uint8_t hex_byte_to_data(const char *hex_bytes)
 {
 	return nibble_to_data(*hex_bytes) * 0x10 + nibble_to_data(*(hex_bytes+1));
 }
 
+/**
+ * @brief Convert uint8_t to a binary ascii (characters of either 1 or 0).
+ */
 static size_t hex_str_to_data(const char* input_buf, uint8_t* output_buf, size_t output_len)
 {
 	size_t str_len = strlen(input_buf);
@@ -120,6 +131,20 @@ static size_t hex_str_to_data(const char* input_buf, uint8_t* output_buf, size_t
 		output_buf[i] = hex_byte_to_data(&input_buf[i * 2]);
 	}
 	return i;
+}
+
+/**
+ * @brief Convert uint8_t to a binary ascii (string with 1 and 0).
+ */
+static char* byte_to_binary_str(uint8_t byte) {
+    static char buf[9] = { 0 };
+
+    memset(buf, 0, sizeof(buf));
+    for (int i = 0; i < 8; i++) {
+        buf[7 - i] = (byte & 1 << i) ? '1' : '0';
+    }
+
+    return buf;
 }
 
 #define ATOI(s_, value_, desc_) murata_1sc_atoi(s_, value_, desc_, __func__)
@@ -161,6 +186,8 @@ struct murata_1sc_data {
 	char mdm_phn[MDM_PHN_LENGTH];
 	char mdm_carrier[MDM_CARRIER_LENGTH];
 	char mdm_apn[MDM_APN_LENGTH];
+        char mdm_psm[MDM_PSM_LENGTH];
+        char mdm_edrx[MDM_EDRX_LENGTH];
 	bool is_awake;
 
 	/* Socket from which we are currently reading data. */
@@ -237,6 +264,9 @@ static int murata_1sc_atoi(const char *s, const int err_value,
 	return ret;
 }
 
+/**
+ * @brief Convert ascii hex to uint8_t
+ */
 static inline uint8_t hex_char_to_int(char ch)
 {
 	uint8_t ret;
@@ -298,6 +328,9 @@ MODEM_CMD_DEFINE(on_cmd_error)
 	return 0;
 }
 
+/**
+ * @brief Handler for sock sentdata
+ */
 MODEM_CMD_DEFINE(on_cmd_sock_sentdata)
 {
 	if (argc < 2) {
@@ -409,7 +442,7 @@ static int on_cmd_sockread_common(int socket_fd,
 
 	ret = net_buf_linearize(sock_data->recv_buf, sock_data->recv_buf_len,
 			data->rx_buf, 0, (uint16_t)(socket_data_length * 2));
-	// LOG_INF("net_buf_linearize returned %d", ret);
+	       LOG_DBG("net_buf_linearize returned %d", ret);
 
 	data->rx_buf = net_buf_skip(data->rx_buf, ret);
 	sock_data->recv_read_len = socket_data_length;
@@ -642,6 +675,36 @@ MODEM_CMD_DEFINE(on_cmd_get_cereg)
 }
 #endif
 
+/**
+ * @brief Handler for getting PSM values
+ */
+MODEM_CMD_DEFINE(on_cmd_get_psm)
+{
+        size_t out_len = net_buf_linearize(mdata.mdm_psm,
+                        sizeof(mdata.mdm_psm) - 1,
+                        data->rx_buf, 0, len);
+        mdata.mdm_psm[out_len] = '\0';
+
+        /* Log the received information. */
+        LOG_DBG("PSM: %s", mdata.mdm_psm);
+        return 0;
+}
+
+/**
+ * @brief Handler for eDRX 
+ */
+MODEM_CMD_DEFINE(on_cmd_get_edrx)
+{
+        size_t out_len = net_buf_linearize(mdata.mdm_edrx,
+                        sizeof(mdata.mdm_edrx) - 1,
+                        data->rx_buf, 0, len);
+        mdata.mdm_edrx[out_len] = '\0';
+
+        /* Log the received information. */
+        LOG_DBG("EDRX: %s", mdata.mdm_edrx);
+        return 0;
+}
+
 static char *get_4_octet(char *buf)
 {
 	char *ptr = buf;
@@ -807,6 +870,63 @@ static int set_cfun(int on)
 #endif
 	return ret;
 }
+
+/**
+ * @brief Set the PSM timer values that is passed in thru Parms
+ *
+ */
+static int set_psm_timer(struct set_cpsms_params* Parms) {
+        char psm[100];
+        char t3312[PSM_TIME_LEN];
+        char t3314[PSM_TIME_LEN];
+        char t3412[PSM_TIME_LEN];
+        char t3324[PSM_TIME_LEN];
+        int ret;
+
+        if (&mctx.iface == NULL) {
+                return -1;
+        }
+
+        strcpy(t3312, (const char*) byte_to_binary_str(Parms->t3312_mask));
+        strcpy(t3314, (const char*) byte_to_binary_str(Parms->t3314_mask));
+        strcpy(t3412, (const char*) byte_to_binary_str(Parms->t3412_mask));
+        strcpy(t3324, (const char*) byte_to_binary_str(Parms->t3324_mask));
+
+        if(Parms->t3312_mask == 0 || Parms->t3314_mask == 0){
+                snprintf(psm, sizeof(psm), "AT+CPSMS=%d,,,\"%s\",\"%s\"", Parms->mode, t3412, t3324);
+        }else {
+                snprintf(psm, sizeof(psm), "AT+CPSMS=%d,\"%s\",\"%s\",\"%s\",\"%s\"", Parms->mode, t3312, t3314, t3412, t3324);
+        }
+
+        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                        NULL, 0, psm, &mdata.sem_response, K_SECONDS(6));
+        if (ret < 0) {
+                LOG_ERR("%s ret:%d", psm, ret);
+        }
+        return ret;
+}
+
+/**
+ * @brief Set the edrx timer values that is passed in thru Parms
+ *
+ */
+//      This function assume the edrx_value or time value pass in is a coded byte
+static int set_edrx_timer(struct set_cedrxs_params* Parms) {
+        int ret;
+
+        char at_cmd[100] = {0};
+        char* binary_str = byte_to_binary_str(Parms->time_mask);
+        binary_str = binary_str + 4;  // get last 4 bits in ascii
+        snprintf(at_cmd, sizeof(at_cmd), "AT+CEDRXS=%d,%d,\"%s\"",
+                 (int)Parms->mode, (int)Parms->act_type, binary_str);
+        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                        NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(6));
+        if (ret < 0) {
+                LOG_ERR("%s ret:%d", at_cmd, ret);
+        }
+        return ret;
+}
+
 
 /**
  * @brief Use the PDNSET command to set APN and IP type
@@ -1309,6 +1429,48 @@ static int get_carrier(char *rbuf)
 	snprintk(rbuf, MAX_CARRIER_RESP_SIZE, "%s", mdata.mdm_carrier);
 	return ret;
 }
+
+/**
+ * @brief Get PSM
+ */
+static int get_psm(char *response)
+{
+        int ret;
+        const char at_cmd[] = "AT+CPSMS?";
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("+CPSMS:", on_cmd_get_psm, 0U, ","),
+	};
+        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                        data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+        if (ret < 0) {
+                LOG_ERR("%s ret:%d", at_cmd, ret);
+                ret = -1;
+        }
+        snprintk(response, MAX_PSM_RESP_SIZE, "%s", mdata.mdm_psm);
+        return ret;
+}
+
+/**
+ * @brief Get edrx 
+ */
+static int get_edrx(char *response)
+{
+        int ret;
+        const char at_cmd[] = "AT+CEDRXS?";
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("+CEDRXS:", on_cmd_get_edrx, 0U, ","),
+	};
+
+        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+                        data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+        if (ret < 0) {
+                LOG_ERR("%s ret:%d", at_cmd, ret);
+                ret = -1;
+        }
+        snprintk(response, MAX_EDRX_RESP_SIZE, "%s", mdata.mdm_edrx);
+        return ret;
+}
+
 
 /**
  * @brief Reset the modem
@@ -2517,6 +2679,7 @@ enum mdmdata_e {
 	apn_e,
 	awake_e,
 	connsts_e,
+        edrx_e,
 	golden_e,
 	iccid_e,
 	imei_e,
@@ -2524,6 +2687,7 @@ enum mdmdata_e {
 	ip_e,
 	ip6_e,
 	msisdn_e,
+        psm_e,
 	sim_info_e,
 	sleep_e,
 	ssi_e,
@@ -2585,6 +2749,13 @@ static int ioctl_query(enum mdmdata_e idx, void *buf)
 		ret = get_apn(buf);
 		break;
 
+                case psm_e:
+                ret = get_psm(buf);
+                break;
+  
+                case edrx_e:
+                ret = get_edrx(buf);
+                break;
 		case sleep_e:
 		ret = set_cfun(0);
 		break;
@@ -2625,6 +2796,7 @@ struct mdmdata_cmd_t cmd_pool[] = {
 	{"AWAKE",    awake_e},
 	{"CONN_STS", connsts_e},
 	{"CONN",     connsts_e},
+        {"EDRX",      edrx_e},
 	{"GOLD",     golden_e},
 	{"GOLDEN",   golden_e},
 	{"ICCID",    iccid_e},
@@ -2633,6 +2805,7 @@ struct mdmdata_cmd_t cmd_pool[] = {
 	{"IP",       ip_e},
 	{"IP6",      ip6_e},
 	{"MSISDN",   msisdn_e},
+        {"PSM",      psm_e},
 	{"SLEEP",    sleep_e},
 	{"SSI",      ssi_e},
 	{"STAT",     connsts_e},
@@ -3376,6 +3549,26 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 		case RESET_MODEM:
 			ret = reset_modem();
 			break;
+
+                case AT_MODEM_PSM_SET:
+			ret = set_psm_timer((struct set_cpsms_params *)va_arg(args, struct set_cpsms_params *));
+			va_end(args);
+			break;
+
+                case AT_MODEM_EDRX_SET:
+			ret = set_edrx_timer((struct set_cedrxs_params *)va_arg(args, struct set_cedrxs_params *));
+			va_end(args);
+                        break;
+
+                case AT_MODEM_EDRX_GET:
+			ret = get_edrx((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+                case AT_MODEM_PSM_GET:
+			ret = get_psm((char *)va_arg(args, char *));
+			va_end(args);
+                        break;
 
 		default:
 			errno = EINVAL;
