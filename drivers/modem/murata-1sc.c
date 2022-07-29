@@ -1145,6 +1145,7 @@ static int parse_dnsresp(char *buf, struct mdm_dns_resp_t *dns_resp)
 		len = get_str_in_quotes(buf, ip, IP_STR_LEN);
 		ip[len] = 0;
 		dns_resp->ipv4.sin_family = AF_INET;
+		inet_pton(AF_INET, ip, &dns_resp->ipv4.sin_addr.s4_addr);
 		LOG_DBG("dns-ipv4: %s\n", ip);
 	}
 #if defined(CONFIG_NET_IPV6)
@@ -1152,6 +1153,7 @@ static int parse_dnsresp(char *buf, struct mdm_dns_resp_t *dns_resp)
 		len = get_str_in_quotes(buf, ip, IP_STR_LEN);
 		ip[len] = 0;
 		dns_resp->ipv6.sin6_family = AF_INET6;
+		inet_pton(AF_INET6, ip, &dns_resp->ipv6.sin6_addr.s6_addr);
 		LOG_DBG("dns-ipv6: %s\n", ip);
 	}
 #endif
