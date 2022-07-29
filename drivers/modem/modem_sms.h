@@ -29,6 +29,8 @@ struct sms_in {
         char phone[SMS_PHONE_MAX_LEN];
         char time [SMS_TIME_MAX_LEN];
         char msg  [CONFIG_MODEM_SMS_IN_MSG_MAX_LEN + 1];
+        uint8_t csms_ref;
+        uint8_t csms_idx;
         k_timeout_t timeout;
 };
 

@@ -85,7 +85,7 @@ static int find_valid_sni()
  * @brief Convert a series of uint8_t or byte to ascii hex value in a string
  */
 static size_t data_to_hex_str(const void* input_buf, size_t input_len,
-                              char* output_buf, size_t output_len)
+							  char* output_buf, size_t output_len)
 {
 	size_t i;
 
@@ -137,14 +137,14 @@ static size_t hex_str_to_data(const char* input_buf, uint8_t* output_buf, size_t
  * @brief Convert uint8_t to a binary ascii (string with 1 and 0).
  */
 static char* byte_to_binary_str(uint8_t byte) {
-    static char buf[9] = { 0 };
+	static char buf[9] = { 0 };
 
-    memset(buf, 0, sizeof(buf));
-    for (int i = 0; i < 8; i++) {
-        buf[7 - i] = (byte & 1 << i) ? '1' : '0';
-    }
+	memset(buf, 0, sizeof(buf));
+	for (int i = 0; i < 8; i++) {
+		buf[7 - i] = (byte & 1 << i) ? '1' : '0';
+	}
 
-    return buf;
+	return buf;
 }
 
 #define ATOI(s_, value_, desc_) murata_1sc_atoi(s_, value_, desc_, __func__)
@@ -186,8 +186,8 @@ struct murata_1sc_data {
 	char mdm_phn[MDM_PHN_LENGTH];
 	char mdm_carrier[MDM_CARRIER_LENGTH];
 	char mdm_apn[MDM_APN_LENGTH];
-        char mdm_psm[MDM_PSM_LENGTH];
-        char mdm_edrx[MDM_EDRX_LENGTH];
+	char mdm_psm[MDM_PSM_LENGTH];
+	char mdm_edrx[MDM_EDRX_LENGTH];
 	bool is_awake;
 
 	/* Socket from which we are currently reading data. */
@@ -209,7 +209,11 @@ struct murata_1sc_data {
 	struct k_sem sem_sms;
 
 	/* SMS message support */
+#if CONFIG_MURATA_1SC_USE_PDU
+	int sms_indices[16];
+#else
 	int sms_index;
+#endif
 	struct sms_in *sms;
 	recv_sms_func_t recv_sms;
 }; 
@@ -303,7 +307,7 @@ static inline uint8_t *murata_1sc_get_mac(const struct device *dev)
 	for (int i=0;i<6;i++) {
 		int imei_idx = (MDM_IMEI_LENGTH - 1) - 12 + (i * 2);
 		data->mac_addr[i] = (hex_char_to_int(mdata.mdm_imei[imei_idx]) << 4) |
-			            (hex_char_to_int(mdata.mdm_imei[imei_idx + 1]));
+						(hex_char_to_int(mdata.mdm_imei[imei_idx + 1]));
 	}
 	return data->mac_addr;
 }
@@ -442,7 +446,7 @@ static int on_cmd_sockread_common(int socket_fd,
 
 	ret = net_buf_linearize(sock_data->recv_buf, sock_data->recv_buf_len,
 			data->rx_buf, 0, (uint16_t)(socket_data_length * 2));
-	       LOG_DBG("net_buf_linearize returned %d", ret);
+		   LOG_DBG("net_buf_linearize returned %d", ret);
 
 	data->rx_buf = net_buf_skip(data->rx_buf, ret);
 	sock_data->recv_read_len = socket_data_length;
@@ -680,14 +684,14 @@ MODEM_CMD_DEFINE(on_cmd_get_cereg)
  */
 MODEM_CMD_DEFINE(on_cmd_get_psm)
 {
-        size_t out_len = net_buf_linearize(mdata.mdm_psm,
-                        sizeof(mdata.mdm_psm) - 1,
-                        data->rx_buf, 0, len);
-        mdata.mdm_psm[out_len] = '\0';
+		size_t out_len = net_buf_linearize(mdata.mdm_psm,
+						sizeof(mdata.mdm_psm) - 1,
+						data->rx_buf, 0, len);
+		mdata.mdm_psm[out_len] = '\0';
 
-        /* Log the received information. */
-        LOG_DBG("PSM: %s", mdata.mdm_psm);
-        return 0;
+		/* Log the received information. */
+		LOG_DBG("PSM: %s", mdata.mdm_psm);
+		return 0;
 }
 
 /**
@@ -695,14 +699,14 @@ MODEM_CMD_DEFINE(on_cmd_get_psm)
  */
 MODEM_CMD_DEFINE(on_cmd_get_edrx)
 {
-        size_t out_len = net_buf_linearize(mdata.mdm_edrx,
-                        sizeof(mdata.mdm_edrx) - 1,
-                        data->rx_buf, 0, len);
-        mdata.mdm_edrx[out_len] = '\0';
+		size_t out_len = net_buf_linearize(mdata.mdm_edrx,
+						sizeof(mdata.mdm_edrx) - 1,
+						data->rx_buf, 0, len);
+		mdata.mdm_edrx[out_len] = '\0';
 
-        /* Log the received information. */
-        LOG_DBG("EDRX: %s", mdata.mdm_edrx);
-        return 0;
+		/* Log the received information. */
+		LOG_DBG("EDRX: %s", mdata.mdm_edrx);
+		return 0;
 }
 
 static char *get_4_octet(char *buf)
@@ -876,34 +880,34 @@ static int set_cfun(int on)
  *
  */
 static int set_psm_timer(struct set_cpsms_params* Parms) {
-        char psm[100];
-        char t3312[PSM_TIME_LEN];
-        char t3314[PSM_TIME_LEN];
-        char t3412[PSM_TIME_LEN];
-        char t3324[PSM_TIME_LEN];
-        int ret;
+		char psm[100];
+		char t3312[PSM_TIME_LEN];
+		char t3314[PSM_TIME_LEN];
+		char t3412[PSM_TIME_LEN];
+		char t3324[PSM_TIME_LEN];
+		int ret;
 
-        if (&mctx.iface == NULL) {
-                return -1;
-        }
+		if (&mctx.iface == NULL) {
+				return -1;
+		}
 
-        strcpy(t3312, (const char*) byte_to_binary_str(Parms->t3312_mask));
-        strcpy(t3314, (const char*) byte_to_binary_str(Parms->t3314_mask));
-        strcpy(t3412, (const char*) byte_to_binary_str(Parms->t3412_mask));
-        strcpy(t3324, (const char*) byte_to_binary_str(Parms->t3324_mask));
+		strcpy(t3312, (const char*) byte_to_binary_str(Parms->t3312_mask));
+		strcpy(t3314, (const char*) byte_to_binary_str(Parms->t3314_mask));
+		strcpy(t3412, (const char*) byte_to_binary_str(Parms->t3412_mask));
+		strcpy(t3324, (const char*) byte_to_binary_str(Parms->t3324_mask));
 
-        if(Parms->t3312_mask == 0 || Parms->t3314_mask == 0){
-                snprintf(psm, sizeof(psm), "AT+CPSMS=%d,,,\"%s\",\"%s\"", Parms->mode, t3412, t3324);
-        }else {
-                snprintf(psm, sizeof(psm), "AT+CPSMS=%d,\"%s\",\"%s\",\"%s\",\"%s\"", Parms->mode, t3312, t3314, t3412, t3324);
-        }
+		if(Parms->t3312_mask == 0 || Parms->t3314_mask == 0){
+				snprintf(psm, sizeof(psm), "AT+CPSMS=%d,,,\"%s\",\"%s\"", Parms->mode, t3412, t3324);
+		}else {
+				snprintf(psm, sizeof(psm), "AT+CPSMS=%d,\"%s\",\"%s\",\"%s\",\"%s\"", Parms->mode, t3312, t3314, t3412, t3324);
+		}
 
-        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-                        NULL, 0, psm, &mdata.sem_response, K_SECONDS(6));
-        if (ret < 0) {
-                LOG_ERR("%s ret:%d", psm, ret);
-        }
-        return ret;
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+						NULL, 0, psm, &mdata.sem_response, K_SECONDS(6));
+		if (ret < 0) {
+				LOG_ERR("%s ret:%d", psm, ret);
+		}
+		return ret;
 }
 
 /**
@@ -912,19 +916,19 @@ static int set_psm_timer(struct set_cpsms_params* Parms) {
  */
 //      This function assume the edrx_value or time value pass in is a coded byte
 static int set_edrx_timer(struct set_cedrxs_params* Parms) {
-        int ret;
+		int ret;
 
-        char at_cmd[100] = {0};
-        char* binary_str = byte_to_binary_str(Parms->time_mask);
-        binary_str = binary_str + 4;  // get last 4 bits in ascii
-        snprintf(at_cmd, sizeof(at_cmd), "AT+CEDRXS=%d,%d,\"%s\"",
-                 (int)Parms->mode, (int)Parms->act_type, binary_str);
-        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-                        NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(6));
-        if (ret < 0) {
-                LOG_ERR("%s ret:%d", at_cmd, ret);
-        }
-        return ret;
+		char at_cmd[100] = {0};
+		char* binary_str = byte_to_binary_str(Parms->time_mask);
+		binary_str = binary_str + 4;  // get last 4 bits in ascii
+		snprintf(at_cmd, sizeof(at_cmd), "AT+CEDRXS=%d,%d,\"%s\"",
+				 (int)Parms->mode, (int)Parms->act_type, binary_str);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+						NULL, 0, at_cmd, &mdata.sem_response, K_SECONDS(6));
+		if (ret < 0) {
+				LOG_ERR("%s ret:%d", at_cmd, ret);
+		}
+		return ret;
 }
 
 
@@ -1437,19 +1441,19 @@ static int get_carrier(char *rbuf)
  */
 static int get_psm(char *response)
 {
-        int ret;
-        const char at_cmd[] = "AT+CPSMS?";
+		int ret;
+		const char at_cmd[] = "AT+CPSMS?";
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("+CPSMS:", on_cmd_get_psm, 0U, ","),
 	};
-        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-                        data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
-        if (ret < 0) {
-                LOG_ERR("%s ret:%d", at_cmd, ret);
-                ret = -1;
-        }
-        snprintk(response, MAX_PSM_RESP_SIZE, "%s", mdata.mdm_psm);
-        return ret;
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+						data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+			ret = -1;
+		}
+		snprintk(response, MAX_PSM_RESP_SIZE, "%s", mdata.mdm_psm);
+		return ret;
 }
 
 /**
@@ -1457,20 +1461,20 @@ static int get_psm(char *response)
  */
 static int get_edrx(char *response)
 {
-        int ret;
-        const char at_cmd[] = "AT+CEDRXS?";
+		int ret;
+		const char at_cmd[] = "AT+CEDRXS?";
 	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("+CEDRXS:", on_cmd_get_edrx, 0U, ","),
 	};
 
-        ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-                        data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
-        if (ret < 0) {
-                LOG_ERR("%s ret:%d", at_cmd, ret);
-                ret = -1;
-        }
-        snprintk(response, MAX_EDRX_RESP_SIZE, "%s", mdata.mdm_edrx);
-        return ret;
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, K_SECONDS(1));
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+			ret = -1;
+		}
+		snprintk(response, MAX_EDRX_RESP_SIZE, "%s", mdata.mdm_edrx);
+		return ret;
 }
 
 
@@ -1549,6 +1553,409 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	return ret;
 }
 
+#if CONFIG_MURATA_1SC_USE_PDU
+
+enum sms_tp_flags {
+	TP_FLAG_MMS = BIT(2),
+	TP_FLAG_RP = BIT(7),
+	TP_FLAG_UDHI = BIT(6),
+	TP_FLAG_SRI = BIT(5)
+};
+
+enum sms_type_of_number {
+	SMS_TON_UNKNOWN = 0,
+	SMS_TON_INTERNATIONAL,
+	SMS_TON_NATIONAL,
+	SMS_TON_NETWORK_SPECIFIC,
+	SMS_TON_SUBSCRIBER,
+	SMS_TON_ALPHANUMERIC,
+	SMS_TON_ABBREVIATED,
+	SMS_TON_RESERVED,
+};
+
+enum sms_alphabet {
+	SMS_ALPHABET_GSM7 = 0,
+	SMS_ALPHABET_GSM8,
+	SMS_ALPHABET_UCS2,
+};
+
+
+//Structure for storing information about a SMS-DELIVER PDU
+typedef struct deliver_pdu_data_s {
+	//Length of SMSC segment
+	uint8_t smsc_len;
+	//SMSC segment
+	char *smsc_start;
+	//Flags
+	uint8_t tp_flags;
+	//Originator address length
+	uint8_t oa_len;
+	//Originator address
+	char *oa;
+	//Alphabet used
+	uint8_t alphabet;
+	//Timestamp
+	char *scts;
+	//User data length
+	uint8_t udl;
+	//User data header length
+	uint8_t udhl;
+	//User data
+	char *ud;
+} deliver_pdu_data_t;
+
+void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data) 
+{
+	pdu_data->smsc_len = hex_byte_to_data(buf);
+	pdu_data->smsc_start = pdu_data->smsc_len ? buf + 2 : NULL;
+	buf += 2 + pdu_data->smsc_len * 2;
+	pdu_data->tp_flags = hex_byte_to_data(buf) & ~0x3;
+	buf += 2;
+	pdu_data->oa_len = hex_byte_to_data(buf);
+	buf += 2;
+	pdu_data->oa = buf;
+	if ((hex_byte_to_data(buf) & 0x70) != 0x50) {
+		buf += 2 + pdu_data->oa_len;
+		buf += (pdu_data->oa_len % 2);
+	} else {
+		buf += 2 + (((pdu_data->oa_len + 1) * 7 / 8) * 2);
+	}
+	buf += 2; //Skip TP-PID
+	pdu_data->alphabet = hex_byte_to_data(buf) & 0x3;
+	buf += 2;
+	pdu_data->scts = buf;
+	buf += 14;
+	pdu_data->udl = hex_byte_to_data(buf);
+	buf += 2;
+	pdu_data->ud = buf;
+	pdu_data->udhl = (pdu_data->tp_flags & TP_FLAG_UDHI) ? hex_byte_to_data(buf) : 0;
+}
+
+void gsmunpack_frag(uint8_t *frag, int frag_len, uint8_t *out){
+	switch (frag_len){
+		case 7:
+			out[7] = frag[6] >> 1;
+			out[6] = (frag[5] >> 2) | ((frag[6] & 0x01) << 6);
+		case 6:
+			out[5] = (frag[4] >> 3) | ((frag[5] & 0x03) << 5);
+		case 5:
+			out[4] = (frag[3] >> 4) | ((frag[4] & 0x07) << 4);
+		case 4:
+			out[3] = (frag[2] >> 5) | ((frag[3] & 0x0F) << 3);
+		case 3:
+			out[2] = (frag[1] >> 6) | ((frag[2] & 0x1F) << 2);
+		case 2:
+			out[1] = (frag[0] >> 7) | ((frag[1] & 0x3F) << 1);
+		case 1:
+			out[0] = frag[0] & 0x7F;
+	}
+}
+
+char gsm2ascii(uint8_t gsm, bool escaped) {
+	if (escaped) {
+		switch (gsm) {
+			case 0x0A:
+				return '\f';
+			case 0x14:
+				return '^';
+			case 0x28:
+				return '{';
+			case 0x29:
+				return '}';
+			case 0x2F:
+				return '\\';
+			case 0x3c:
+				return '[';
+			case 0x3d:
+				return '~';
+			case 0x3e:
+				return ']';
+			case 0x40:
+				return '|';
+			default:
+				return '\0';
+		}
+	}
+	if ((gsm >= 'a' && gsm <= 'z') || (gsm >= 'A' && gsm <= 'Z') || (gsm >> 4) == 3
+			|| (((gsm >> 4) == 2) && gsm != 0x24)) {
+		return gsm;
+	}
+	switch (gsm){
+		case 0x00:
+			return '@';
+		case 0x02:
+			return '$';
+		case '\n':
+		case '\r':
+			return gsm;
+		case 0x11:
+			return '_';
+		default:
+			return '\0';
+	}
+}
+
+int gsm7_decode(char* in, int udl, char *out, int outlen, int skip) {
+	uint8_t packed[7], unpacked[8];
+	uint8_t processed = 0, escaped_cnt = 0;
+	uint8_t udl_octets = ((udl * 7 + 7) / 8);
+	int skip_drp = skip;
+	char *out_orig = out;
+	bool escaped = false;
+	for (int i = 0; i < udl_octets; i += 7) {
+		memset(packed, 0, 7);
+		hex_str_to_data(&in[i * 2], packed, MIN(7, udl_octets - processed));
+		gsmunpack_frag(packed, MIN(7, udl_octets - processed), unpacked);
+		processed += 7;
+		for (int j = 0; j < 8; j++) {
+			if (skip){
+				skip--;
+			} else if (unpacked[j] == 0x1b) {
+				escaped = true;
+				escaped_cnt++;
+			} else {
+				if (out > (out_orig + outlen - 1)) {
+					return 1;
+				}
+				char chr = gsm2ascii(unpacked[j], escaped);
+				if (chr){
+					*out = chr;
+					out++;
+				}
+				escaped = false;
+			}
+		}
+	}
+	out_orig[MIN((udl - escaped_cnt - skip_drp), outlen)] = '\0';
+	return 0;
+}
+
+/**
+ * Check if given char sequence is crlf.
+ *
+ * @param c The char sequence.
+ * @param len Total length of the fragment.
+ * @return @c true if char sequence is crlf.
+ *         Otherwise @c false is returned.
+ */
+static bool is_crlf(uint8_t *c, uint8_t len)
+{
+	/* crlf does not fit. */
+	if (len < 2) {
+		return false;
+	}
+
+	return c[0] == '\r' && c[1] == '\n';
+}
+
+/**
+ * Find terminating crlf in a netbuffer.
+ *
+ * @param buf The netbuffer.
+ * @param skip Bytes to skip before search.
+ * @return Length of the returned fragment or 0 if not found.
+ */
+static size_t net_buf_find_crlf(struct net_buf *buf, size_t skip)
+{
+	size_t len = 0, pos = 0;
+	struct net_buf *frag = buf;
+
+	/* Skip to the start. */
+	while (frag && skip >= frag->len) {
+		skip -= frag->len;
+		frag = frag->frags;
+	}
+
+	/* Need to wait for more data. */
+	if (!frag) {
+		return 0;
+	}
+
+	pos = skip;
+
+	while (frag && !is_crlf(frag->data + pos, frag->len - pos)) {
+		if (pos + 1 >= frag->len) {
+			len += frag->len;
+			frag = frag->frags;
+			pos = 0U;
+		} else {
+			pos++;
+		}
+	}
+
+	if (frag && is_crlf(frag->data + pos, frag->len - pos)) {
+		len += pos;
+		return len - skip;
+	}
+
+	return 0;
+}
+
+/**
+ * Parses list sms and add them to buffer.
+ * Format is:
+ *
+ * +CMGL: <index>,<stat>,,<length><CR><LF><pdu><CR><LF>
+ * +CMGL: <index>,<stat>,,<length><CR><LF><pdu><CR><LF>
+ * ...
+ * OK
+ */
+MODEM_CMD_DEFINE(on_cmd_cmgl)
+{
+	int ret;
+	char pdu_buffer[360];
+	size_t out_len, sms_len, param_len;
+	struct sms_in *sms;
+	bool first_msg = false;
+	char *out_buf;
+	size_t out_buf_avail;
+
+	/* Get the length of the "length" parameter.
+	 * The last parameter will be stuck in the netbuffer.
+	 * It is not the actual length of the trailing pdu so
+	 * we have to search the next crlf.
+	 */
+	param_len = net_buf_find_crlf(data->rx_buf, 0);
+	if (param_len == 0) {
+		LOG_INF("No <CR><LF>");
+		return -EAGAIN;
+	}
+
+	/* Get actual trailing pdu len. +2 to skip crlf. */
+	sms_len = net_buf_find_crlf(data->rx_buf, param_len + 2);
+	if (sms_len == 0) {
+		return -EAGAIN;
+	}
+
+	/* Skip to start of pdu. */
+	data->rx_buf = net_buf_skip(data->rx_buf, param_len + 2);
+	out_len = net_buf_linearize(pdu_buffer, sizeof(pdu_buffer) - 1, data->rx_buf, 0, sms_len);
+	pdu_buffer[out_len] = '\0';
+
+	data->rx_buf = net_buf_skip(data->rx_buf, sms_len);
+
+	/* No buffer specified. */
+	if (!mdata.sms) {
+		return 0;
+	}
+	sms = mdata.sms;
+	out_buf = sms->msg;
+	out_buf+= strlen(sms->msg);
+
+	out_buf_avail = sizeof(sms->msg) - (strlen(sms->msg) + 1);
+	deliver_pdu_data_t pdu_data;
+	deliver_pdu_parse(pdu_buffer, &pdu_data);
+
+	uint8_t csms_ref = 0, csms_idx = 0;
+	if (pdu_data.udhl) {
+		char *udh = pdu_data.ud + 2;
+		uint8_t iei, iedl;
+		while (udh < (pdu_data.ud + 2 + (pdu_data.udhl * 2))) {
+			iei = hex_byte_to_data(udh);
+			udh += 2;
+			iedl = hex_byte_to_data(udh);
+			udh += 2;
+			if (iei != 0) {
+				LOG_WRN("Unknown UDH Identifier %d", iei);
+				udh += iedl * 2;
+			} else {
+				csms_ref = hex_byte_to_data(udh);
+				udh += 4;
+				//Todo: give some warning if we don't get all parts
+				// udh += 2;
+				// csms_pts = hex_byte_to_data(udh);
+				// udh += 2;
+				csms_idx = hex_byte_to_data(udh);
+				udh += 2;
+			}
+		}
+	}
+	if (!strlen(sms->msg)) {
+		sms->csms_ref = csms_ref;
+		first_msg = true;
+	} else if (sms->csms_ref != csms_ref || !sms->csms_ref 
+		|| sms->csms_idx + 1 != csms_idx) {
+		//We alrady have a message, and this is an unrelated message
+		return 0;
+	}
+	sms->csms_idx = csms_idx;
+
+	if (!first_msg)
+		goto decode_msg; //We already have the phone number & timestamp
+	int real_len = (pdu_data.oa_len % 2) ? pdu_data.oa_len + 1 : pdu_data.oa_len;
+	for (int i = 0; i < real_len; i += 2) {
+		byteswp(&pdu_data.oa[i + 2], &pdu_data.oa[i + 3], 1);
+	}
+	memset(sms->phone, 0, sizeof(sms->phone));
+	uint8_t type_of_number = (hex_byte_to_data(pdu_data.oa) >> 4) & 0x7;
+	if (type_of_number == SMS_TON_INTERNATIONAL) {
+		sms->phone[0] = '+';
+		memcpy(&sms->phone[1], pdu_data.oa + 2, pdu_data.oa_len);
+	} else {
+		memcpy(sms->phone, pdu_data.oa + 2, pdu_data.oa_len);
+	}
+	// snprintk(sms->phone, sizeof(sms->phone), "%s", argv[2]);
+	for (int i = 0; i < 14; i += 2) {
+		byteswp(&pdu_data.scts[i], &pdu_data.scts[i + 1], 1);
+	}
+	uint8_t tz = hex_byte_to_data(&pdu_data.scts[12]);
+	snprintk(sms->time, sizeof(sms->time), "%.2s/%.2s/%.2s,%.2s:%.2s:%.2s%c%02x", 
+		pdu_data.scts, &pdu_data.scts[2], &pdu_data.scts[4], &pdu_data.scts[6],
+		&pdu_data.scts[8], &pdu_data.scts[10], (tz & 0x80) ? '+' : '-', tz & 0x7F);
+	memset(sms->msg, 0, sizeof(sms->msg));
+
+decode_msg:
+	if (pdu_data.alphabet == SMS_ALPHABET_GSM8) {
+		if ((pdu_data.udl - pdu_data.udhl) > out_buf_avail) {
+			if (first_msg) {
+				LOG_WRN("Buffer too small: partial message copied");
+			} else {
+				LOG_WRN("Buffer too small: unable to concatenate part %d", csms_idx);
+				return 0;
+			}
+		}
+		hex_str_to_data(pdu_data.ud, out_buf, 
+			MIN((out_buf_avail), pdu_data.udl - pdu_data.udhl));
+		for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
+			if (!mdata.sms_indices[i]) {
+				mdata.sms_indices[i] = atoi(argv[0]);
+				break;
+			}
+		}
+	} else if (pdu_data.alphabet == SMS_ALPHABET_GSM7){
+		if (!pdu_data.udhl) {
+			ret = gsm7_decode(pdu_data.ud, pdu_data.udl, out_buf, out_buf_avail, 0);
+			if (ret) {
+				LOG_WRN("Buffer too small: partial message copied");
+			}
+			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
+				if (!mdata.sms_indices[i]) {
+					mdata.sms_indices[i] = atoi(argv[0]);
+					break;
+				}
+			}
+		} else {
+			uint8_t skip = ((pdu_data.udhl + 1) * 8 + 6) / 7;
+			ret = gsm7_decode(pdu_data.ud, pdu_data.udl, out_buf, out_buf_avail, skip);
+			if (ret && !first_msg) {
+				out_buf = '\0';
+				LOG_WRN("Buffer too small: unable to concatenate part %d", csms_idx);
+				return 0;
+			} else  if (ret) {
+				LOG_WRN("Buffer too small: partial message copied");
+			}
+			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
+				if (!mdata.sms_indices[i]) {
+					mdata.sms_indices[i] = atoi(argv[0]);
+					break;
+				}
+			}
+		}
+	}
+	return 0;
+}
+#else
+
 /* @brief Handler to read SMS message from modem
  *
  * Below is an example of AT+CMGL response format:
@@ -1573,7 +1980,7 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
  *
  * data is pointing at argv[5]
  **/
-MODEM_CMD_DEFINE(on_cmd_readsms)
+MODEM_CMD_DEFINE(on_cmd_cmgl)
 {
 	struct sms_in *sms = mdata.sms;
 	char *str1;
@@ -1634,77 +2041,75 @@ MODEM_CMD_DEFINE(on_cmd_readsms)
 
 	return 0;
 }
+#endif
 
-/**
- * @brief Recieve sms message
- */
-static int recv_sms_msg(void *obj, struct sms_in *sms)
+int recv_sms_msg(void *obj, struct sms_in *sms)
 {
-	char at_cmd[64];
-	int  ret;
-	// struct modem_socket *sock = (struct modem_socket *)obj;
-	int count = 0;
-
-	k_sem_reset(&mdata.sem_sms);
-
-	/* Modem command response to sms receive the data. */
-	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
-		MODEM_CMD("+CMGL:", on_cmd_readsms, 6U, ",")
-	};
-
-	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
-	if (ret < 0) {
-		LOG_DBG("recv_sms_msg error 1\n");
-		LOG_ERR("%s ret:%d", at_cmd, ret);
+	ARG_UNUSED(obj);
+	int ret;
+	if (!sms) {
+		errno = EINVAL;
+		return -1;
 	}
-
-	// Set pointer to struct which is populated in on_cmd_sockreadsms
+	memset(sms, 0, sizeof(struct sms_in));
+	struct modem_cmd cmds[] = { MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r") };
+#ifdef CONFIG_MURATA_1SC_USE_PDU
+	memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
+	
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=0",
+				 &mdata.sem_response, MDM_CMD_RSP_TIME);
 	mdata.sms = sms;
 
-	while (count <= 1) {
-		snprintk(at_cmd, sizeof(at_cmd), "AT+CMGL=\"ALL\"");
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				data_cmd, ARRAY_SIZE(data_cmd), at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
-		if (ret < 0) {
-			LOG_ERR("recv_sms_msg error 2, %s ret = %d\n", at_cmd, ret);
-		}
-
-		else {
-			if (mdata.sms_index)
-			{
-				LOG_DBG("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
-
-				// Delete the message from the modem
-				snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_index);
-				ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-						NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
-				if (ret < 0) {
-					LOG_DBG("recv_sms_msg error 3\n");
-					LOG_ERR("%s ret:%d", at_cmd, ret);
-				}
-
-				ret = mdata.sms_index;
-				mdata.sms_index = 0;
-				break;
-			}
-		}
-
-		// if no message was returned, wait for an SMS message for the requested time
-		if (ret == 0 && count == 0) {
-			ret = k_sem_take(&mdata.sem_sms, sms->timeout);
-			if (ret < 0) {
-				// timed out waiting for semaphore, set ret code to 0 (no msg available)
-				ret = 0;
-				break;
-			}
-		}
-		count++;
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), "AT+CMGL=4",
+				 &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	if (ret < 0) {
+		return -1;
 	}
-	return ret;
-}
+	
+	for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++){
+		if (mdata.sms_indices[i]) {
+			char at_cmd[32];
+			snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_indices[i]);
+			ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+					NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+			if (ret < 0) {
+				LOG_ERR("%s ret:%d", at_cmd, ret);
+			}
+		} else {
+			break;
+		}
+	}
+
+	return strlen(sms->msg);
+#else
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=1",
+				 &mdata.sem_response, MDM_CMD_RSP_TIME);
+	mdata.sms = sms;
+
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), "AT+CMGL=\"ALL\"",
+				 &mdata.sem_response, sms->timeout);
+	if (ret < 0) {
+		return -1;
+	}
+
+	if (mdata.sms_index)
+	{
+		LOG_DBG("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
+
+		// Delete the message from the modem
+		snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_index);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+				NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+		if (ret < 0) {
+			LOG_ERR("%s ret:%d", at_cmd, ret);
+		}
+
+		ret = mdata.sms_index;
+		mdata.sms_index = 0;
+	}
+
+	return strlen(sms->msg);
+#endif
 
 /**
  * @brief Receive data on a socket
@@ -2041,8 +2446,8 @@ static ssize_t offload_sendto(void *obj, const void *buf, size_t len,
 		/* or if not, check whether it is the same as the connected socket */
 		if (to != NULL || tolen != 0) {
 			if ((to == NULL && tolen) ||
-			    ((to != NULL) && !tolen) ||
-			    (memcmp(to, &sock->dst, tolen) != 0)) {
+				((to != NULL) && !tolen) ||
+				(memcmp(to, &sock->dst, tolen) != 0)) {
 				errno = EISCONN;
 				return -1;
 			}
@@ -2681,7 +3086,7 @@ enum mdmdata_e {
 	apn_e,
 	awake_e,
 	connsts_e,
-        edrx_e,
+	edrx_e,
 	golden_e,
 	iccid_e,
 	imei_e,
@@ -2689,7 +3094,7 @@ enum mdmdata_e {
 	ip_e,
 	ip6_e,
 	msisdn_e,
-        psm_e,
+	psm_e,
 	sim_info_e,
 	sleep_e,
 	ssi_e,
@@ -2751,13 +3156,13 @@ static int ioctl_query(enum mdmdata_e idx, void *buf)
 		ret = get_apn(buf);
 		break;
 
-                case psm_e:
-                ret = get_psm(buf);
-                break;
-  
-                case edrx_e:
-                ret = get_edrx(buf);
-                break;
+		case psm_e:
+		ret = get_psm(buf);
+		break;
+
+		case edrx_e:
+		ret = get_edrx(buf);
+		break;
 		case sleep_e:
 		ret = set_cfun(0);
 		break;
@@ -2798,7 +3203,7 @@ struct mdmdata_cmd_t cmd_pool[] = {
 	{"AWAKE",    awake_e},
 	{"CONN_STS", connsts_e},
 	{"CONN",     connsts_e},
-        {"EDRX",      edrx_e},
+	{"EDRX",      edrx_e},
 	{"GOLD",     golden_e},
 	{"GOLDEN",   golden_e},
 	{"ICCID",    iccid_e},
@@ -2807,7 +3212,7 @@ struct mdmdata_cmd_t cmd_pool[] = {
 	{"IP",       ip_e},
 	{"IP6",      ip6_e},
 	{"MSISDN",   msisdn_e},
-        {"PSM",      psm_e},
+	{"PSM",      psm_e},
 	{"SLEEP",    sleep_e},
 	{"SSI",      ssi_e},
 	{"STAT",     connsts_e},
@@ -3212,7 +3617,7 @@ static int send_fw_data(const struct send_fw_data_t *sfd)
 	};
 
 	if (sfd->len <= 0 || sfd->len > MDM_MAX_DATA_LENGTH) {
-                return -1;
+		return -1;
 	}
 
 	k_sem_take(&mdata.sem_xlate_buf, K_FOREVER);
@@ -3275,7 +3680,7 @@ static int init_fw_upgrade(const char *file)
 	char at_cmd[64];
 	snprintk(at_cmd, sizeof(at_cmd), "AT%%UPGCMD=\"UPGVRM\",\"%s\"", file);
 
-        LOG_DBG("init_fw_upgrade: at cmd = %s", at_cmd);
+	LOG_DBG("init_fw_upgrade: at cmd = %s", at_cmd);
 
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
@@ -3552,25 +3957,25 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 			ret = reset_modem();
 			break;
 
-                case AT_MODEM_PSM_SET:
+		case AT_MODEM_PSM_SET:
 			ret = set_psm_timer((struct set_cpsms_params *)va_arg(args, struct set_cpsms_params *));
 			va_end(args);
 			break;
 
-                case AT_MODEM_EDRX_SET:
+		case AT_MODEM_EDRX_SET:
 			ret = set_edrx_timer((struct set_cedrxs_params *)va_arg(args, struct set_cedrxs_params *));
 			va_end(args);
-                        break;
+			break;
 
-                case AT_MODEM_EDRX_GET:
+		case AT_MODEM_EDRX_GET:
 			ret = get_edrx((char *)va_arg(args, char *));
 			va_end(args);
 			break;
 
-                case AT_MODEM_PSM_GET:
+		case AT_MODEM_PSM_GET:
 			ret = get_psm((char *)va_arg(args, char *));
 			va_end(args);
-                        break;
+			break;
 
 		default:
 			errno = EINVAL;
