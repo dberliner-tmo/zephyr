@@ -124,4 +124,11 @@ config USER_ROOT_CA_FILE
         help
           This is for a user to specify a root CA file
 
+config MURATA_1SC_USE_PDU
+        bool "Use PDU mode for SMS Recieve"
+        default y
+        help
+          This allows for the 1SC modem to recieve segmented SMS
+
+
 endif  #MODEM_MURATA_1SC
