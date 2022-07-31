@@ -2079,8 +2079,6 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 			break;
 		}
 	}
-
-	return strlen(sms->msg);
 #else
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=1",
 				 &mdata.sem_response, MDM_CMD_RSP_TIME);
@@ -2107,9 +2105,9 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 		ret = mdata.sms_index;
 		mdata.sms_index = 0;
 	}
-
-	return strlen(sms->msg);
 #endif
+	return strlen(sms->msg);
+}
 
 /**
  * @brief Receive data on a socket
