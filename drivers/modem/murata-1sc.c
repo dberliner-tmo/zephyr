@@ -25,7 +25,6 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #include "modem_socket.h"
 #include "modem_cmd_handler.h"
 #include "modem_sms.h"
-#include "strnstr.h"
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 #include <net/tls_credentials.h>
 #include <sys/base64.h>
@@ -209,11 +208,7 @@ struct murata_1sc_data {
 	struct k_sem sem_sms;
 
 	/* SMS message support */
-#if CONFIG_MURATA_1SC_USE_PDU
 	int sms_indices[16];
-#else
-	int sms_index;
-#endif
 	struct sms_in *sms;
 	recv_sms_func_t recv_sms;
 }; 
@@ -1063,7 +1058,7 @@ static bool first_pdn_rcved = false;
  */
 MODEM_CMD_DEFINE(on_cmd_ipgwmask)
 {
-	char buf[PDN_QUERY_RESPONSE_LEN];
+	char buf[PDN_QUERY_RESPONSE_LEN] = {0};
 	int ret = 0;
 	size_t read_cnt;
 	LOG_DBG("Got PDNRDP, len = %d", len);
@@ -1072,7 +1067,7 @@ MODEM_CMD_DEFINE(on_cmd_ipgwmask)
 		read_cnt = net_buf_linearize(buf,
 				PDN_QUERY_RESPONSE_LEN - 1,
 				data->rx_buf, 0, len);
-		if (strnstr(buf, "\r\n", read_cnt)) {
+		if (strstr(buf, "\r\n")) {
 			LOG_WRN("Not enough octets!!");
 			ret = -EAGAIN;
 			first_pdn_rcved = false;
@@ -1173,13 +1168,13 @@ static int parse_dnsresp(char *buf, struct mdm_dns_resp_t *dns_resp)
 MODEM_CMD_DEFINE(on_cmd_dnsrslv)
 {
 #define DNS_QUERY_RESPONSE_LEN 128
-	char buf[DNS_QUERY_RESPONSE_LEN];
+	char buf[DNS_QUERY_RESPONSE_LEN] = {0};
 	int ret = 0;
 	size_t read_cnt;
 	read_cnt = net_buf_linearize(buf,
 			DNS_QUERY_RESPONSE_LEN - 1,
 			data->rx_buf, 0, len);
-	if (strnstr(buf, "\r\n", read_cnt)) {
+	if (strstr(buf, "\r\n")) {
 		LOG_WRN("NOT enough octets!!");
 		ret = -EAGAIN;
 		first_pdn_rcved = false;
@@ -1553,8 +1548,6 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	return ret;
 }
 
-#if CONFIG_MURATA_1SC_USE_PDU
-
 enum sms_tp_flags {
 	TP_FLAG_MMS = BIT(2),
 	TP_FLAG_RP = BIT(7),
@@ -1582,26 +1575,16 @@ enum sms_alphabet {
 
 //Structure for storing information about a SMS-DELIVER PDU
 typedef struct deliver_pdu_data_s {
-	//Length of SMSC segment
-	uint8_t smsc_len;
-	//SMSC segment
-	char *smsc_start;
-	//Flags
-	uint8_t tp_flags;
-	//Originator address length
-	uint8_t oa_len;
-	//Originator address
-	char *oa;
-	//Alphabet used
-	uint8_t alphabet;
-	//Timestamp
-	char *scts;
-	//User data length
-	uint8_t udl;
-	//User data header length
-	uint8_t udhl;
-	//User data
-	char *ud;
+	uint8_t smsc_len;	/* Length of SMSC segment */
+	char *smsc_start;	/* SMSC segment */
+	uint8_t tp_flags;	/* Flags */
+	uint8_t oa_len;		/*Originator address length */
+	char *oa;			/* Originator address */
+	uint8_t alphabet;	/* Alphabet used */
+	char *scts;			/* Timestamp */
+	uint8_t udl;		/* User data length */
+	uint8_t udhl;		/* User data header length */
+	char *ud;			/* User data */
 } deliver_pdu_data_t;
 
 void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data) 
@@ -1954,94 +1937,6 @@ decode_msg:
 	}
 	return 0;
 }
-#else
-
-/* @brief Handler to read SMS message from modem
- *
- * Below is an example of AT+CMGL response format:
- * <<<<<
- * AT at+cmgl="ALL"
- * 
- * +CMGL: 1,"REC UNREAD","+12817725818",,"21/11/01,06:22:13-28"
- * First sms msg
- * +CMGL: 2,"REC UNREAD","+12817725818",,"21/11/01,06:22:22-28"
- * Second test msg
- * 
- * OK
- * >>>>>
- *
- * At entry, the 6 args prior to the message have been parsed:
- * argv[0] = message index
- * argv[1] = message status
- * argv[2] = address (phone number)
- * argv[3] = address text
- * argv[4] = date in format \"yy/mm/dd,
- * argv[5] = time in format hh:mm:ss[+/-][tz offset]\"
- *
- * data is pointing at argv[5]
- **/
-MODEM_CMD_DEFINE(on_cmd_cmgl)
-{
-	struct sms_in *sms = mdata.sms;
-	char *str1;
-	char *str2;
-	char *str3;
-
-	/*
-	printk("In on_cmd_readsms\n");
-	for (int i=0;i<argc;i++)
-	printk("   argv[%i]='%s'\n", i, argv[i]);
-
-	printk("data (len=%d, strlen=%d: '", data->rx_buf->len, strlen(data->rx_buf->data));
-	for (int i=0;i<data->rx_buf->len;i++)
-	printk("%c", data->rx_buf->data[i]);
-	printk("'\n");
-	*/
-
-	// Verify that the entire response has arrived
-	str1 = strnstr(data->rx_buf->data, "\r\nOK\r\n", data->rx_buf->len);
-	if (str1 == NULL)
-		return -EAGAIN;
-
-	// Find the beginning of the message (first crlf after argv[5])
-	str1 = strnstr(data->rx_buf->data, "\r\n", data->rx_buf->len);
-	if (str1) {
-		// Find the end of the message (next crlf after str1 + 2)
-		str2 = strnstr(str1 + 2, "\r\n", data->rx_buf->len - (size_t) (str1 + 2 - (char *) data->rx_buf->data));
-		if (str2) {
-			*str2 = '\0';
-			LOG_DBG("SMS msg: '%s'\n", str1 + 2);
-
-			// Prepare the return struct
-			snprintk(sms->phone, sizeof(sms->phone), "%s", argv[2]);
-			snprintk(sms->time, sizeof(sms->time), "%.8s,%.11s", argv[4]+1, argv[5]);
-			snprintk(sms->msg, sizeof(sms->msg), "%s", str1 + 2);
-
-			// Set sms_index so we can delete the message from recv_sms_msg
-			// TBD: should we just delete it here
-			mdata.sms_index = atoi(argv[0]);
-
-			// Check for "\r\nOK\r\n" at the end of CMGL response
-			// Skip ahead to the found string if present since
-			// we need to let the command handler know we're done.
-			str3 = strnstr(str2 + 2, "\r\nOK\r\n", data->rx_buf->len - (size_t) (str2 + 2 - (char *) data->rx_buf->data));
-			if (str3) {
-				data->rx_buf = net_buf_skip(data->rx_buf, (size_t) ((uint8_t *) str3 - data->rx_buf->data));
-			}
-		}
-		else {
-			LOG_DBG("Warning, SMS bad format 2\n");
-			return -EAGAIN;
-		}
-	}
-	else {
-		LOG_WRN("Warning, SMS bad format 1\n");
-		return -EAGAIN;
-	}
-
-	return 0;
-}
-#endif
 
 int recv_sms_msg(void *obj, struct sms_in *sms)
 {
@@ -2053,7 +1948,6 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 	}
 	memset(sms, 0, sizeof(struct sms_in));
 	struct modem_cmd cmds[] = { MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r") };
-#ifdef CONFIG_MURATA_1SC_USE_PDU
 	memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
 	
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=0",
@@ -2079,33 +1973,6 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 			break;
 		}
 	}
-#else
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=1",
-				 &mdata.sem_response, MDM_CMD_RSP_TIME);
-	mdata.sms = sms;
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), "AT+CMGL=\"ALL\"",
-				 &mdata.sem_response, sms->timeout);
-	if (ret < 0) {
-		return -1;
-	}
-
-	if (mdata.sms_index)
-	{
-		LOG_DBG("Received SMS from %s dated %s: %s\n", mdata.sms->phone, mdata.sms->time, mdata.sms->msg);
-
-		// Delete the message from the modem
-		snprintk(at_cmd, sizeof(at_cmd), "AT+CMGD=%d", mdata.sms_index);
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
-		if (ret < 0) {
-			LOG_ERR("%s ret:%d", at_cmd, ret);
-		}
-
-		ret = mdata.sms_index;
-		mdata.sms_index = 0;
-	}
-#endif
 	return strlen(sms->msg);
 }
 
@@ -2203,7 +2070,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	k_sem_give(&mdata.sem_xlate_buf);
 	errno = 0;
 
-	/* HACK: use dst address as from */
+	/* Use dst address as from */
 	if (from && fromlen) {
 		*fromlen = sizeof(sock->dst);
 		memcpy(from, &sock->dst, *fromlen);

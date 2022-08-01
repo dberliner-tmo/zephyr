@@ -45,6 +45,5 @@ endif()
 if(CONFIG_MODEM_MURATA_1SC)
         zephyr_library_include_directories(${ZEPHYR_BASE}/subsys/net/ip)
         zephyr_library_sources(murata-1sc.c)
-        zephyr_library_sources(strnstr.c)
 endif()
 
