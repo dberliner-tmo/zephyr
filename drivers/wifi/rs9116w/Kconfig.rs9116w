@@ -51,6 +51,30 @@ config RS9116W_TLS_PEM_BUF_SZ
 
 endif # RS9116W_TLS_OFFLOAD
 
+config RS9116_DNS_SERVER_IP_ADDRESSES
+	bool "Manually set DNS server to be used by the RS9116W"
+	default n
+
+if RS9116_DNS_SERVER_IP_ADDRESSES
+
+config RS9116_IPV4_DNS_SERVER1
+	string "RS9116W IPV4 DNS server 1"
+	default ""
+
+config RS9116_IPV4_DNS_SERVER2
+	string "RS9116W IPV4 DNS server 2"
+	default ""
+
+config RS9116_IPV6_DNS_SERVER1
+	string "RS9116W IPV6 DNS server 1"
+	default ""
+
+config RS9116_IPV6_DNS_SERVER2
+	string "RS9116W IPV6 DNS server 2"
+	default ""
+
+endif # RS9116_DNS_SERVER_IP_ADDRESSES
+
 endif # NET_SOCKETS_OFFLOAD
 
 endif # WIFI_RS9116W

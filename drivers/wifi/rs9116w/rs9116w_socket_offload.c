@@ -1036,19 +1036,12 @@ NET_SOCKET_REGISTER(rs9116w, NET_SOCKET_RS9116_PRIO, AF_UNSPEC,
 #include <rsi_nwk.h>
 #include <rsi_utils.h>
 
-#if CONFIG_DNS_RESOLVER_MAX_SERVERS
-#define DNS_SERVER_COUNT CONFIG_DNS_RESOLVER_MAX_SERVERS
-#else
-#define DNS_SERVER_COUNT 1
-#endif
-
-#if IS_ENABLED(CONFIG_DNS_SERVER_IP_ADDRESSES)
+#if IS_ENABLED(CONFIG_RS9116_DNS_SERVER_IP_ADDRESSES)
 char *dns_servers[] = {
-	CONFIG_DNS_SERVER1,
-	CONFIG_DNS_SERVER2,
-	CONFIG_DNS_SERVER3,
-	CONFIG_DNS_SERVER4,
-	CONFIG_DNS_SERVER5
+	CONFIG_RS9116_IPV4_DNS_SERVER1,
+	CONFIG_RS9116_IPV4_DNS_SERVER2,
+	CONFIG_RS9116_IPV6_DNS_SERVER1,
+	CONFIG_RS9116_IPV6_DNS_SERVER2,
 };
 #endif
 
@@ -1172,12 +1165,12 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 	uint8_t *dns6_1 = NULL, *dns6_2 = NULL;
 #endif
 
-#if IS_ENABLED(CONFIG_DNS_SERVER_IP_ADDRESSES)
+#if IS_ENABLED(CONFIG_RS9116_DNS_SERVER_IP_ADDRESSES)
 	struct sockaddr v4_addresses[2];
 	struct sockaddr v6_addresses[2];
 	int a4i = 0, a6i = 0;
 #if IS_ENABLED(CONFIG_NET_IPV4)
-	for (int i = 0; i < DNS_SERVER_COUNT; i++) {
+	for (int i = 0; i < 4; i++) {
 		if (strcmp(dns_servers[i], "")) {
 			char *server = dns_servers[i];
 			struct sockaddr addr;
