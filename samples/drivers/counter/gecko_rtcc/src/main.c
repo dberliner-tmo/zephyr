@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2020 Peter Bigot Consulting, LLC
- * Copyright (c) 2021 Dennis Ruffer <daruffer@gmail.com>
+ * Copyright (c) 2022 T-Mobile USA, Inc.
  *
  * This sample is based upon modifying Peter Bigot Consulting, LLC's
  * maxim_ds3231 sample to work with the gecko_rtcc's driver.

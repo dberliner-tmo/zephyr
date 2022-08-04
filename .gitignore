@@ -15,8 +15,6 @@ build*/
 cscope.*
 .dir
 
-map*.yml
-
 /*.patch
 
 # The .cache directory will be used to cache toolchain capabilities if

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Dennis Ruffer <daruffer@gmail.com>
+ * Copyright (c) 2022 T-Mobile USA, Inc.
  *
  * This driver is based upon Peter Bigot Consulting, LLC's
  * maxim_ds3231 driver but without an I2C interface.

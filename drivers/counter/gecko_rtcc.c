@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019, Piotr Mienkowski
- * Copyright (c) 2021 Dennis Ruffer <daruffer@gmail.com>
+ * Copyright (c) 2022 T-Mobile USA, Inc.
  *
  * This driver is based upon merging Peter Bigot Consulting, LLC's
  * maxim_ds3231 driver with Piotr's counter_gecko_rtcc driver.

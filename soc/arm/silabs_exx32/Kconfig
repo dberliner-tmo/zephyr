@@ -1,5 +1,7 @@
 # Copyright (c) 2017 Christian Taedcke
 # Copyright (c) 2018 Gil Benkoe
+# Copyright (c) 2022 T-Mobile USA, Inc.
+#
 # SPDX-License-Identifier: Apache-2.0
 
 config SOC_FAMILY_EXX32
