@@ -1,6 +1,7 @@
 # Modem configuration options
 
 # Copyright (c) 2018 Foundries.io
+# Copyright (c) 2022 T-Mobile USA, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 menuconfig MODEM
