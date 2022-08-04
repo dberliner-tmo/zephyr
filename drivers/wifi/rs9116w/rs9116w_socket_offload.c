@@ -29,6 +29,8 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include <rsi_wlan_non_rom.h>
 #include <net/net_pkt.h>
 
+extern struct rs9116w_device s_rs9116w_dev[];
+
 /* Dealing with mismatched define values */
 /* Protocol families. */
 #define Z_PF_UNSPEC       0          /**< Unspecified protocol family.  */
@@ -1211,13 +1213,13 @@ static int rs9116w_getaddrinfo(const char *node, const char *service,
 #endif
 
 #if IS_ENABLED(CONFIG_NET_IPV4)
-	if (v4) {
+	if (v4 && s_rs9116w_dev[0].has_ipv4) {
 		retval4 = rsi_dns_req(4, (uint8_t*)node, dns4_1, dns4_2, &qr4, sizeof(qr4));
 	}
 #endif
 
 #if IS_ENABLED(CONFIG_NET_IPV6)
-	if (v6) {
+	if (v6 && s_rs9116w_dev[0].has_ipv6) {
 		retval6 = rsi_dns_req(6, (uint8_t*)node, dns6_1, dns6_2, &qr6, sizeof(qr6));
 	}
 #endif
