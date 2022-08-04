@@ -38,6 +38,12 @@ struct rs9116w_device {
     /* TBD what else goes here?
      * winc1500 has iface, mac, scan results, and connecting / connected flags
      */
+#if CONFIG_NET_IPV4
+    bool has_ipv4;
+#endif
+#if CONFIG_NET_IPV6
+    bool has_ipv6;
+#endif
     rsi_rsp_scan_t scan_results;
 };
 

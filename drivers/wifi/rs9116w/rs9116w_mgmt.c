@@ -38,7 +38,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #define RS9116W_MAX_IFACES 1
 
-static struct rs9116w_device s_rs9116w_dev[RS9116W_MAX_IFACES] = {0};
+struct rs9116w_device s_rs9116w_dev[RS9116W_MAX_IFACES] = {0};
 
 
 // rsi_wlan_get_state() is not defined in WiseConnect, so define it here
@@ -267,8 +267,11 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     ret = rsi_config_ipaddress(RSI_IP_VERSION_4, ipv4_mode, ipv4_addr, ipv4_mask, ipv4_gw, (uint8_t *) &rsi_rsp_ipv4_parmas, sizeof(rsi_rsp_ipv4_parmas), 0);
     if (ret != 0)
     {
+        rs9116w_dev->has_ipv4 = false;
         LOG_WRN("ipv4: rsi_config_ipaddress error: %d", ret);
         ret = 0;
+    } else {
+        rs9116w_dev->has_ipv4 = true;
     }
 
     memcpy(addr.s4_addr, rsi_rsp_ipv4_parmas.gateway, 4);
@@ -311,6 +314,9 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     {
         LOG_WRN("ipv6: rsi_config_ipaddress error: %x", ret);
         ret = 0;
+        rs9116w_dev->has_ipv6 = false;
+    }  else {
+        rs9116w_dev->has_ipv6 = true;
     }
 
     memcpy(addr6.s6_addr, rsi_rsp_ipv6_parmas.ipaddr6, 16);
@@ -318,6 +324,8 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
     addr6.s6_addr32[1] = sys_cpu_to_be32(addr6.s6_addr32[1]);
     addr6.s6_addr32[2] = sys_cpu_to_be32(addr6.s6_addr32[2]);
     addr6.s6_addr32[3] = sys_cpu_to_be32(addr6.s6_addr32[3]);
+
+    
     // net_if_ipv6_prefix_add(rs9116w_dev->net_iface, &addr6, rsi_rsp_ipv6_parmas.prefixLength, 0);
 
     LOG_DBG("ip6 = %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
@@ -329,7 +337,6 @@ static int rs9116w_mgmt_connect(const struct device *dev, struct wifi_connect_re
 #if IS_ENABLED(CONFIG_NET_NATIVE_IPV6)
     net_if_ipv6_addr_add(rs9116w_dev->net_iface, &addr6, NET_ADDR_DHCP, 0);
 #endif
-
 #endif
 
     LOG_DBG("Connected!");
