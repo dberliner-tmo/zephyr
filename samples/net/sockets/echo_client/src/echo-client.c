@@ -3,6 +3,7 @@
 /*
  * Copyright (c) 2017 Intel Corporation.
  * Copyright (c) 2018 Nordic Semiconductor ASA.
+ * Copyright (c) 2022 T-Mobile USA, Inc.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
