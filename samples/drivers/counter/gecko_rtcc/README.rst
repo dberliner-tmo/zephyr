@@ -1,3 +1,7 @@
+# Copyright (c) 2022 T-Mobile USA, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 .. _maxim-ds3231-sample:
 
 Maxim DS3231 TCXO RTC Sample Application
