@@ -1800,7 +1800,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 	 */
 	param_len = net_buf_find_crlf(data->rx_buf, 0);
 	if (param_len == 0) {
-		LOG_INF("No <CR><LF>");
+		LOG_DBG("No <CR><LF>");
 		return -EAGAIN;
 	}
 
@@ -1946,16 +1946,33 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 		errno = EINVAL;
 		return -1;
 	}
-	memset(sms, 0, sizeof(struct sms_in));
+	memset(sms->msg, 0, sizeof(sms->msg));
+	memset(sms->phone, 0, sizeof(sms->phone));
+	memset(sms->time, 0, sizeof(sms->time));
+	sms->csms_idx = sms->csms_ref = 0;
 	struct modem_cmd cmds[] = { MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r") };
 	memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
 	
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=0",
 				 &mdata.sem_response, MDM_CMD_RSP_TIME);
 	mdata.sms = sms;
-
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), "AT+CMGL=4",
-				 &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	k_sem_reset(&mdata.sem_sms);
+	int count = 0;
+	while (count <= 1){
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), 
+				 "AT+CMGL=4", &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+		if (ret == 0 && !mdata.sms_indices[0]) {
+			ret = k_sem_take(&mdata.sem_sms, sms->timeout);
+			if (ret < 0) {
+				// timed out waiting for semaphore, set ret code to 0 (no msg available)
+				ret = 0;
+				break;
+			}
+		} else if (mdata.sms_indices[0]){
+			break;
+		}
+		count++;
+	}
 	if (ret < 0) {
 		return -1;
 	}
