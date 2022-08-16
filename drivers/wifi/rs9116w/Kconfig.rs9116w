@@ -77,4 +77,12 @@ endif # RS9116_DNS_SERVER_IP_ADDRESSES
 
 endif # NET_SOCKETS_OFFLOAD
 
+if PING
+
+config WISECONNECT_ICMP
+	bool
+	default y
+
+endif # PING
+
 endif # WIFI_RS9116W

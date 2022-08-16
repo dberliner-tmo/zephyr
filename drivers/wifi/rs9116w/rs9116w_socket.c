@@ -18,6 +18,12 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 #include <rsi_wlan_apis.h>
 #include "rsi_wlan.h"
+#undef s6_addr
+#undef s6_addr32
+#define Z_PF_INET         1          /**< IP protocol family version 4. */
+#define Z_PF_INET6        2          /**< IP protocol family version 6. */
+#define Z_AF_INET        Z_PF_INET   /**< IP protocol family version 4. */
+#define Z_AF_INET6       Z_PF_INET6  /**< IP protocol family version 6. */
 
 static int rs9116w_dummy_get(sa_family_t family,
 				enum net_sock_type type,
@@ -40,6 +46,44 @@ static struct net_offload rs9116w_offload = {
     .put      = NULL
 };
 
+// #ifdef CONFIG_PING
+#if 1
+#include <zephyr/net/ping.h>
+static uint32_t sent_ts;
+static void rs9116w_ping_resp_handler(uint16_t status, const uint8_t* buf, uint16_t len) 
+{
+    if (!status) {
+        net_ping_resp_notify(k_uptime_get_32() - sent_ts);
+    }
+}
+
+static int rs9116w_ping_offload(const struct sockaddr* dst, size_t sz)
+{
+    int stat;
+    uint8_t *addr;
+    sent_ts = k_uptime_get_32();
+    if (dst->sa_family == Z_AF_INET) {
+        addr = (uint8_t*)&net_sin(dst)->sin_addr.s_addr;
+        stat = rsi_wlan_ping_async(0, (uint8_t*)&addr, sz, rs9116w_ping_resp_handler);
+        if (stat) {
+            LOG_WRN("rsi_wlan_ping_async error : %d", stat);
+            return -EIO;
+        }
+    } else if (dst->sa_family == Z_AF_INET6) {
+        // addr =net_sin6(dst)
+        addr = net_sin6(dst)->sin6_addr.s6_addr;
+        stat = rsi_wlan_ping_async(1, addr, sz, rs9116w_ping_resp_handler);
+        if (stat) {
+            LOG_WRN("rsi_wlan_ping_async error : %d", stat);
+            return -EIO;
+        }
+    } else {
+        return -EINVAL;
+    }
+    return 0;
+}
+#endif
+
 int rs9116w_offload_init(struct rs9116w_device *rs9116w)
 {
     rs9116w->net_iface->if_dev->offload = &rs9116w_offload;
@@ -48,6 +92,9 @@ int rs9116w_offload_init(struct rs9116w_device *rs9116w)
 
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
     rs9116w->net_iface->if_dev->socket_offload = rs9116w_socket_create;
+#ifdef CONFIG_PING
+    rs9116w->net_iface->if_dev->ping_offload = rs9116w_ping_offload;
+#endif
     rs9116w_socket_offload_init();
 #endif
 
