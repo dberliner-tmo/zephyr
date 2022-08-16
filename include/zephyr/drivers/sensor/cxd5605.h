@@ -1,0 +1,212 @@
+/*
+ * Copyright (c) 2022 T-Mobile USA, Inc.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef ZEPHYR_INCLUDE_DRIVERS_SENSOR_CXD5605_H_
+#define ZEPHYR_INCLUDE_DRIVERS_SENSOR_CXD5605_H_
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define READ_BYTES_SIZE			128
+#define CXD5605_PACKET_SIZE		74
+#define CXD5605_PACKET_DATA_SIZE	70
+#define GALG_ALMANAC_DATA_SIZE		2056
+#define GEMG_EPHEMERIS_DATA_SIZE	3080
+#define LALG_ALMANAC_DATA_SIZE 		584
+#define LEMG_EPHEMERIS_DATA_SIZE	1160
+#define QALG_ALMANAC_DATA_SIZE		680
+#define QEMG_EPHEMERIS_DATA_SIZE	968
+
+#define	NMEA_SENTENCE_ID_IDX		0
+#define	NMEA_SENTENCE_ID_LEN		6
+
+enum sensor_attr_gns_t{
+	GNS_GPS 		= 0x01,
+	GNS_GLONASS		= 0x02,
+	GNS_SBAS 		= 0x04,
+	GNS_QZSS_L1_CA 		= 0x08,
+	GNS_QZSS_L1_5 		= 0x20,
+	GNS_BEIDOU 		= 0x40,
+	GNS_GALILEO 		= 0x80
+}; 
+
+enum sensor_attr_bssl_t {
+	BSSL_GGA 		= 0x01,
+	BSSL_GLL		= 0x02,
+	BSSL_GSA 		= 0x04,
+	BSSL_GSV 		= 0x08,
+	BSSL_GNS 		= 0x10,
+	BSSL_RMC 		= 0x20,
+	BSSL_VTG 		= 0x40,	
+	BSSL_ZDA		= 0x80
+}; 
+
+enum sensor_attr_guse_t {
+	GUSE_FITNESS_MODE,				// Fitness mode (default value)
+	GUSE_SWIMMING_MODE	= 0x0080,		// Swimming mode
+	GUSE_DRIVING_MODE	= 0x8000		// Driving mode
+};
+
+enum sensor_attribute_cxd5605 {
+	SENSOR_ATTRIBUTE_CXD5605_TURN_ON_1PPS = SENSOR_ATTR_PRIV_START,
+	SENSOR_ATTRIBUTE_CXD5605_SHUTDOWN_MODE,
+	SENSOR_ATTRIBUTE_CXD5605_CONTINUOUS_CONVERSION_MODE,
+	SENSOR_ATTRIBUTE_CXD5605_ALERT_POLARITY,
+	SENSOR_ATTRIBUTE_CXD5605_CALLBACK,
+	SENSOR_ATTRIBUTE_CXD5605_BSSL,
+	SENSOR_ATTRIBUTE_CXD5605_GCD,
+	SENSOR_ATTRIBUTE_CXD5605_WAKE_UP,
+	SENSOR_ATTRIBUTE_CXD5605_ABPT,
+	SENSOR_ATTRIBUTE_CXD5605_ABUP,
+	SENSOR_ATTRIBUTE_CXD5605_BUP,
+	SENSOR_ATTRIBUTE_CXD5605_BUPC,
+	SENSOR_ATTRIBUTE_CXD5605_CSBR,
+	SENSOR_ATTRIBUTE_CXD5605_FER,
+	SENSOR_ATTRIBUTE_CXD5605_GALG,
+	SENSOR_ATTRIBUTE_CXD5605_GALS,
+	SENSOR_ATTRIBUTE_CXD5605_GEMG,
+	SENSOR_ATTRIBUTE_CXD5605_GEMS,
+	SENSOR_ATTRIBUTE_CXD5605_GNS,
+	SENSOR_ATTRIBUTE_CXD5605_GPOE,
+	SENSOR_ATTRIBUTE_CXD5605_GPOS,
+	SENSOR_ATTRIBUTE_CXD5605_GPTC,
+	SENSOR_ATTRIBUTE_CXD5605_GSOP,
+	SENSOR_ATTRIBUTE_CXD5605_GSP,
+	SENSOR_ATTRIBUTE_CXD5605_GSR,
+	SENSOR_ATTRIBUTE_CXD5605_GSW,
+	SENSOR_ATTRIBUTE_CXD5605_GTCX,
+	SENSOR_ATTRIBUTE_CXD5605_GTE,
+	SENSOR_ATTRIBUTE_CXD5605_GTIM,
+	SENSOR_ATTRIBUTE_CXD5605_GTR,
+	SENSOR_ATTRIBUTE_CXD5605_GTS,
+	SENSOR_ATTRIBUTE_CXD5605_LALG,
+	SENSOR_ATTRIBUTE_CXD5605_LALS,
+	SENSOR_ATTRIBUTE_CXD5605_LEMG,
+	SENSOR_ATTRIBUTE_CXD5605_LEMS,
+	SENSOR_ATTRIBUTE_CXD5605_QALG,
+	SENSOR_ATTRIBUTE_CXD5605_QALS,
+	SENSOR_ATTRIBUTE_CXD5605_QEMG,
+	SENSOR_ATTRIBUTE_CXD5605_QEMS,
+	SENSOR_ATTRIBUTE_CXD5605_SLP,
+	SENSOR_ATTRIBUTE_CXD5605_VER,
+	SENSOR_ATTRIBUTE_CXD5605_GUSE,
+	SENSOR_ATTRIBUTE_CXD5605_CEPS,
+	SENSOR_ATTRIBUTE_CXD5605_CEPW,
+	SENSOR_ATTRIBUTE_CXD5605_CEPC,
+	SENSOR_ATTRIBUTE_CXD5605_ERASE,
+	};
+
+enum gga_nmea_fieldpos_t {
+	GGA_UTC_OF_POSITION_IDX = 1,
+	GGA_LATITUDE_IDX,
+	GGA_LATITUDE_DIR_IDX,
+	GGA_LONGITUDE_IDX,
+	GGA_LONGITUDE_DIR_IDX,
+	GGA_QUALITY_INDICATOR_IDX,
+	GGA_NUM_SATELLITE_IDX,
+	GGA_HDOP_IDX,
+	GGA_ALTITUDE_IDX,
+	GGA_GEOIDAL_SEPARATION_IDX,
+	GGA_AGE_OF_DGPS_IDX,
+	GGA_DIFFERENTIAL_REF_IDX
+};
+
+enum gns_nmea_fieldpos_t {
+	GNS_UTC_OF_POSITION_IDX = 1,
+	GNS_LATITUDE_IDX,
+	GNS_LATITUDE_DIR_IDX,
+	GNS_LONGITUDE_IDX,
+	GNS_LONGITUDE_DIR_IDX,
+	GNS_MODE_INDICATOR_IDX,
+	GNS_NUM_SATELLITE_IDX,
+	GNS_HDOP_IDX,
+	GNS_ALTITUDE_IDX,
+	GNS_GEOIDAL_SEPARATION_IDX,
+	GNS_AGE_OF_DGPS_IDX,
+	GNS_DIFFERENTIAL_REF_IDX
+};
+
+enum gll_nmea_fieldpos {
+	GLL_LATITUDE_IDX = 1,
+	GLL_LATITUDE_DIR_IDX,
+	GLL_LONGITUDE_IDX,
+	GLL_LONGITUDE_DIR_IDX,
+	GLL_UTC_OF_POSITION_IDX,
+	GLL_STATUS_IDX,
+	GLL_MODE_INDICATOR_IDX
+};
+
+struct cxd5605_version {
+	uint32_t major;
+	uint32_t minor;
+	uint32_t patch;
+};
+
+struct cxd5605_gtr {
+	double cn_level;
+	double doppler_freq;
+} ;
+
+struct cxd5605_cmd_data {
+	struct cxd5605_version ver;
+	struct cxd5605_gtr gtr;
+	double txco_offset;
+	uint8_t galg_almanac[GALG_ALMANAC_DATA_SIZE];
+	uint8_t gals_almanac[GALG_ALMANAC_DATA_SIZE];
+	uint8_t gemg_ephemeris[GEMG_EPHEMERIS_DATA_SIZE];
+	uint8_t gems_ephemeris[GEMG_EPHEMERIS_DATA_SIZE];
+	uint8_t lalg_almanac[LALG_ALMANAC_DATA_SIZE];
+	uint8_t lals_almanac[LALG_ALMANAC_DATA_SIZE];
+	uint8_t lemg_ephemeris[LEMG_EPHEMERIS_DATA_SIZE];
+	uint8_t lems_ephemeris[LEMG_EPHEMERIS_DATA_SIZE];
+	uint8_t qalg_almanac[QALG_ALMANAC_DATA_SIZE];
+	uint8_t qals_almanac[QALG_ALMANAC_DATA_SIZE];
+	uint8_t qemg_ephemeris[QEMG_EPHEMERIS_DATA_SIZE];
+	uint8_t qems_ephemeris[QEMG_EPHEMERIS_DATA_SIZE];
+};
+
+struct cxd5605_packet {
+	uint8_t preamble;
+	uint8_t packet_type;
+	uint8_t data_size;
+	uint8_t data[CXD5605_PACKET_DATA_SIZE];
+	uint8_t checksum;
+};
+
+struct cxd5605_binary_data {
+	uint8_t preamble;
+	uint8_t control_type;
+	uint8_t data_length_upper;
+	uint8_t data_length_lower;
+	uint8_t data[CXD5605_PACKET_DATA_SIZE];
+	uint8_t checksum_upper;
+	uint8_t checksum_lower;
+	uint8_t fixed_value1;
+	uint8_t fixed_value2;
+};
+
+struct cxd5605_cepw_binary_data {
+	uint8_t preamble;
+	uint8_t control_type;
+	uint8_t data_length_upper;
+	uint8_t data_length_lower;
+	uint8_t data[2048];
+	uint8_t checksum_upper;
+	uint8_t checksum_lower;
+	uint8_t fixed_value1;
+	uint8_t fixed_value2;
+};
+
+typedef void (*gpps_func)(void);
+
+/** a mask for the under temp alert bit in the status word*/
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* ZEPHYR_INCLUDE_DRIVERS_SENSOR_CXD5605_H_ */
