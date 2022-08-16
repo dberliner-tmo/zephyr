@@ -4018,6 +4018,54 @@ static struct net_offload modem_net_offload = {
 };
 #endif
 
+#if CONFIG_PING
+#include <zephyr/net/ping.h>
+static uint32_t sent_ts;
+
+/**
+ * @brief Handler for ping reply events
+ */
+MODEM_CMD_DEFINE(on_cmd_pingcmd)
+{
+	net_ping_resp_notify(k_uptime_get_32() - sent_ts);
+	return 0;
+}
+
+static int offload_ping(const struct sockaddr* dst, size_t sz)
+{
+	ARG_UNUSED(sz); /* Even though there is a size argument, it doesn't work correctly */
+	char at_cmd[sizeof("AT%PINGCMD=0,\"\"") + NET_IPV6_ADDR_LEN];
+	char addr[NET_IPV6_ADDR_LEN];
+
+	struct modem_cmd data_cmd[] = {
+		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
+		MODEM_CMD("%PINGCMD:", on_cmd_pingcmd, 4U, ",")
+	};
+	
+	int ipv6 = (dst->sa_family == AF_INET6) ? 1 : 0;
+
+	if (ipv6) {
+		// zsock_inet_ntop()
+		net_addr_ntop(AF_INET6, &net_sin6(dst)->sin6_addr, addr, sizeof(addr));
+	} else {
+		net_addr_ntop(AF_INET, &net_sin(dst)->sin_addr, addr, sizeof(addr));
+	}
+
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%PINGCMD=%d,\"%s\"", ipv6, addr);
+
+	sent_ts = k_uptime_get_32();
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
+			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+
+}
+#endif
+
 /* @brief Setup the Modem NET Interface. */
 static void murata_1sc_net_iface_init(struct net_if *iface)
 {
@@ -4032,6 +4080,9 @@ static void murata_1sc_net_iface_init(struct net_if *iface)
 #if defined(CONFIG_NET_SOCKETS_OFFLOAD)
 	iface->if_dev->offload = &modem_net_offload;
 	iface->if_dev->socket_offload = offload_socket;
+#if defined(CONFIG_PING)
+	iface->if_dev->ping_offload = offload_ping;
+#endif
 	murata_socket_offload_init();
 #endif
 
