@@ -206,9 +206,11 @@ struct murata_1sc_data {
 	struct k_sem sem_sock_conn;
 	struct k_sem sem_xlate_buf;
 	struct k_sem sem_sms;
+	struct k_sem sem_rcv_sms;
 
 	/* SMS message support */
-	int sms_indices[16];
+	uint8_t sms_indices[16];
+	uint8_t sms_csms_indices[16];
 	struct sms_in *sms;
 	recv_sms_func_t recv_sms;
 }; 
@@ -469,7 +471,7 @@ exit:
  */
 MODEM_CMD_DEFINE(on_cmd_unsol_sms)
 {
-	k_sem_give(&mdata.sem_sms);
+	k_sem_give(&mdata.sem_rcv_sms);
 
 	return 0;
 }
@@ -1531,6 +1533,8 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	int  ret;
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
+	k_sem_take(&mdata.sem_sms, K_FOREVER);
+
 	snprintk(at_cmd, sizeof(at_cmd), "AT+CMGF=1");
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0U, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
@@ -1544,6 +1548,8 @@ static int send_sms_msg(void *obj, const struct sms_out *sms)
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
+
+	k_sem_give(&mdata.sem_sms);
 
 	return ret;
 }
@@ -1785,6 +1791,145 @@ static size_t net_buf_find_crlf(struct net_buf *buf, size_t skip)
  */
 MODEM_CMD_DEFINE(on_cmd_cmgl)
 {
+	char pdu_buffer[200]; /* We dont actuall need the whole thing */
+	char raw_ts[8] = {0};
+	uint64_t ts, min_ts;
+	size_t out_len, sms_len, param_len;
+	struct sms_in *sms;
+
+	/* Get the length of the "length" parameter.
+	 * The last parameter will be stuck in the netbuffer.
+	 * It is not the actual length of the trailing pdu so
+	 * we have to search the next crlf.
+	 */
+	param_len = net_buf_find_crlf(data->rx_buf, 0);
+	if (param_len == 0) {
+		LOG_DBG("No <CR><LF>");
+		return -EAGAIN;
+	}
+
+	/* Get actual trailing pdu len. +2 to skip crlf. */
+	sms_len = net_buf_find_crlf(data->rx_buf, param_len + 2);
+	if (sms_len == 0) {
+		return -EAGAIN;
+	}
+
+	/* Skip to start of pdu. */
+	data->rx_buf = net_buf_skip(data->rx_buf, param_len + 2);
+	out_len = net_buf_linearize(pdu_buffer, sizeof(pdu_buffer) - 1, data->rx_buf, 0, sms_len);
+	pdu_buffer[out_len] = '\0';
+
+	data->rx_buf = net_buf_skip(data->rx_buf, sms_len);
+
+	/* No buffer specified. */
+	if (!mdata.sms) {
+		return 0;
+	}
+	sms = mdata.sms;
+
+	deliver_pdu_data_t pdu_data;
+	deliver_pdu_parse(pdu_buffer, &pdu_data);
+
+	for (int i = 0; i < 14; i += 2) {
+		byteswp(&pdu_data.scts[i], &pdu_data.scts[i + 1], 1);
+	}
+
+	memcpy(raw_ts, pdu_data.scts, 7);
+	ts = strtol(raw_ts, NULL, 10) * 100000;
+	memset(raw_ts, 0, sizeof(raw_ts));
+	memcpy(raw_ts, pdu_data.scts + 7, 5);
+	ts += strtol(raw_ts, NULL, 10);
+
+	if (strlen(sms->time)){
+		memcpy(raw_ts, sms->time, 7);
+		min_ts = strtol(raw_ts, NULL, 10) * 100000;
+		memset(raw_ts, 0, sizeof(raw_ts));
+		memcpy(raw_ts, sms->time + 7, 5);
+		min_ts += strtol(raw_ts, NULL, 10);
+	} else {
+		min_ts = UINT64_MAX;
+	}
+	
+	if (ts < min_ts) {
+		uint8_t csms_ref = 0, csms_idx = 0;
+		memcpy(sms->time, pdu_data.scts, 12);
+		memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
+		if (pdu_data.udhl) {
+			char *udh = pdu_data.ud + 2;
+			uint8_t iei, iedl;
+			while (udh < (pdu_data.ud + 2 + (pdu_data.udhl * 2))) {
+				iei = hex_byte_to_data(udh);
+				udh += 2;
+				iedl = hex_byte_to_data(udh);
+				udh += 2;
+				if (iei != 0) {
+					LOG_WRN("Unknown UDH Identifier %d", iei);
+					udh += iedl * 2;
+				} else {
+					csms_ref = hex_byte_to_data(udh);
+					udh += 4;
+					csms_idx = hex_byte_to_data(udh);
+					udh += 2;
+				}
+			}
+		}
+		if (sms->csms_ref != csms_ref){
+			mdata.sms_indices[0] = strtol(argv[0], NULL, 10);
+			mdata.sms_csms_indices[0]  = sms->csms_idx;
+			sms->csms_ref = csms_ref;
+			sms->csms_idx = csms_idx;
+		} else {
+			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
+				if (!mdata.sms_indices[i]){
+					mdata.sms_indices[i] = strtol(argv[0], NULL, 10);
+					mdata.sms_csms_indices[i] = csms_idx;
+					break;
+				}
+			}
+		}
+		//Store csms_ref as well
+	} else if (pdu_data.udhl && sms->csms_ref){
+		char *udh = pdu_data.ud + 2;
+		uint8_t iei, iedl, csms_ref = 0, csms_idx = 0;
+		while (udh < (pdu_data.ud + 2 + (pdu_data.udhl * 2))) {
+			iei = hex_byte_to_data(udh);
+			udh += 2;
+			iedl = hex_byte_to_data(udh);
+			udh += 2;
+			if (iei != 0) {
+				LOG_WRN("Unknown UDH Identifier %d", iei);
+				udh += iedl * 2;
+			} else {
+				csms_ref = hex_byte_to_data(udh);
+				udh += 4;
+				csms_idx = hex_byte_to_data(udh);
+				udh += 2;
+			}
+		}
+		if (!csms_ref || csms_ref != sms->csms_ref) {
+			return 0;
+		}
+		for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
+			if (!mdata.sms_indices[i]){
+				mdata.sms_indices[i] = strtol(argv[0], NULL, 10);
+				mdata.sms_csms_indices[i] = csms_idx;
+				break;
+			}
+		}
+	}
+	return 0;
+}
+
+/**
+ * Parses list sms and add them to buffer.
+ * Format is:
+ *
+ * +CMGR: <stat>,,<length><CR><LF><pdu><CR><LF>
+ * 
+ * OK
+ */
+MODEM_CMD_DEFINE(on_cmd_cmgr)
+{
 	int ret;
 	char pdu_buffer[360];
 	size_t out_len, sms_len, param_len;
@@ -1829,7 +1974,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 	deliver_pdu_data_t pdu_data;
 	deliver_pdu_parse(pdu_buffer, &pdu_data);
 
-	uint8_t csms_ref = 0, csms_idx = 0;
+	uint8_t csms_idx = 0;
 	if (pdu_data.udhl) {
 		char *udh = pdu_data.ud + 2;
 		uint8_t iei, iedl;
@@ -1842,7 +1987,6 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 				LOG_WRN("Unknown UDH Identifier %d", iei);
 				udh += iedl * 2;
 			} else {
-				csms_ref = hex_byte_to_data(udh);
 				udh += 4;
 				//Todo: give some warning if we don't get all parts
 				// udh += 2;
@@ -1854,11 +1998,8 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 		}
 	}
 	if (!strlen(sms->msg)) {
-		sms->csms_ref = csms_ref;
 		first_msg = true;
-	} else if (sms->csms_ref != csms_ref || !sms->csms_ref 
-		|| sms->csms_idx + 1 != csms_idx) {
-		//We alrady have a message, and this is an unrelated message
+	}  else if (sms->csms_idx + 1 != csms_idx) {
 		return 0;
 	}
 	sms->csms_idx = csms_idx;
@@ -1884,7 +2025,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 	uint8_t tz = hex_byte_to_data(&pdu_data.scts[12]);
 	snprintk(sms->time, sizeof(sms->time), "%.2s/%.2s/%.2s,%.2s:%.2s:%.2s%c%02x", 
 		pdu_data.scts, &pdu_data.scts[2], &pdu_data.scts[4], &pdu_data.scts[6],
-		&pdu_data.scts[8], &pdu_data.scts[10], (tz & 0x80) ? '+' : '-', tz & 0x7F);
+		&pdu_data.scts[8], &pdu_data.scts[10], (tz & 0x80) ? '-' : '+', tz & 0x7F);
 	memset(sms->msg, 0, sizeof(sms->msg));
 
 decode_msg:
@@ -1899,39 +2040,21 @@ decode_msg:
 		}
 		hex_str_to_data(pdu_data.ud, out_buf, 
 			MIN((out_buf_avail), pdu_data.udl - pdu_data.udhl));
-		for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
-			if (!mdata.sms_indices[i]) {
-				mdata.sms_indices[i] = atoi(argv[0]);
-				break;
-			}
-		}
 	} else if (pdu_data.alphabet == SMS_ALPHABET_GSM7){
 		if (!pdu_data.udhl) {
 			ret = gsm7_decode(pdu_data.ud, pdu_data.udl, out_buf, out_buf_avail, 0);
 			if (ret) {
 				LOG_WRN("Buffer too small: partial message copied");
 			}
-			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
-				if (!mdata.sms_indices[i]) {
-					mdata.sms_indices[i] = atoi(argv[0]);
-					break;
-				}
-			}
 		} else {
 			uint8_t skip = ((pdu_data.udhl + 1) * 8 + 6) / 7;
 			ret = gsm7_decode(pdu_data.ud, pdu_data.udl, out_buf, out_buf_avail, skip);
 			if (ret && !first_msg) {
-				out_buf = '\0';
 				LOG_WRN("Buffer too small: unable to concatenate part %d", csms_idx);
+				*out_buf = '\0';
 				return 0;
 			} else  if (ret) {
 				LOG_WRN("Buffer too small: partial message copied");
-			}
-			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++) {
-				if (!mdata.sms_indices[i]) {
-					mdata.sms_indices[i] = atoi(argv[0]);
-					break;
-				}
 			}
 		}
 	}
@@ -1950,19 +2073,25 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 	memset(sms->phone, 0, sizeof(sms->phone));
 	memset(sms->time, 0, sizeof(sms->time));
 	sms->csms_idx = sms->csms_ref = 0;
-	struct modem_cmd cmds[] = { MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r") };
+	struct modem_cmd cmds[] = { 
+		MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r"),
+		MODEM_CMD("+CMGR: ", on_cmd_cmgr, 3U, ",\r"),
+	};
 	memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
+	memset(mdata.sms_csms_indices, 0, sizeof(mdata.sms_indices));
 	
+	k_sem_take(&mdata.sem_sms, K_FOREVER);
+
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=0",
 				 &mdata.sem_response, MDM_CMD_RSP_TIME);
 	mdata.sms = sms;
-	k_sem_reset(&mdata.sem_sms);
+	k_sem_reset(&mdata.sem_rcv_sms);
 	int count = 0;
 	while (count <= 1){
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), 
 				 "AT+CMGL=4", &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret == 0 && !mdata.sms_indices[0]) {
-			ret = k_sem_take(&mdata.sem_sms, sms->timeout);
+			ret = k_sem_take(&mdata.sem_rcv_sms, sms->timeout);
 			if (ret < 0) {
 				// timed out waiting for semaphore, set ret code to 0 (no msg available)
 				ret = 0;
@@ -1974,7 +2103,44 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 		count++;
 	}
 	if (ret < 0) {
+		k_sem_give(&mdata.sem_sms);
 		return -1;
+	}
+
+	if (mdata.sms_indices[0]) {
+		/* Perform read now */
+		bool out_of_order = true;
+		while (out_of_order && sms->csms_ref) {
+			out_of_order = false;
+			for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices) - 1; i++) {
+				if ((mdata.sms_csms_indices[i] > mdata.sms_csms_indices[i + 1])
+					 && mdata.sms_csms_indices[i + 1]) {
+					uint8_t tmp = mdata.sms_csms_indices[i];
+					mdata.sms_csms_indices[i] = mdata.sms_csms_indices[i + 1];
+					mdata.sms_csms_indices[i + 1] = tmp;
+					tmp = mdata.sms_indices[i];
+					mdata.sms_indices[i] = mdata.sms_indices[i + 1];
+					mdata.sms_indices[i + 1] = tmp;
+					out_of_order = true;
+				}
+			}
+		}
+		int sms_len;
+		for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++){
+			if (!mdata.sms_indices[i]) {
+				break;
+			}
+			sms_len = strlen(sms->msg);
+			char at_cmd[32];
+			snprintk(at_cmd, sizeof(at_cmd), "AT+CMGR=%d", mdata.sms_indices[i]);
+			ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), 
+					at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+			if (ret || sms_len == strlen(sms->msg)) {
+				memset(&mdata.sms_indices[i], 0, 
+					    sizeof(mdata.sms_indices) - sizeof(mdata.sms_indices[0]) * i);
+				break;
+			}
+		}
 	}
 	
 	for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++){
@@ -1990,6 +2156,7 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 			break;
 		}
 	}
+	k_sem_give(&mdata.sem_sms);
 	return strlen(sms->msg);
 }
 
@@ -3897,7 +4064,8 @@ static int murata_1sc_init(const struct device *dev)
 	k_sem_init(&mdata.sem_response,	 0, 1);
 	k_sem_init(&mdata.sem_sock_conn, 0, 1);
 	k_sem_init(&mdata.sem_xlate_buf, 1, 1);
-	k_sem_init(&mdata.sem_sms,       0, 1);
+	k_sem_init(&mdata.sem_rcv_sms,       0, 1);
+	k_sem_init(&mdata.sem_sms,       1, 1);
 
 	/* socket config */
 	mdata.socket_config.sockets = &mdata.sockets[0];
