@@ -417,6 +417,14 @@ struct net_traffic_class {
  * @brief A function prototype to create an offloaded socket. The prototype is
  *        compatible with socket() function.
  */
+typedef int (*net_offload_ping_t)(const struct sockaddr*, size_t);
+
+/**
+ * @typedef net_socket_create_t
+
+ * @brief A function prototype to create an offloaded socket. The prototype is
+ *        compatible with socket() function.
+ */
 typedef int (*net_socket_create_t)(int, int, int);
 
 /**
@@ -455,6 +463,12 @@ struct net_if_dev {
 	 * network interface.
 	 */
 	struct net_offload *offload;
+
+
+	/** Offload ping function
+	 * If non-NULL, then ping can be performed on chip 
+	 */
+	net_offload_ping_t ping_offload;
 #endif /* CONFIG_NET_OFFLOAD */
 
 	/** The hardware MTU */
