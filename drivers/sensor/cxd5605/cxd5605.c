@@ -12,11 +12,14 @@
 #define DT_DRV_COMPAT sony_cxd5605
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <float.h>
 #include <device.h>
 #include <string.h>
+#include <ctype.h>
+#include <kernel.h>
 #include <drivers/i2c.h>
 #include <drivers/sensor.h>
 #include <drivers/sensor/gnss.h>
@@ -24,8 +27,6 @@
 #include <sys/util.h>
 #include <sys/byteorder.h>
 #include <logging/log.h>
-#include <kernel.h>
-#include <stdio.h>
 #include <fs/fs.h>
 
 #include "cxd5605.h"
@@ -373,6 +374,49 @@ static void callback_1pps(const struct device *dev,
 		(drv_data->gpps_cb)();
 }
 
+/** @brief Local implementation of atof since atof and strod are not in
+ * minimal libc
+ *
+ * @param str Pointer to string representing float, [+/-][<decimal>][.<fraction>]
+ *
+ * @return Converted double value
+ */
+static double atod(const char *str)
+{
+	double ret = 0.0;
+	bool neg = false;
+
+	// remove leading space
+	while (isspace(*str)) str++;
+
+	// get sign if present
+	if (*str && (*str == '-' || *str == '+')) {
+		if (*str == '-') {
+			neg = true;
+		}
+		str++;
+	}
+
+	// get decimal part
+	while (*str && isdigit(*str)) {
+		ret = ret * 10 + (*str - '0');
+		str++;
+	}
+
+	// get fractional part
+	if (*str && *str == '.') {
+		double frac = 0.0;
+		double div = 1.0;
+		str++;
+		while (*str && isdigit(*str)) {
+			frac = frac * 10 + (*str - '0');
+			str++;
+			div *= 10.0;
+		}
+		ret = ret + frac / div;
+	}
+	return neg ? (ret * -1.0) : ret;
+}
 
 /** @brief Callback routine for alert gpio interrupt. It will be called when GPS data/response is ready.
  *
@@ -391,7 +435,6 @@ static void callback(const struct device *dev,
 	char to_send[32];
 	struct cxd5605_packet rd_data;
 	int result;
-	char *ptr;
 	char *temp_field[MAXFIELDS];
 	int readbytes;
 
@@ -409,28 +452,28 @@ static void callback(const struct device *dev,
 
 				if (!strncmp("$GPGGA",temp_field[NMEA_SENTENCE_ID_IDX], NMEA_SENTENCE_ID_LEN)) {
 					if (atoi(temp_field[GGA_QUALITY_INDICATOR_IDX]) == 1) {
-						uint32_t t = strtod(temp_field[GGA_UTC_OF_POSITION_IDX],&ptr) * 100;
+						uint32_t t = atod(temp_field[GGA_UTC_OF_POSITION_IDX]) * 100;
 						drv_data->pvt.time.gnss_hour = (t / 1000000);
 						drv_data->pvt.time.gnss_minute = (t % 1000000) / 10000;
 						drv_data->pvt.time.gnss_second = (t % 10000) / 100;
-						drv_data->pvt.time.gnss_nanosecond = (t % 100);
+						drv_data->pvt.time.gnss_nanosecond = (t % 100) * 10000000;
 
-						drv_data->pvt.position.latitude= (strtod(temp_field[GGA_LATITUDE_IDX],&ptr) * 100000);
+						drv_data->pvt.position.latitude= (atod(temp_field[GGA_LATITUDE_IDX]) * 100000);
 						if (temp_field[GGA_LATITUDE_DIR_IDX][0] == 'S') {
 							drv_data->pvt.position.latitude *= -1;
 						}
-						drv_data->pvt.position.longitude = (strtod(temp_field[GGA_LONGITUDE_IDX],&ptr) * 100000);
+						drv_data->pvt.position.longitude = (atod(temp_field[GGA_LONGITUDE_IDX]) * 100000);
 						if (temp_field[GGA_LONGITUDE_DIR_IDX][0] == 'W') {
 							drv_data->pvt.position.longitude *= -1;
 						}
 						drv_data->pvt.position.fix_type = atoi(temp_field[GGA_QUALITY_INDICATOR_IDX]);
 						drv_data->pvt.position.SIV = atoi(temp_field[GGA_NUM_SATELLITE_IDX]);
-						drv_data->pvt.position.horizontal_accuracy = strtod(temp_field[GGA_HDOP_IDX],&ptr) * 10;
-						drv_data->pvt.position.altitude_MSL = strtod(temp_field[GGA_ALTITUDE_IDX],&ptr);
+						drv_data->pvt.position.horizontal_accuracy = atod(temp_field[GGA_HDOP_IDX]) * 10;
+						drv_data->pvt.position.altitude_MSL = atod(temp_field[GGA_ALTITUDE_IDX]);
 						/* Subtract geoidal separation value from altitude (MSL) to arrive at the 
 						 * altitude (height above Ellipsoid)
 						 */
-						drv_data->pvt.position.altitude = drv_data->pvt.position.altitude_MSL - strtod(temp_field[GGA_GEOIDAL_SEPARATION_IDX],&ptr);
+						drv_data->pvt.position.altitude = drv_data->pvt.position.altitude_MSL - atod(temp_field[GGA_GEOIDAL_SEPARATION_IDX]);
 					} else {
 						drv_data->pvt.time.gnss_hour = 0;
 						drv_data->pvt.time.gnss_minute = 0;
@@ -447,43 +490,43 @@ static void callback(const struct device *dev,
 
 				} else if (!strncmp("$GPGNS",temp_field[NMEA_SENTENCE_ID_IDX],NMEA_SENTENCE_ID_LEN)) {
 
-					uint32_t t = strtod(temp_field[GGA_UTC_OF_POSITION_IDX],&ptr) * 100;
+					uint32_t t = atod(temp_field[GGA_UTC_OF_POSITION_IDX]) * 100;
 					drv_data->pvt.time.gnss_hour = (t / 1000000);
 					drv_data->pvt.time.gnss_minute = (t % 1000000) / 10000;
 					drv_data->pvt.time.gnss_second = (t % 10000) / 100;
-					drv_data->pvt.time.gnss_nanosecond = (t % 100);
+					drv_data->pvt.time.gnss_nanosecond = (t % 100) * 10000000;
 
-					drv_data->pvt.position.latitude= (strtod(temp_field[GNS_LATITUDE_IDX],&ptr) * 100000);
+					drv_data->pvt.position.latitude= (atod(temp_field[GNS_LATITUDE_IDX]) * 100000);
 					if (temp_field[GNS_LATITUDE_DIR_IDX][0] == 'S') {
 						drv_data->pvt.position.latitude *= -1;
 					}
-					drv_data->pvt.position.longitude = (strtod(temp_field[GNS_LONGITUDE_IDX],&ptr) * 100000);
+					drv_data->pvt.position.longitude = (atod(temp_field[GNS_LONGITUDE_IDX]) * 100000);
 					if (temp_field[GNS_LONGITUDE_DIR_IDX][0] == 'W') {
 						drv_data->pvt.position.longitude *= -1;
 					}
 
 					drv_data->pvt.position.SIV = atoi(temp_field[GNS_NUM_SATELLITE_IDX]);
-					drv_data->pvt.position.horizontal_accuracy = strtod(temp_field[GNS_HDOP_IDX],&ptr) * 10;
-					drv_data->pvt.position.altitude_MSL = strtod(temp_field[GNS_ALTITUDE_IDX],&ptr);
+					drv_data->pvt.position.horizontal_accuracy = atod(temp_field[GNS_HDOP_IDX]) * 10;
+					drv_data->pvt.position.altitude_MSL = atod(temp_field[GNS_ALTITUDE_IDX]);
 					/* Subtract geoidal separation value from altitude (MSL) to arrive at the 
 					* altitude (height above Ellipsoid)
 					*/
-					drv_data->pvt.position.altitude = drv_data->pvt.position.altitude_MSL - strtod(temp_field[GNS_GEOIDAL_SEPARATION_IDX],&ptr);
+					drv_data->pvt.position.altitude = drv_data->pvt.position.altitude_MSL - atod(temp_field[GNS_GEOIDAL_SEPARATION_IDX]);
 
 					
 				} else if (!strncmp("$GPGLL",temp_field[NMEA_SENTENCE_ID_IDX], NMEA_SENTENCE_ID_LEN)) {
 
-					uint32_t t = strtod(temp_field[GLL_UTC_OF_POSITION_IDX],&ptr) * 100;
+					uint32_t t = atod(temp_field[GLL_UTC_OF_POSITION_IDX]) * 100;
 					drv_data->pvt.time.gnss_hour = (t / 1000000);
 					drv_data->pvt.time.gnss_minute = (t % 1000000) / 10000;
 					drv_data->pvt.time.gnss_second = (t % 10000) / 100;
-					drv_data->pvt.time.gnss_nanosecond = (t % 100);
+					drv_data->pvt.time.gnss_nanosecond = (t % 100) * 10000000;
 
-					drv_data->pvt.position.latitude= (strtod(temp_field[GLL_LATITUDE_IDX],&ptr) * 100000);
+					drv_data->pvt.position.latitude= (atod(temp_field[GLL_LATITUDE_IDX]) * 100000);
 					if (temp_field[GLL_LATITUDE_DIR_IDX][0] == 'S') {
 						drv_data->pvt.position.latitude *= -1;
 					}
-					drv_data->pvt.position.longitude = (strtod(temp_field[GLL_LONGITUDE_IDX],&ptr) * 100000);
+					drv_data->pvt.position.longitude = (atod(temp_field[GLL_LONGITUDE_IDX]) * 100000);
 					if (temp_field[GLL_LONGITUDE_DIR_IDX][0] == 'W') {
 						drv_data->pvt.position.longitude *= -1;
 					}
@@ -588,8 +631,8 @@ static void callback(const struct device *dev,
 					case SENSOR_ATTRIBUTE_CXD5605_GTR: 
 					if (drv_data->num_msg == 0) {
 						csv_split(rd_data.data, ',', temp_field);
-						drv_data->cxd5605_cmd_data.gtr.cn_level =  strtod(temp_field[0],&ptr);
-						drv_data->cxd5605_cmd_data.gtr.doppler_freq = strtod(temp_field[1],&ptr);
+						drv_data->cxd5605_cmd_data.gtr.cn_level = atod(temp_field[0]);
+						drv_data->cxd5605_cmd_data.gtr.doppler_freq = atod(temp_field[1]);
 						drv_data->num_msg++;
 					} else if (drv_data->num_msg == 1) {
 						ret = get_cmd_response(rd_data.data);
@@ -603,7 +646,7 @@ static void callback(const struct device *dev,
 						if (strstr(rd_data.data,"INVALID")) {
 							drv_data->cxd5605_cmd_data.txco_offset = 0.0;
 						} else {
-							drv_data->cxd5605_cmd_data.txco_offset = strtod(rd_data.data,&ptr);
+							drv_data->cxd5605_cmd_data.txco_offset = atod(rd_data.data);
 						}
 						drv_data->num_msg++;
 					} else if (drv_data->num_msg ==1) {
