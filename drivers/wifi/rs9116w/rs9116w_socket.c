@@ -46,8 +46,7 @@ static struct net_offload rs9116w_offload = {
     .put      = NULL
 };
 
-// #ifdef CONFIG_PING
-#if 1
+#ifdef CONFIG_PING
 #include <zephyr/net/ping.h>
 static uint32_t sent_ts;
 static void rs9116w_ping_resp_handler(uint16_t status, const uint8_t* buf, uint16_t len) 
