@@ -30,6 +30,8 @@
 
 #include "cxd5605.h"
 
+extern char  *strtok_r(char *str, const char *sep, char **state);
+
 LOG_MODULE_REGISTER(CXD5605, CONFIG_SENSOR_LOG_LEVEL);
 
 #define SEND_BUF_SIZE 32
