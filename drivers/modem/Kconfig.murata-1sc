@@ -49,7 +49,7 @@ config MODEM_MURATA_1SC_INIT_PRIORITY
 
 config MODEM_MURATA_1SC_SOCKET_COUNT
         int "MURATA_1SC Maximum concurrent sockets allowed"
-        range 1 4
+        range 1 6
         default 4
         help
           This value sets the maximum number of allowed concurrent sockets 
