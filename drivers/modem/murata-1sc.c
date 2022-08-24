@@ -640,6 +640,27 @@ MODEM_CMD_DEFINE(on_cmd_get_acfg)
 	return 0;
 }
 
+/**
+ * @brief Handler for socket count info
+ */
+static bool needto_set_sockcount = false;
+MODEM_CMD_DEFINE(on_cmd_get_sockcount)
+{
+	char sockcount_str[16];
+	size_t out_len = net_buf_linearize(sockcount_str,
+			sizeof(sockcount_str) - 1,
+			data->rx_buf, 0, len);
+	sockcount_str[out_len] = '\0';
+
+	/* Log the received information. */
+	if (strtol(sockcount_str, NULL, 10) != MDM_MAX_SOCKETS) {
+		needto_set_sockcount = true;
+	} else {
+		needto_set_sockcount = false;
+	}
+	return 0;
+}
+
 #ifdef VERIFY_INIT_MODEM_STATE
 /**
  * @brief Handler for CFUN
@@ -729,6 +750,23 @@ static int set_autoconn_on(void)
 	// struct modem_socket *sock = (struct modem_socket *)obj;
 
 	LOG_WRN("autoconnect is set to false, will now set to true");
+	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
+			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+	if (ret < 0) {
+		LOG_ERR("%s ret:%d", at_cmd, ret);
+	}
+	return ret;
+}
+
+/**
+ * @brief Set socket count to match config
+ */
+static int set_socket_count(void)
+{
+	char at_cmd[sizeof("AT%SETACFG=\"service.sockserv.maxsock\",\"X\"")];
+
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%SETACFG=\"service.sockserv.maxsock\",\"%d\"", MDM_MAX_SOCKETS);
+
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			NULL, 0, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
@@ -3853,6 +3891,7 @@ static int murata_1sc_setup(void)
 		SETUP_CMD("AT%CCID", "%CCID:", on_cmd_get_iccid, 0U, " "),
 #endif
 		SETUP_CMD("AT%GETACFG=modem_apps.Mode.AutoConnectMode", "", on_cmd_get_acfg, 0U, ""),
+		SETUP_CMD("AT%GETACFG=service.sockserv.maxsock", "", on_cmd_get_sockcount, 0U, ""),
 		SETUP_CMD("AT%GETCFG=\"BAND\"", "Bands:", on_cmd_get_bands, 0U, ""),
 #ifdef VERIFY_INIT_MODEM_STATE
 		SETUP_CMD("AT%STATUS=\"USIM\"", "USIM:", on_cmd_get_usim, 0U, ""),
@@ -3889,6 +3928,10 @@ top: ;
 	bool needto_reset_modem = false;
 	if (needto_set_autoconn_to_true) {
 		set_autoconn_on();
+		needto_reset_modem = true;
+	}
+	if (needto_set_sockcount) {
+		set_socket_count();
 		needto_reset_modem = true;
 	}
 
