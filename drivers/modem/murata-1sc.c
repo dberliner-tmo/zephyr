@@ -1631,6 +1631,12 @@ typedef struct deliver_pdu_data_s {
 	char *ud;			/* User data */
 } deliver_pdu_data_t;
 
+/**
+ * @brief Function for parsing the PDU structure for a SMS Deliver PDU
+ * 
+ * @param buf Raw PDU buffer
+ * @param pdu_data Output structure
+ */
 void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data) 
 {
 	pdu_data->smsc_len = hex_byte_to_data(buf);
@@ -1648,7 +1654,7 @@ void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data)
 		buf += 2 + (((pdu_data->oa_len + 1) * 7 / 8) * 2);
 	}
 	buf += 2; //Skip TP-PID
-	pdu_data->alphabet = hex_byte_to_data(buf) & 0x3;
+	pdu_data->alphabet = (hex_byte_to_data(buf) & 0xC) >> 2;
 	buf += 2;
 	pdu_data->scts = buf;
 	buf += 14;
@@ -1658,6 +1664,13 @@ void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data)
 	pdu_data->udhl = (pdu_data->tp_flags & TP_FLAG_UDHI) ? hex_byte_to_data(buf) : 0;
 }
 
+/**
+ * @brief Logic to unpack septets
+ * 
+ * @param frag Packed septet framents
+ * @param frag_len Length of packed fragments
+ * @param out Output: Septets, unpacked into an octet (byte) array
+ */
 void gsmunpack_frag(uint8_t *frag, int frag_len, uint8_t *out){
 	switch (frag_len){
 		case 7:
@@ -1678,6 +1691,13 @@ void gsmunpack_frag(uint8_t *frag, int frag_len, uint8_t *out){
 	}
 }
 
+/**
+ * @brief Logic for converting GSM 7-bit characters into ASCII
+ * 
+ * @param gsm GSM septet
+ * @param escaped Flag for if the previous character was an escape character
+ * @return char ASCII equivalent character
+ */
 char gsm2ascii(uint8_t gsm, bool escaped) {
 	if (escaped) {
 		switch (gsm) {
@@ -1722,6 +1742,16 @@ char gsm2ascii(uint8_t gsm, bool escaped) {
 	}
 }
 
+/**
+ * @brief Combined logic for converting a septet payload into an ASCII string
+ * 
+ * @param in Binary encoding of the septet payload/SMS User Data
+ * @param udl Length of septet payload/SMS User Data
+ * @param out Buffer for output
+ * @param outlen Length of output buffer
+ * @param skip Number of septets to skip
+ * @return int 0 on success
+ */
 int gsm7_decode(char* in, int udl, char *out, int outlen, int skip) {
 	uint8_t packed[7], unpacked[8];
 	uint8_t processed = 0, escaped_cnt = 0;
@@ -1755,6 +1785,75 @@ int gsm7_decode(char* in, int udl, char *out, int outlen, int skip) {
 	}
 	out_orig[MIN((udl - escaped_cnt - skip_drp), outlen)] = '\0';
 	return 0;
+}
+
+/**
+ * @brief Function for converting a UTF-16LE encoded character into UTF-8
+ * 
+ * @param in Pointer to UTF-16 character
+ * @param out Pointer to UTF-8 output buffer
+ * @param out_len Length of output buffer
+ * @param next_char Pointer to new position in output buffer
+ * @return int 0 on success else negative errno code
+ */
+int utf16le_to_utf8(uint16_t *in, uint8_t *out, size_t out_len, uint16_t **next_char){
+    uint32_t codepoint;
+    if (!out || !in || !out_len || !*in) {
+        return -EINVAL;
+    }
+    // size_t char_av = wcslen(*in);
+    if (in[1] != 0 && ((sys_le16_to_cpu(in[0]) & 0xFC00) == 0xD800) 
+        && (sys_le16_to_cpu(in[1]) & 0xFC00) == 0xDC00) {
+        codepoint = (sys_le16_to_cpu(in[0]) - 0xD800) << 10;
+        codepoint += sys_le16_to_cpu(in[1]) - 0xDC00;
+        codepoint += 0x10000;
+    } else {
+        codepoint = in[0];
+    }
+
+    if (codepoint <= 0x7F) {
+        *out = (uint8_t)codepoint;
+        out++;
+    } else if (codepoint <= 0x7FF){
+        if (out_len < 2) {
+            return -EIO;
+        } else {
+            *out = 0xC0 | (codepoint >> 6);
+            out++;
+            *out = 0x80 | (codepoint & 0x3F);
+            out++;
+        }
+    } else if (codepoint <= 0xFFFF){
+        if (out_len < 3) {
+            return -EIO;
+        } else {
+            *out = 0xE0 | (codepoint >> 12);
+            out++;
+            *out = 0x80 | ((codepoint >> 6) & 0x3F);
+            out++;
+            *out = 0x80 | (codepoint & 0x3F);
+            out++;
+        }
+    } else {
+        if (out_len < 4) {
+            return -EIO;
+        } else {
+            *out = 0xF0 | (codepoint >> 18);
+            out++;
+            *out = 0x80 | ((codepoint >> 12) & 0x3F);
+            out++;
+            *out = 0x80 | ((codepoint >> 6) & 0x3F);
+            out++;
+            *out = 0x80 | (codepoint & 0x3F);
+            out++;
+        }
+    }
+    if (next_char){
+        *next_char = codepoint > 65535 ? &in[2] : &in[1];
+    }
+	// printk("CHR: %4x%4x", in[0], in[1]);
+	// printk("Codepoint: %d", codepoint);
+    return 0;
 }
 
 /**
@@ -2078,6 +2177,37 @@ decode_msg:
 		}
 		hex_str_to_data(pdu_data.ud, out_buf, 
 			MIN((out_buf_avail), pdu_data.udl - pdu_data.udhl));
+	} else if (pdu_data.alphabet == SMS_ALPHABET_UCS2) {
+		uint16_t utf16_chr[3];
+		char *ud = pdu_data.ud + 2 * pdu_data.udhl;
+		char *out_buf_ptr = out_buf;
+		uint16_t *nchr;
+		int avail = out_buf_avail;
+		utf16_chr[2] = 0;
+		while (strlen(ud) && avail) {
+			memset(utf16_chr, 0, sizeof(utf16_chr));
+			hex_str_to_data(ud, (uint8_t*)utf16_chr, 4);
+			utf16_chr[0] = sys_be16_to_cpu(utf16_chr[0]);
+			utf16_chr[1] = sys_be16_to_cpu(utf16_chr[1]);
+			ret = utf16le_to_utf8(utf16_chr, out_buf_ptr, avail, &nchr);
+			if (ret) {
+				if (pdu_data.udhl && first_msg) {
+					LOG_WRN("Buffer too small: partial message copied");
+					break;
+				} else {
+					out_buf = '\0';
+					LOG_WRN("Buffer too small: unable to concatenate part %d", csms_idx);
+					return 0;
+				}
+			}
+			avail -= strlen(out_buf_ptr);
+			out_buf_ptr += strlen(out_buf_ptr);
+			if (nchr == &utf16_chr[1]) {
+				ud += 4;
+			} else {
+				ud += 8;
+			}
+		}
 	} else if (pdu_data.alphabet == SMS_ALPHABET_GSM7){
 		if (!pdu_data.udhl) {
 			ret = gsm7_decode(pdu_data.ud, pdu_data.udl, out_buf, out_buf_avail, 0);
