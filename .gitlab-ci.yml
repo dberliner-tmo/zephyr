@@ -10,7 +10,7 @@ include:
   - project: 'tmobile/suhwdev/firmware/gitlab-templates'
     file: '/gitlab-ci/.tmo.suhwdev.compliance-check-warns.gitlab-ci.yml'
   - project: 'tmobile/suhwdev/firmware/gitlab-templates'
-    file: '/gitlab-ci/.tmo.suhwdev.native-posix-twister.gitlab-ci.yml'
+    file: '/gitlab-ci/.tmo.suhwdev.manual.native-posix-twister.gitlab-ci.yml'
   - project: 'tmobile/suhwdev/firmware/gitlab-templates'
     file: '/gitlab-ci/.tmo.suhwdev.git-merge.gitlab-ci.yml'
 
