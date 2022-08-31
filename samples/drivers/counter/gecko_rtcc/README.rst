@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-.. _maxim-ds3231-sample:
+.. _gecko-rtcc-sample:
 
 Maxim DS3231 TCXO RTC Sample Application
 ########################################

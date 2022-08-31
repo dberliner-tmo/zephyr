@@ -823,8 +823,8 @@ static void sync_finish_read(const struct device *dev)
 	time_t time = 0;
 
 	(void)read_time(dev, &time);
-	data->syncpoint.rtc.tv_sec = time;
-	data->syncpoint.rtc.tv_nsec = 0;
+	data->syncpoint.rtcc.tv_sec = time;
+	data->syncpoint.rtcc.tv_nsec = 0;
 	data->syncpoint.syncclock = data->isw_syncclock;
 	sync_finish(dev, 0);
 }
@@ -847,10 +847,10 @@ static void sync_prep_write(const struct device *dev)
 	uint32_t syncclock_Hz = gecko_rtcc_syncclock_frequency(dev);
 	uint32_t offset_s = offset / syncclock_Hz;
 	uint32_t offset_ms = (offset % syncclock_Hz) * 1000U / syncclock_Hz;
-	time_t when = data->new_sp.rtc.tv_sec;
+	time_t when = data->new_sp.rtcc.tv_sec;
 
 	when += offset_s;
-	offset_ms += data->new_sp.rtc.tv_nsec / NSEC_PER_USEC / USEC_PER_MSEC;
+	offset_ms += data->new_sp.rtcc.tv_nsec / NSEC_PER_USEC / USEC_PER_MSEC;
 	if (offset_ms >= MSEC_PER_SEC) {
 		offset_ms -= MSEC_PER_SEC;
 	} else {
@@ -863,8 +863,8 @@ static void sync_prep_write(const struct device *dev)
 		when += 1;
 		rem_ms += MSEC_PER_SEC;
 	}
-	data->new_sp.rtc.tv_sec = when;
-	data->new_sp.rtc.tv_nsec = 0;
+	data->new_sp.rtcc.tv_sec = when;
+	data->new_sp.rtcc.tv_nsec = 0;
 
 	data->sync_state = SYNCSM_FINISH_WRITE;
 	k_timer_start(&data->sync_timer, K_MSEC(rem_ms), K_NO_WAIT);
@@ -874,7 +874,7 @@ static void sync_prep_write(const struct device *dev)
 static void sync_finish_write(const struct device *dev)
 {
 	struct counter_gecko_data *data = dev->data;
-	time_t when = data->new_sp.rtc.tv_sec;
+	time_t when = data->new_sp.rtcc.tv_sec;
 	struct tm tm;
 
 	data->registers.time = data->registers.date = 0;
@@ -911,8 +911,8 @@ static void sync_finish_write(const struct device *dev)
 	RTCC_TimeSet(data->registers.time);
 	RTCC_DateSet(data->registers.date);
 
-	data->syncpoint.rtc.tv_sec = when;
-	data->syncpoint.rtc.tv_nsec = 0;
+	data->syncpoint.rtcc.tv_sec = when;
+	data->syncpoint.rtcc.tv_nsec = 0;
 	data->syncpoint.syncclock = syncclock;
 	LOG_INF("sync %u at %u", (uint32_t)when, syncclock);
 
@@ -978,7 +978,7 @@ int z_impl_gecko_rtcc_get_syncpoint(const struct device *dev,
 
 	k_sem_take(&data->lock, K_FOREVER);
 
-	if (data->syncpoint.rtc.tv_sec == 0) {
+	if (data->syncpoint.rtcc.tv_sec == 0) {
 		rv = -ENOENT;
 	} else {
 		__ASSERT_NO_MSG(syncpoint != NULL);
