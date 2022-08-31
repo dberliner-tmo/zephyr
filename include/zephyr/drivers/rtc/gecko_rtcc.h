@@ -266,7 +266,7 @@ struct gecko_rtcc_syncpoint {
 	 * This maybe in UTC, TAI, or local offset depending on how
 	 * the RTC is maintained.
 	 */
-	struct timespec rtc;
+	struct timespec rtcc;
 
 	/** @brief Value of a local clock at the same instant as #rtcc.
 	 *
@@ -358,7 +358,7 @@ int gecko_rtcc_ctrl_update(const struct device *dev,
  * @param dev the RTCC device pointer
  *
  * @param set_bits bits to be set when writing back.  Setting bits
- * other than @ref GECKO_RTCC_REG_STAT_EN32kHz will have no effect.
+ * other than @ ref GECKO_RTCC_REG_STAT_EN32kHz will have no effect.
  *
  * @param clear_bits bits to be cleared when writing back.  Include
  * the bits for the status flags you want to clear.
@@ -443,7 +443,7 @@ int gecko_rtcc_set_alarm(const struct device *dev,
  */
 int gecko_rtcc_synchronize(const struct device *dev,
 			     struct sys_notify *notify);
-
+#if 0
 /** @brief Request to update the synchronization point.
  *
  * This is a variant of gecko_rtcc_synchronize() for use from user
@@ -458,11 +458,10 @@ int gecko_rtcc_synchronize(const struct device *dev,
  * @retval non-negative on success
  * @retval -EBUSY if a synchronization or set is currently in progress
  * @retval -ENOTSUP if the required interrupt is not configured
- * DaR
+ */
 __syscall int gecko_rtcc_req_syncpoint(const struct device *dev,
 					 struct k_poll_signal *signal);
-*/
-
+#endif
 /** @brief Retrieve the most recent synchronization point.
  *
  * This function returns the synchronization data last captured using
