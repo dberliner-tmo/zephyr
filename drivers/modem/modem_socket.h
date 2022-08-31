@@ -45,6 +45,8 @@ __net_socket struct modem_socket {
 	bool is_connected;
 	bool is_waiting;
 
+	k_timeout_t rcvtimeo;
+	
 	/** temporary socket data */
 	void *data;
 };
@@ -76,7 +78,7 @@ int modem_socket_poll_update(struct modem_socket *sock, struct zsock_pollfd *pfd
 int modem_socket_poll_prepare(struct modem_socket_config *cfg, struct modem_socket *sock,
 			      struct zsock_pollfd *pfd, struct k_poll_event **pev,
 			      struct k_poll_event *pev_end);
-void modem_socket_wait_data(struct modem_socket_config *cfg, struct modem_socket *sock);
+int modem_socket_wait_data(struct modem_socket_config *cfg, struct modem_socket *sock);
 void modem_socket_data_ready(struct modem_socket_config *cfg, struct modem_socket *sock);
 int modem_socket_init(struct modem_socket_config *cfg, const struct socket_op_vtable *vtable);
 

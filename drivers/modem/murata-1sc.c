@@ -2376,7 +2376,10 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 			return 0;
 		}
 
-		modem_socket_wait_data(&mdata.socket_config, sock);
+		if (modem_socket_wait_data(&mdata.socket_config, sock)) {
+			errno = EAGAIN;
+			return -1;
+		}
 		packet_size = modem_socket_next_packet_size(
 			&mdata.socket_config, sock);
 	}
@@ -3700,7 +3703,7 @@ static int offload_setsockopt(void *obj, int level, int optname,
 				strncat(servername_desc[sd].host, optval, MIN(optlen, MAX_FILENAME_LEN));
 				retval = 0;
 				break;
-			case TLS_CIPHERSUITE_LIST: //?SO_SSL_V_1_2_ENABLE...
+			case TLS_CIPHERSUITE_LIST:
 			case TLS_DTLS_ROLE:
 				errno = ENOTSUP;
 				return -1;
@@ -3709,6 +3712,26 @@ static int offload_setsockopt(void *obj, int level, int optname,
 				return -1;
 		}
 	} else {
+		switch (optname) {
+			case SO_RCVTIMEO:
+				if (!optval) {
+					sock->rcvtimeo = K_FOREVER;
+					retval = 0;
+					break;
+				} else if (optlen != sizeof(struct timeval)) {
+					errno = EINVAL;
+					return -1;
+				} else {
+					const struct timeval *tv;
+					tv = optval;
+					sock->rcvtimeo = K_TICKS(k_ms_to_ticks_ceil32(tv->tv_sec * 1000) + k_us_to_ticks_ceil32(tv->tv_usec));
+					retval = 0;
+					break;
+				}
+			default:
+				errno = EINVAL;
+				return -1;
+		}
 		return -1;
 	}
 	return retval;
