@@ -7,6 +7,7 @@
 
 #include "rs9116w_ble_conn.h"
 #include <bluetooth/hci_err.h>
+#include <zephyr/drivers/bluetooth/rs9116w.h>
 /* Peripheral timeout to initialize Connection Parameter Update procedure */
 #define CONN_UPDATE_TIMEOUT  K_MSEC(CONFIG_BT_CONN_PARAM_UPDATE_TIMEOUT)
 
@@ -585,6 +586,16 @@ int bt_conn_le_get_tx_power_level(struct bt_conn *conn,
 				  struct bt_conn_le_tx_power *tx_power_level)
 {
 	return -ENOTSUP;
+}
+
+int bt_conn_le_get_rssi(const struct bt_conn *conn)
+{
+	int8_t rssi;
+	if (rsi_bt_get_rssi((uint8_t*)conn->le.dst.a.val, &rssi)) {
+		return -EIO;
+	} else {
+		return -rssi;
+	}
 }
 
 bool bt_le_conn_params_valid(const struct bt_le_conn_param *param)
