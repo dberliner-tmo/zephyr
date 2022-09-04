@@ -977,6 +977,10 @@ static int cxd5605_attr_set(const struct device *dev,
 				LOG_ERR("[%s:%d] to_send buffer error %d", __FILE__, __LINE__, result);
 				return result;
 			}
+			drv_data->version[0] = 0;
+			drv_data->cxd5605_cmd_data.ver.major = 0;
+			drv_data->cxd5605_cmd_data.ver.minor = 0;
+			drv_data->cxd5605_cmd_data.ver.patch = 0;
 			break;
 
 		case SENSOR_ATTRIBUTE_CXD5605_GALG:
@@ -1233,6 +1237,10 @@ static int cxd5605_attr_set(const struct device *dev,
 				LOG_ERR("[%s:%d] to_send buffer error %d", __FILE__, __LINE__, result);
 				return result;
 			}
+			drv_data->version[0] = 0;
+			drv_data->cxd5605_cmd_data.ver.major = 0;
+			drv_data->cxd5605_cmd_data.ver.minor = 0;
+			drv_data->cxd5605_cmd_data.ver.patch = 0;
 			break;
 		
 		case SENSOR_ATTRIBUTE_CXD5605_CEPW:
