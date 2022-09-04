@@ -19,7 +19,6 @@ supported:
   - watchdog
   - counter
 testing:
-  default: true
   ignore_tags:
     - net
     - bluetooth
