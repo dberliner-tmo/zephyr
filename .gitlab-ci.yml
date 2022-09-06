@@ -1,6 +1,4 @@
 include:
-  - project: 'tmobile/templates'
-    file: '/gitlab-ci/.tmo.global.common.gitlab-ci.yml'
   - project: 'tmobile/suhwdev/firmware/gitlab-templates'
     file: '/gitlab-ci/.tmo.suhwdev.coding-guidelines.gitlab-ci.yml'
   - project: 'tmobile/suhwdev/firmware/gitlab-templates'
