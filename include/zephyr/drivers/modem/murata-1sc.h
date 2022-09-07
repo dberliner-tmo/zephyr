@@ -53,6 +53,7 @@
 #define MDM_EDRX_LENGTH                   128
 #define MDM_PSM_LENGTH                    128
 #define PSM_TIME_LEN                      11
+#define TLS_MURATA_USE_PROFILE            99
 
 /**
  * this is for tmo_shell to call for overriding the wifi dns_offload
@@ -76,9 +77,9 @@ struct socket_read_data {
 };
 
 struct init_fw_data_t {
-        char *imagename;
-        uint32_t imagesize;
-        uint32_t imagecrc;
+	char *imagename;
+	uint32_t imagesize;
+	uint32_t imagecrc;
 };
 
 struct send_fw_data_t {
@@ -96,31 +97,60 @@ enum murata_1sc_io_ctl {
 	INIT_FW_UPGRADE,
 	GET_CHKSUM_ABILITY,
 	GET_FILE_MODE,
-        RESET_MODEM,
-        AT_MODEM_CFUN_SET,
-        AT_MODEM_PSM_SET,
-        AT_MODEM_PSM_GET,
-        AT_MODEM_EDRX_SET,
-        AT_MODEM_EDRX_GET
+	RESET_MODEM,
+	AT_MODEM_CFUN_SET,
+	AT_MODEM_PSM_SET,
+	AT_MODEM_PSM_GET,
+	AT_MODEM_EDRX_SET,
+	AT_MODEM_EDRX_GET,
+	STORE_CERT,
+	DEL_CERT,
+	CHECK_CERT,
+	DELETE_CERT_PROFILE,
+	CREATE_CERT_PROFILE,
 };
 
 struct set_cpsms_params  {
-        uint8_t mode;
-        uint8_t t3312_mask;
-        uint8_t t3314_mask;
-        uint8_t t3412_mask;
-        uint8_t t3324_mask;
+	uint8_t mode;
+	uint8_t t3312_mask;
+	uint8_t t3314_mask;
+	uint8_t t3412_mask;
+	uint8_t t3324_mask;
 };
 
 struct set_cedrxs_params  {
-        uint8_t mode;
-        uint8_t act_type;
-        uint8_t time_mask;
+	uint8_t mode;
+	uint8_t act_type;
+	uint8_t time_mask;
 };
 
 union params_cmd {
-        char cfun;
-        struct set_cpsms_params psm;
-        struct set_cedrxs_params edrx;
-        char response[128];
+	char cfun;
+	struct set_cpsms_params psm;
+	struct set_cedrxs_params edrx;
+	char response[128];
+};
+
+struct murata_cert_params {
+	/** Certificate filename */
+	char *filename;
+	/** Certificate structure */
+	struct tls_credential *cert;
+};
+
+struct murata_tls_profile_params {
+	/** ID for profile, can be any value between 1 and 255 */
+	uint8_t profile_id_num;
+	/** Filename for CA certificate */
+	char *ca_file;
+	/** Filename for CA certificate */
+	char *ca_path;
+	/** Filename for device certificate */
+	char *dev_cert;
+	/** Filename for device private key */
+	char *dev_key;
+	/** Filename for PSK ID */
+	char *psk_id;
+	/** Filename for PSK key */
+	char *psk_key;
 };

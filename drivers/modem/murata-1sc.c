@@ -18,7 +18,7 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 #include <net/net_offload.h>
 #include <net/socket_offload.h>
 #include <fcntl.h>
-#include "drivers/modem/murata-1sc.h"
+#include <zephyr/drivers/modem/murata-1sc.h>
 #include "modem_context.h"
 #include "modem_receiver.h"
 #include "modem_iface_uart.h"
@@ -41,11 +41,6 @@ LOG_MODULE_REGISTER(modem_murata_1sc, CONFIG_MODEM_LOG_LEVEL);
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 
-#ifdef CONFIG_USER_CA_DER_ENABLED
-static const unsigned char ca_certificate[] = {
-#include CONFIG_USER_CA_DER_FILE
-};
-#endif
 
 #define CERTCMD_WRITE_SIZE 32+MAX_FILENAME_LEN // assume filename maxlen = 32
 #define PEM_BUFF_SIZE      6145	               // terminate with \" & 0
@@ -62,22 +57,11 @@ struct cert_cmd_t {
 
 static struct cert_cmd_t cert_cmd_buf = {0};
 
-struct hostname_s {
+struct mdm_sock_tls_s {
 	char host[MAX_FILENAME_LEN + 1];
+	uint8_t profile;
 	bool sni_valid;
-} servername_desc[MDM_MAX_SOCKETS] = {{{0}, false}};
-
-char sni_hostname[MAX_FILENAME_LEN+1] = {0};
-
-static int find_valid_sni()
-{
-	for (int i = 0; i < MDM_MAX_SOCKETS; i++) {
-		if (servername_desc[i].sni_valid) {
-			return i;
-		}
-	}
-	return -1;
-}
+} murata_sock_tls_info[MDM_MAX_SOCKETS] = {{{0}, false, false}};
 #endif
 
 /**
@@ -213,7 +197,7 @@ struct murata_1sc_data {
 	uint8_t sms_csms_indices[16];
 	struct sms_in *sms;
 	recv_sms_func_t recv_sms;
-}; 
+};
 
 /* Modem pins - Wake Host, Wake Modem, Reset, and Reset Done */
 static const struct gpio_dt_spec wake_host_gpio = GPIO_DT_SPEC_INST_GET(0, mdm_wake_host_gpios);
@@ -307,6 +291,20 @@ static inline uint8_t *murata_1sc_get_mac(const struct device *dev)
 						(hex_char_to_int(mdata.mdm_imei[imei_idx + 1]));
 	}
 	return data->mac_addr;
+}
+
+/**
+ * @brief Get the index from a specific socket pointer
+ *
+ * @param sock Socket pointer
+ * @return int Index of socket
+ */
+static int get_socket_idx(struct modem_socket *sock)
+{
+	for (int i = 0; i < mdata.socket_config.sockets_len; i++)
+		if (&mdata.socket_config.sockets[i] == sock)
+			return i;
+	return -1;
 }
 
 /**
@@ -713,7 +711,7 @@ MODEM_CMD_DEFINE(on_cmd_get_psm)
 }
 
 /**
- * @brief Handler for eDRX 
+ * @brief Handler for eDRX
  */
 MODEM_CMD_DEFINE(on_cmd_get_edrx)
 {
@@ -1249,13 +1247,6 @@ static int get_dns_ip(const char *dn)
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	if (strncmp(dn, CONFIG_TLS_SNI_HOSTNAME, sizeof(CONFIG_TLS_SNI_HOSTNAME)) == 0) {
-		strcpy(sni_hostname, dn);
-	} else {
-		memset(sni_hostname, 0, sizeof(sni_hostname));
-	}
-#endif
 	return ret;
 }
 
@@ -1333,18 +1324,17 @@ sec_tag_t sec_tag_list[] = {
 	CLIENT_CA_CERTIFICATE_TAG,
 };
 
-MODEM_CMD_DEFINE(on_cmd_atcmd_file_read)
+static char target_filename[MAX_FILENAME_LEN + 1];
+static bool file_found = false;
+MODEM_CMD_DEFINE(on_cmd_certcmd_dir)
 {
-	size_t out_len;
-
-	uint8_t *pbuf = mdata.xlate_buf;
-	out_len = net_buf_linearize(pbuf,
-			127,				//read partial
-			data->rx_buf, 0, len);
-	pbuf[out_len] = '\0';
-
-	LOG_DBG("received cert file: %s", pbuf);
-
+	for (int i = 0; i < argc; i++){
+		if (!strcmp(argv[i], target_filename)) {
+			file_found = true;
+			return 0;
+		}
+	}
+	file_found = false;
 	return 0;
 }
 
@@ -1358,42 +1348,26 @@ static int check_mdm_store_file(char *filename)
 	char at_cmd[60];
 	got_pdn_flg = false;
 	struct modem_cmd data_cmd[] = {
-		MODEM_CMD("%CERTCMD:", on_cmd_atcmd_file_read, 0U, ""),
+		MODEM_CMD_ARGS_MAX("%CERTCMD:", on_cmd_certcmd_dir, 0U, 255U, ","),
 	};
+	memset(target_filename, 0, sizeof(target_filename));
+	strncpy(target_filename, filename, sizeof(target_filename)-1);
 
-	snprintk(at_cmd, sizeof(at_cmd), "AT%%CERTCMD=\"READ\",\"%s\"", filename);
 	LOG_DBG("%s", at_cmd);
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			data_cmd, 1, at_cmd, &mdata.sem_response, MDM_CMD_RSP_TIME);
+			data_cmd, 1, "AT%CERTCMD=\"DIR\"", &mdata.sem_response, MDM_CMD_RSP_TIME);
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 		ret = -1;
 	}
-
-	return ret;
-
-}
-
-#ifdef CONFIG_USER_CA_DER_ENABLED
-/**
- * @brief Hard-code slot 10 for public CA
- */
-static int set_cert_profile(void)
-{
-	int ret;
-	snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
-			"AT%%CERTCFG=\"ADD\",10,\"%s\",\"~\"", CONFIG_USER_ROOT_CA_FILE);
-
-	LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
-	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-			NULL, 0U, cert_cmd_buf.cert_cmd_write,
-			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
-	if (ret < 0) {
-		LOG_ERR("sendmdmcmd,ret = %d", ret);
+	if (!file_found) {
+		return -1;
 	}
+
 	return ret;
+
 }
-#endif
+
 
 /**
  * @brief Misc init after normal mdm init
@@ -1402,29 +1376,6 @@ static int post_mdm_init(void)
 {
 
 	int ret = 0;
-#ifdef CONFIG_USER_CA_DER_ENABLED
-	struct modem_socket sock;
-	ret = check_mdm_store_file(CONFIG_USER_CA_FILE);
-	if (ret != 0) {
-		ret = tls_credential_add(CLIENT_CA_CERTIFICATE_TAG,
-				TLS_CREDENTIAL_CA_CERTIFICATE,
-				ca_certificate,
-				sizeof(ca_certificate));
-		if (ret < 0) {
-			LOG_ERR("<<< Failed to add CA certificate: %d >>>", ret);
-			return ret;
-		}
-		ret = offload_setsockopt(&sock, SOL_TLS, TLS_SEC_TAG_LIST, (void *)sec_tag_list, sizeof(sec_tag_list));
-		if (ret < 0) {
-			LOG_ERR("failed to setsockopt in post_mdm_init, ret = %d", ret);
-			return ret;
-		}
-	}
-	ret = set_cert_profile();
-	if (ret < 0) {
-		LOG_ERR("failed to setsockopt in post_mdm_init, ret = %d", ret);
-	}
-#endif
 	return ret;
 }
 #endif
@@ -1492,7 +1443,7 @@ static int get_psm(char *response)
 }
 
 /**
- * @brief Get edrx 
+ * @brief Get edrx
  */
 static int get_edrx(char *response)
 {
@@ -1633,11 +1584,11 @@ typedef struct deliver_pdu_data_s {
 
 /**
  * @brief Function for parsing the PDU structure for a SMS Deliver PDU
- * 
+ *
  * @param buf Raw PDU buffer
  * @param pdu_data Output structure
  */
-void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data) 
+void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data)
 {
 	pdu_data->smsc_len = hex_byte_to_data(buf);
 	pdu_data->smsc_start = pdu_data->smsc_len ? buf + 2 : NULL;
@@ -1666,7 +1617,7 @@ void deliver_pdu_parse(char *buf, deliver_pdu_data_t *pdu_data)
 
 /**
  * @brief Logic to unpack septets
- * 
+ *
  * @param frag Packed septet framents
  * @param frag_len Length of packed fragments
  * @param out Output: Septets, unpacked into an octet (byte) array
@@ -1693,7 +1644,7 @@ void gsmunpack_frag(uint8_t *frag, int frag_len, uint8_t *out){
 
 /**
  * @brief Logic for converting GSM 7-bit characters into ASCII
- * 
+ *
  * @param gsm GSM septet
  * @param escaped Flag for if the previous character was an escape character
  * @return char ASCII equivalent character
@@ -1744,7 +1695,7 @@ char gsm2ascii(uint8_t gsm, bool escaped) {
 
 /**
  * @brief Combined logic for converting a septet payload into an ASCII string
- * 
+ *
  * @param in Binary encoding of the septet payload/SMS User Data
  * @param udl Length of septet payload/SMS User Data
  * @param out Buffer for output
@@ -1789,7 +1740,7 @@ int gsm7_decode(char* in, int udl, char *out, int outlen, int skip) {
 
 /**
  * @brief Function for converting a UTF-16LE encoded character into UTF-8
- * 
+ *
  * @param in Pointer to UTF-16 character
  * @param out Pointer to UTF-8 output buffer
  * @param out_len Length of output buffer
@@ -1797,63 +1748,63 @@ int gsm7_decode(char* in, int udl, char *out, int outlen, int skip) {
  * @return int 0 on success else negative errno code
  */
 int utf16le_to_utf8(uint16_t *in, uint8_t *out, size_t out_len, uint16_t **next_char){
-    uint32_t codepoint;
-    if (!out || !in || !out_len || !*in) {
-        return -EINVAL;
-    }
-    // size_t char_av = wcslen(*in);
-    if (in[1] != 0 && ((sys_le16_to_cpu(in[0]) & 0xFC00) == 0xD800) 
-        && (sys_le16_to_cpu(in[1]) & 0xFC00) == 0xDC00) {
-        codepoint = (sys_le16_to_cpu(in[0]) - 0xD800) << 10;
-        codepoint += sys_le16_to_cpu(in[1]) - 0xDC00;
-        codepoint += 0x10000;
-    } else {
-        codepoint = in[0];
-    }
+	uint32_t codepoint;
+	if (!out || !in || !out_len || !*in) {
+		return -EINVAL;
+	}
+	// size_t char_av = wcslen(*in);
+	if (in[1] != 0 && ((sys_le16_to_cpu(in[0]) & 0xFC00) == 0xD800)
+		&& (sys_le16_to_cpu(in[1]) & 0xFC00) == 0xDC00) {
+		codepoint = (sys_le16_to_cpu(in[0]) - 0xD800) << 10;
+		codepoint += sys_le16_to_cpu(in[1]) - 0xDC00;
+		codepoint += 0x10000;
+	} else {
+		codepoint = in[0];
+	}
 
-    if (codepoint <= 0x7F) {
-        *out = (uint8_t)codepoint;
-        out++;
-    } else if (codepoint <= 0x7FF){
-        if (out_len < 2) {
-            return -EIO;
-        } else {
-            *out = 0xC0 | (codepoint >> 6);
-            out++;
-            *out = 0x80 | (codepoint & 0x3F);
-            out++;
-        }
-    } else if (codepoint <= 0xFFFF){
-        if (out_len < 3) {
-            return -EIO;
-        } else {
-            *out = 0xE0 | (codepoint >> 12);
-            out++;
-            *out = 0x80 | ((codepoint >> 6) & 0x3F);
-            out++;
-            *out = 0x80 | (codepoint & 0x3F);
-            out++;
-        }
-    } else {
-        if (out_len < 4) {
-            return -EIO;
-        } else {
-            *out = 0xF0 | (codepoint >> 18);
-            out++;
-            *out = 0x80 | ((codepoint >> 12) & 0x3F);
-            out++;
-            *out = 0x80 | ((codepoint >> 6) & 0x3F);
-            out++;
-            *out = 0x80 | (codepoint & 0x3F);
-            out++;
-        }
-    }
-    if (next_char){
-        *next_char = codepoint > 65535 ? &in[2] : &in[1];
-    }
+	if (codepoint <= 0x7F) {
+		*out = (uint8_t)codepoint;
+		out++;
+	} else if (codepoint <= 0x7FF){
+		if (out_len < 2) {
+			return -EIO;
+		} else {
+			*out = 0xC0 | (codepoint >> 6);
+			out++;
+			*out = 0x80 | (codepoint & 0x3F);
+			out++;
+		}
+	} else if (codepoint <= 0xFFFF){
+		if (out_len < 3) {
+			return -EIO;
+		} else {
+			*out = 0xE0 | (codepoint >> 12);
+			out++;
+			*out = 0x80 | ((codepoint >> 6) & 0x3F);
+			out++;
+			*out = 0x80 | (codepoint & 0x3F);
+			out++;
+		}
+	} else {
+		if (out_len < 4) {
+			return -EIO;
+		} else {
+			*out = 0xF0 | (codepoint >> 18);
+			out++;
+			*out = 0x80 | ((codepoint >> 12) & 0x3F);
+			out++;
+			*out = 0x80 | ((codepoint >> 6) & 0x3F);
+			out++;
+			*out = 0x80 | (codepoint & 0x3F);
+			out++;
+		}
+	}
+	if (next_char){
+		*next_char = codepoint > 65535 ? &in[2] : &in[1];
+	}
 	// printk("CHR: %4x%4x", in[0], in[1]);
 	// printk("Codepoint: %d", codepoint);
-    return 0;
+	return 0;
 }
 
 /**
@@ -1986,7 +1937,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
 	} else {
 		min_ts = UINT64_MAX;
 	}
-	
+
 	if (ts < min_ts) {
 		uint8_t csms_ref = 0, csms_idx = 0;
 		memcpy(sms->time, pdu_data.scts, 12);
@@ -2062,7 +2013,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgl)
  * Format is:
  *
  * +CMGR: <stat>,,<length><CR><LF><pdu><CR><LF>
- * 
+ *
  * OK
  */
 MODEM_CMD_DEFINE(on_cmd_cmgr)
@@ -2160,7 +2111,7 @@ MODEM_CMD_DEFINE(on_cmd_cmgr)
 		byteswp(&pdu_data.scts[i], &pdu_data.scts[i + 1], 1);
 	}
 	uint8_t tz = hex_byte_to_data(&pdu_data.scts[12]);
-	snprintk(sms->time, sizeof(sms->time), "%.2s/%.2s/%.2s,%.2s:%.2s:%.2s%c%02x", 
+	snprintk(sms->time, sizeof(sms->time), "%.2s/%.2s/%.2s,%.2s:%.2s:%.2s%c%02x",
 		pdu_data.scts, &pdu_data.scts[2], &pdu_data.scts[4], &pdu_data.scts[6],
 		&pdu_data.scts[8], &pdu_data.scts[10], (tz & 0x80) ? '-' : '+', tz & 0x7F);
 	memset(sms->msg, 0, sizeof(sms->msg));
@@ -2175,7 +2126,7 @@ decode_msg:
 				return 0;
 			}
 		}
-		hex_str_to_data(pdu_data.ud, out_buf, 
+		hex_str_to_data(pdu_data.ud, out_buf,
 			MIN((out_buf_avail), pdu_data.udl - pdu_data.udhl));
 	} else if (pdu_data.alphabet == SMS_ALPHABET_UCS2) {
 		uint16_t utf16_chr[3];
@@ -2241,13 +2192,13 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 	memset(sms->phone, 0, sizeof(sms->phone));
 	memset(sms->time, 0, sizeof(sms->time));
 	sms->csms_idx = sms->csms_ref = 0;
-	struct modem_cmd cmds[] = { 
+	struct modem_cmd cmds[] = {
 		MODEM_CMD("+CMGL: ", on_cmd_cmgl, 4U, ",\r"),
 		MODEM_CMD("+CMGR: ", on_cmd_cmgr, 3U, ",\r"),
 	};
 	memset(mdata.sms_indices, 0, sizeof(mdata.sms_indices));
 	memset(mdata.sms_csms_indices, 0, sizeof(mdata.sms_indices));
-	
+
 	k_sem_take(&mdata.sem_sms, K_FOREVER);
 
 	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U, "AT+CMGF=0",
@@ -2256,7 +2207,7 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 	k_sem_reset(&mdata.sem_rcv_sms);
 	int count = 0;
 	while (count <= 1){
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), 
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds),
 				 "AT+CMGL=4", &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 		if (ret == 0 && !mdata.sms_indices[0]) {
 			ret = k_sem_take(&mdata.sem_rcv_sms, sms->timeout);
@@ -2301,16 +2252,16 @@ int recv_sms_msg(void *obj, struct sms_in *sms)
 			sms_len = strlen(sms->msg);
 			char at_cmd[32];
 			snprintk(at_cmd, sizeof(at_cmd), "AT+CMGR=%d", mdata.sms_indices[i]);
-			ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds), 
+			ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, cmds, ARRAY_SIZE(cmds),
 					at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
 			if (ret || sms_len == strlen(sms->msg)) {
-				memset(&mdata.sms_indices[i], 0, 
-					    sizeof(mdata.sms_indices) - sizeof(mdata.sms_indices[0]) * i);
+				memset(&mdata.sms_indices[i], 0,
+						sizeof(mdata.sms_indices) - sizeof(mdata.sms_indices[0]) * i);
 				break;
 			}
 		}
 	}
-	
+
 	for (int i = 0; i < ARRAY_SIZE(mdata.sms_indices); i++){
 		if (mdata.sms_indices[i]) {
 			char at_cmd[32];
@@ -2341,7 +2292,7 @@ static ssize_t offload_recvfrom(void *obj, void *buf, size_t len,
 	struct socket_read_data sock_data;
 
 	/* Modem command to read the data. */
-	struct modem_cmd data_cmd[] = { 
+	struct modem_cmd data_cmd[] = {
 		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
 		MODEM_CMD("%SOCKETDATA:", on_cmd_sock_readdata, 3U, ",")
 	};
@@ -2471,7 +2422,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	char protocol[5];
 	char at_cmd[100];
 	int  ret;
-	int sd = -1;
 
 	LOG_DBG("In offload_connect, sock->id: %d, sock->sock_fd: %d", sock->id, sock->sock_fd);
 
@@ -2498,6 +2448,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 		errno = EINVAL;
 		return -1;
 	}
+	sock->is_connected = true;
 
 	switch (sock->ip_proto) {
 		case IPPROTO_UDP:
@@ -2532,23 +2483,14 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 #endif
 	modem_context_sprint_ip_addr(addr, ip_addr, sizeof(ip_addr));
 
-#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		sd = strncmp(sni_hostname, CONFIG_TLS_SNI_HOSTNAME, sizeof(CONFIG_TLS_SNI_HOSTNAME));
-	} else {
-		sd = -1;
-	}
-#else
-	sd = -1;
-#endif
 	/* Formulate the string to allocate socket. */
-	if (sd != 0) {
-		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
+	if (!murata_sock_tls_info[get_socket_idx(sock)].sni_valid) {
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",1,\"%s\",\"OPEN\",\"%s\",%d",
 				protocol, ip_addr, dst_port);
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	} else {
-		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",0,\"%s\",\"OPEN\",\"%s\",%d",
-				protocol, sni_hostname, dst_port);
+		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"ALLOCATE\",1,\"%s\",\"OPEN\",\"%s\",%d",
+				protocol, murata_sock_tls_info[get_socket_idx(sock)].host, dst_port);
 #endif
 	}
 
@@ -2577,11 +2519,7 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	sock->sock_fd = mdata.sock_fd;
 
 	if (sock->ip_proto == IPPROTO_TLS_1_2) {
-		int profileID;
-		if (sd == 0) {
-			profileID = CONFIG_AMAZON_CA_ROOT_SLOT;
-		} else
-			profileID = CONFIG_SNI_SLOT;
+		int profileID = murata_sock_tls_info[get_socket_idx(sock)].profile;
 
 		snprintk(at_cmd, sizeof(at_cmd), "AT%%SOCKETCMD=\"SSLALLOC\",%d,1,%d", sock->sock_fd, profileID);
 
@@ -2622,7 +2560,6 @@ static int offload_connect(void *obj, const struct sockaddr *addr,
 	}
 
 	/* Connected successfully. */
-	sock->is_connected = true;
 	errno = 0;
 	memcpy(&sock->dst, addr, addrlen);
 	return 0;
@@ -2726,10 +2663,8 @@ static int offload_close(void *obj)
 	}
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	int sd = find_valid_sni();
-	if (sd != -1) {
-		servername_desc[sd].sni_valid = false;
-	}
+	murata_sock_tls_info[get_socket_idx(sock)].sni_valid = false;
+	murata_sock_tls_info[get_socket_idx(sock)].profile = 0;
 #endif
 	/* Close the socket only if it is connected. */
 	socket_close(sock);
@@ -2793,7 +2728,7 @@ static int set_addr_info(uint8_t *addr, bool ipv6, uint8_t socktype, uint16_t po
 	int retval = 0;
 
 	if (ipv6) {
-		if (!(qtupletouint(&addr[0]) || qtupletouint(&addr[4]) 
+		if (!(qtupletouint(&addr[0]) || qtupletouint(&addr[4])
 			 || qtupletouint(&addr[8]) || qtupletouint(&addr[12]))) {
 			return 0;
 		}
@@ -3063,7 +2998,7 @@ static int get_ip(char *rbuf)
  * @param argv[0] cid
  * @param argv[1] ipv4 addr
  * @param argv[2] ipv6 addr
- * 
+ *
  * Sample response:
  *
  * AT at+CGPADDR
@@ -3482,8 +3417,7 @@ enum {
 };
 
 /* send binary data via the AT commands */
-static ssize_t send_cert(struct modem_socket *sock,
-		struct modem_cmd *handler_cmds,
+static ssize_t send_cert(struct modem_cmd *handler_cmds,
 		size_t handler_cmds_len,
 		const char *cert_data,
 		int cert_type,
@@ -3491,24 +3425,17 @@ static ssize_t send_cert(struct modem_socket *sock,
 {
 	int ret = 0;
 	static int certfile_exist = -1;	//0 means yes
-	int filename_len = strlen(filename);
 	static char *certfile = NULL;
 	static char *keyfile = NULL;
-	int offset = CERTCMD_WRITE_SIZE - filename_len - 25;	//overhead of "WRITE",,, & 2.5 pairs of "" & 1 digit
-	uint8_t *sptr = &cert_cmd_buf.cert_cmd_write[offset];
-
-	if (!sock) {
-		return -EINVAL;
-	}
+	uint8_t *sptr;
+	memset(cert_cmd_buf.cert_cmd_write, 0, CERTCMD_WRITE_SIZE);
+	char write_cmd[CERTCMD_WRITE_SIZE];
 
 	/* TODO support other cert types as well */
 	switch(cert_type) {
 		case SSL_CERTIFICATE_TYPE:
 		case SSL_CA_CERTIFICATE_TYPE:
 			certfile = filename;
-			if (SSL_CERTIFICATE_TYPE == cert_type) {
-				certfile_exist = check_mdm_store_file(filename);
-			}
 			break;
 		case SSL_PRIVATE_KEY_TYPE:
 			keyfile = filename;
@@ -3517,13 +3444,16 @@ static ssize_t send_cert(struct modem_socket *sock,
 			LOG_WRN("Bad cert_type %d", cert_type);
 			goto exit;
 	}
+	certfile_exist = check_mdm_store_file(filename);
 
 	__ASSERT_NO_MSG(cert_len <= MDM_MAX_CERT_LENGTH);
 
 	if (certfile_exist != 0) {
-		snprintk(sptr, sizeof(cert_cmd_buf),
+		snprintk(write_cmd, sizeof(write_cmd),
 				"AT%%CERTCMD=\"WRITE\",\"%s\",%d,\"", filename, cert_type%2);
-		cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintk
+		// cert_cmd_buf.pem_buf[0] = '-';	//amend the pem[0] overwritten by snprintk
+		sptr = (cert_cmd_buf.cert_cmd_write) + (CERTCMD_WRITE_SIZE - strlen(write_cmd));
+		memcpy(sptr, write_cmd, strlen(write_cmd));
 		LOG_DBG("sptr: %s", sptr);
 		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U,
 				sptr, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
@@ -3534,34 +3464,8 @@ static ssize_t send_cert(struct modem_socket *sock,
 				goto exit;
 			}
 		}
-	}
-
-	if (cert_type == SSL_PRIVATE_KEY_TYPE) {
-		k_sleep(K_MSEC(20));	//brief brake?
-		snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
-				"AT%%CERTCFG=\"ADD\",8,,,\"%s\",\"%s\"", certfile, keyfile);
-
-		LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, cert_cmd_buf.cert_cmd_write,
-				&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
-		if (ret < 0) {
-			LOG_ERR("failure, sendmdmcmd,ret = %d", ret);
-			goto exit;
-		}
-	} else if (cert_type == SSL_CA_CERTIFICATE_TYPE) {
-		k_sleep(K_MSEC(20));	//brief brake?
-		snprintk(cert_cmd_buf.cert_cmd_write, sizeof(cert_cmd_buf.cert_cmd_write),
-				"AT%%CERTCFG=\"ADD\",8,\"%s\",\".\"", certfile);
-
-		LOG_DBG("certcfg: %s", cert_cmd_buf.cert_cmd_write);
-		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
-				NULL, 0U, cert_cmd_buf.cert_cmd_write,
-				&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
-		if (ret < 0) {
-			LOG_ERR("sendmdmcmd,ret = %d", ret);
-			goto exit;
-		}
+	} else {
+		return -EEXIST;
 	}
 
 exit:
@@ -3571,86 +3475,152 @@ exit:
 	return ret;
 }
 
-static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
+static int store_cert(struct murata_cert_params *params)
 {
-	sec_tag_t *sec_tags = (sec_tag_t *)optval;
+	struct tls_credential *cert = params->cert;
+	char *filename = params->filename;
 	int retval = 0;
-	int tags_len;
-	sec_tag_t tag;
 	int cert_type;
-	int i;
-	struct tls_credential *cert;
 
-	if ((optlen % sizeof(sec_tag_t)) != 0 || (optlen == 0)) {
-		return -EINVAL;
-	}
-
-	tags_len = optlen / sizeof(sec_tag_t);
 	/* For each tag, retrieve the credentials value and type: */
-	for (i = 0; i < tags_len; i++) {
-		char *filename = NULL;
-		uint8_t cert_idx;
-		int offset;
-		char *header, *footer;
-		tag = sec_tags[i];
-		cert = credential_next_get(tag, NULL);
-		while (cert != NULL) {
-			switch (cert->type) {
-				case TLS_CREDENTIAL_SERVER_CERTIFICATE:
-					cert_type = SSL_CERTIFICATE_TYPE;
-					header = "-----BEGIN CERTIFICATE-----\n";
-					footer = "\n-----END CERTIFICATE-----\"\n";
-					filename = CONFIG_USER_CERT_FILE;
-					break;
-				case TLS_CREDENTIAL_PRIVATE_KEY:
-					cert_type = SSL_PRIVATE_KEY_TYPE;
-					header = "-----BEGIN RSA PRIVATE KEY-----\n";
-					footer = "\n-----END RSA PRIVATE KEY-----\"\n";
-					filename = CONFIG_USER_PRIVATEKEY_FILE;
-					break;
-				case TLS_CREDENTIAL_CA_CERTIFICATE:
-					cert_type = SSL_CA_CERTIFICATE_TYPE;
-					header = "-----BEGIN CERTIFICATE-----\n";
-					footer = "\n-----END CERTIFICATE-----\"\n";
-					cert_idx = 0;
-					filename = CONFIG_USER_CA_FILE;
-					break;
-				case TLS_CREDENTIAL_NONE:
-				case TLS_CREDENTIAL_PSK:
-				case TLS_CREDENTIAL_PSK_ID:
-				default:
-					retval = -EINVAL;
-					goto exit;
+	int offset;
+	char *header, *footer;
+	if (cert != NULL) {
+		switch (cert->type) {
+			case TLS_CREDENTIAL_SERVER_CERTIFICATE:
+				cert_type = SSL_CERTIFICATE_TYPE;
+				header = "-----BEGIN CERTIFICATE-----\n";
+				footer = "\n-----END CERTIFICATE-----\"\n";
+				break;
+			case TLS_CREDENTIAL_PRIVATE_KEY:
+				cert_type = SSL_PRIVATE_KEY_TYPE;
+				header = "-----BEGIN RSA PRIVATE KEY-----\n";
+				footer = "\n-----END RSA PRIVATE KEY-----\"\n";
+				break;
+			case TLS_CREDENTIAL_CA_CERTIFICATE:
+				cert_type = SSL_CA_CERTIFICATE_TYPE;
+				header = "-----BEGIN CERTIFICATE-----\n";
+				footer = "\n-----END CERTIFICATE-----\"\n";
+				break;
+			case TLS_CREDENTIAL_NONE:
+			case TLS_CREDENTIAL_PSK:
+			case TLS_CREDENTIAL_PSK_ID:
+			default:
+				retval = -EINVAL;
+				goto exit;
+		}
+
+		strcpy(cert_cmd_buf.pem_buf, header);
+		offset = strlen(header);
+		size_t written;
+		base64_encode(cert_cmd_buf.pem_buf + offset, PEM_BUFF_SIZE - offset - strlen(footer), &written, cert->buf, cert->len);
+		memcpy(cert_cmd_buf.pem_buf + offset + written, footer, strlen(footer));
+		cert_cmd_buf.pem_buf[offset + written + strlen(footer)] = 0;	//null terminate
+
+		LOG_DBG("offset= %d; written = %d\n", offset, written);
+
+		{	//write cert to murata with filename
+			retval = send_cert(NULL, 0, cert_cmd_buf.pem_buf, cert_type, filename);
+			if (retval < 0) {
+				LOG_ERR("Failed to send cert to modem, ret = %d", retval);
+				return retval;
 			}
-
-			strcpy(cert_cmd_buf.pem_buf, header);
-			offset = strlen(header);
-			size_t written;
-			base64_encode(cert_cmd_buf.pem_buf + offset, PEM_BUFF_SIZE - offset - strlen(footer), &written, cert->buf, cert->len);
-			memcpy(cert_cmd_buf.pem_buf + offset + written, footer, strlen(footer));
-			cert_cmd_buf.pem_buf[offset + written + strlen(footer)] = 0;	//null terminate
-
-			LOG_DBG("offset= %d; written = %d\n", offset, written);
-
-			{	//write cert to murata with filename
-				retval = send_cert(sock, NULL, 0, cert_cmd_buf.pem_buf, cert_type, filename);
-				if (retval < 0) {
-					LOG_ERR("Failed to send cert to modem, ret = %d", retval);
-					return retval;
-				}
-			}
-
-			cert = credential_next_get(tag, cert);	//should be key
 		}
 	}
 exit:
 	return retval;
 }
+
+static int del_cert(char *filename)
+{
+	int ret;
+	bool certfile_exist = check_mdm_store_file(filename) == 0;
+
+	__ASSERT_NO_MSG(cert_len <= MDM_MAX_CERT_LENGTH);
+
+	char at_cmd[sizeof("AT%%CERTCMD=\"DELETE\",\"\"") + MAX_FILENAME_LEN];
+
+	if (certfile_exist) {
+		snprintk(at_cmd, sizeof(at_cmd),
+				"AT%%CERTCMD=\"DELETE\",\"%s\"", filename);
+		ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U,
+				at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	} else {
+		return -ENOENT;
+	}
+	return ret;
+}
+
+static int create_tls_profile(struct murata_tls_profile_params *params)
+{
+	uint8_t profile_id = params->profile_id_num;
+	int ret;
+	char fragment[MAX_FILENAME_LEN + 3];
+	char at_cmd[sizeof("AT%CERTCFG=\"ADD\",XX,") + 6 * MAX_FILENAME_LEN + 19];
+	snprintk(at_cmd, sizeof(at_cmd) - 1, "AT%%CERTCFG=\"ADD\",%d,", profile_id);
+	strcat(at_cmd, ",");
+	if (params->ca_file){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->ca_file);
+		strcat(at_cmd, fragment);
+	}
+	strcat(at_cmd, ",");
+	if (params->ca_path){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->ca_path);
+		strcat(at_cmd, fragment);
+	}
+	strcat(at_cmd, ",");
+	if (params->dev_cert){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->dev_cert);
+		strcat(at_cmd, fragment);
+	}
+	strcat(at_cmd, ",");
+	if (params->dev_key){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->dev_key);
+		strcat(at_cmd, fragment);
+	}
+	strcat(at_cmd, ",");
+	if (params->psk_id){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->psk_id);
+		strcat(at_cmd, fragment);
+	}
+	strcat(at_cmd, ",");
+	if (params->psk_key){
+		snprintk(fragment, sizeof(fragment), "\"%s\"", params->psk_key);
+		strcat(at_cmd, fragment);
+	}
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U,
+				at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	return ret;
+}
+
+static int delete_tls_profile(uint8_t profile)
+{
+	int ret;
+	char at_cmd[sizeof("AT%CERTCFG=\"DELETE\",XXX")];
+	snprintk(at_cmd, sizeof(at_cmd), "AT%%CERTCFG=\"DELETE\",%d", profile);
+	ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler, NULL, 0U,
+				at_cmd, &mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
+	return ret;
+}
+
 #else
-static int map_credentials(struct modem_socket *sock, const void *optval, socklen_t optlen)
+static int store_cert(struct murata_cert_params *params)
 {
 	return -EINVAL;
 }
+static int del_cert(char *filename)
+{
+	return -EINVAL
+}
+static int create_tls_profile(struct murata_tls_profile_params *params)
+{
+	return -EINVAL;
+}
+static int delete_tls_profile(uint8_t profile)
+{
+	return -EINVAL;
+}
+
 #endif
 
 static int offload_setsockopt(void *obj, int level, int optname,
@@ -3659,8 +3629,10 @@ static int offload_setsockopt(void *obj, int level, int optname,
 	int retval = -1;
 
 #if !defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
-	errno = -ENOTSUP;
-	return retval;
+	if (level == SOL_TLS){
+		errno = -ENOTSUP;
+		return retval;
+	}
 #else
 	int sd;
 	struct modem_socket *sock = (struct modem_socket *) obj;
@@ -3670,7 +3642,8 @@ static int offload_setsockopt(void *obj, int level, int optname,
 		switch (optname) {
 			case TLS_SEC_TAG_LIST:
 				/* Bind credential filenames to this socket: */
-				retval = map_credentials(obj, optval, optlen);
+				/* TODO: Determine automatically if certs need to be loaded and create necessary profiles */
+				retval = 0;
 				break;
 			case TLS_PEER_VERIFY:
 				if (optval) {
@@ -3696,22 +3669,27 @@ static int offload_setsockopt(void *obj, int level, int optname,
 				}
 				break;
 			case TLS_HOSTNAME:
-				sd = sock->sock_fd;
+				sd = get_socket_idx(sock);
 				LOG_DBG("set SNI - name %s with len %d, for sock# %d", (char *)optval, optlen, sd);
-				servername_desc[sd].sni_valid = true;
-				servername_desc[sd].host[0] = 0;
-				strncat(servername_desc[sd].host, optval, MIN(optlen, MAX_FILENAME_LEN));
+				murata_sock_tls_info[sd].sni_valid = true;
+				strncpy(murata_sock_tls_info[sd].host, optval, MIN(optlen, MAX_FILENAME_LEN));
 				retval = 0;
 				break;
 			case TLS_CIPHERSUITE_LIST:
 			case TLS_DTLS_ROLE:
 				errno = ENOTSUP;
 				return -1;
+			case TLS_MURATA_USE_PROFILE:
+				sd = get_socket_idx(sock);
+				murata_sock_tls_info[sd].profile = *((int*)optval);
+				return 0;
 			default:
 				errno = EINVAL;
 				return -1;
 		}
-	} else {
+	} else
+#endif
+	{
 		switch (optname) {
 			case SO_RCVTIMEO:
 				if (!optval) {
@@ -3735,7 +3713,6 @@ static int offload_setsockopt(void *obj, int level, int optname,
 		return -1;
 	}
 	return retval;
-#endif
 }
 
 /**
@@ -4077,7 +4054,7 @@ top: ;
 	set_boot_delay();
 	enable_sleep_mode(false);
 	set_max_allowed_pm_mode("dh2");
-		
+
 	bool needto_reset_modem = false;
 	if (needto_set_autoconn_to_true) {
 		set_autoconn_on();
@@ -4103,7 +4080,7 @@ top: ;
 
 /**
  * @brief ioctl handler to handle various requests
- * 
+ *
  * @param obj ptr to socket
  * @param request type
  * @param args parameter
@@ -4219,6 +4196,31 @@ static int offload_ioctl(void *obj, unsigned int request, va_list args)
 
 		case AT_MODEM_PSM_GET:
 			ret = get_psm((char *)va_arg(args, char *));
+			va_end(args);
+			break;
+
+		case STORE_CERT:
+			ret = store_cert(va_arg(args, struct murata_cert_params *));
+			va_end(args);
+			break;
+
+		case DEL_CERT:
+			ret = del_cert(va_arg(args, char*));
+			va_end(args);
+			break;
+
+		case CHECK_CERT:
+			ret = check_mdm_store_file(va_arg(args, char*));
+			va_end(args);
+			break;
+
+		case DELETE_CERT_PROFILE:
+			ret = delete_tls_profile(va_arg(args, int));
+			va_end(args);
+			break;
+
+		case CREATE_CERT_PROFILE:
+			ret = create_tls_profile(va_arg(args, struct murata_tls_profile_params *));
 			va_end(args);
 			break;
 
@@ -4405,7 +4407,7 @@ static int offload_ping(const struct sockaddr* dst, size_t sz)
 		MODEM_CMD("ERROR", on_cmd_error, 0U, ""),
 		MODEM_CMD("%PINGCMD:", on_cmd_pingcmd, 4U, ",")
 	};
-	
+
 	int ipv6 = (dst->sa_family == AF_INET6) ? 1 : 0;
 
 	if (ipv6) {
@@ -4421,7 +4423,7 @@ static int offload_ping(const struct sockaddr* dst, size_t sz)
 	int ret = modem_cmd_send(&mctx.iface, &mctx.cmd_handler,
 			data_cmd, ARRAY_SIZE(data_cmd), at_cmd,
 			&mdata.sem_response, MDM_CMD_LONG_RSP_TIME);
-	
+
 	if (ret < 0) {
 		LOG_ERR("%s ret:%d", at_cmd, ret);
 	}
