@@ -77,6 +77,7 @@ enum sensor_attribute_cxd5605 {
 	SENSOR_ATTRIBUTE_CXD5605_GSOP,
 	SENSOR_ATTRIBUTE_CXD5605_GSP,
 	SENSOR_ATTRIBUTE_CXD5605_GSR,
+	SENSOR_ATTRIBUTE_CXD5605_GSTP,
 	SENSOR_ATTRIBUTE_CXD5605_GSW,
 	SENSOR_ATTRIBUTE_CXD5605_GTCX,
 	SENSOR_ATTRIBUTE_CXD5605_GTE,
@@ -98,6 +99,8 @@ enum sensor_attribute_cxd5605 {
 	SENSOR_ATTRIBUTE_CXD5605_CEPW,
 	SENSOR_ATTRIBUTE_CXD5605_CEPC,
 	SENSOR_ATTRIBUTE_CXD5605_ERASE,
+	SENSOR_ATTRIBUTE_CXD5605_GENERATE_SGE_DATA,
+	SENSOR_ATTRIBUTE_CXD5605_SGE_STATUS,
 	};
 
 enum gga_nmea_fieldpos_t {
@@ -151,7 +154,15 @@ struct cxd5605_gtr {
 	double doppler_freq;
 } ;
 
+struct cxd5605_assisted {
+	uint32_t gps_pending;
+	uint32_t gps_available;
+	uint32_t qzss_pending;
+	uint32_t qzss_available;
+};
+
 struct cxd5605_cmd_data {
+	struct cxd5605_assisted sge;
 	struct cxd5605_version ver;
 	struct cxd5605_gtr gtr;
 	double txco_offset;

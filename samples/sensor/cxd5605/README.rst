@@ -1,26 +1,25 @@
-.. gnss-step-3:
-
-GNSS firmware verification test
+GNSS CXD5605 sample.
 ###########
 
 Overview
 ********
 
-This is the third step in loading firmware into the GNSS chip.  This simply
-initializes the GNSS chip to read NMEA sentences.  This verifies that the
-firmware is programmed and working properly.
+This is a simple sample to show how to use the CXD5605 GNSS chip.  It shows
+how to connect to the CXD5605 and how to do various functions using the driver.
+It should be every helpful.
 
 Building and Running
 ********************
 
-This has been built for the dev edge board.  It takes the normal build command as
-in the following:
+This has been built for the dev edge board.  It takes the normal build 
+command as in the following:
 
-west build -b tmo_dev_edge tmo-zephyr-sdk/samples/gnss-step-3 -DBOARD_ROOT=/home/kmansfie/zephyrk1/tmo-zephyr-sdk/
+west build -b tmo_dev_edge zephyr/samples/sensor/cxd5605 -DBOARD_ROOT=USERPATH/zephyrk1/tmo-zephyr-sdk/
 
 This sample is a standalone application.  You build it using the above 
-command and flash it.  The GNSS chip firmware verification test will start.
-You should see the output below.  If there are errors they will be printed out.
+command and flash it.  Ths sample will start and show you your current location
+as soon as the chip gets a fix.  You should see the output below.  If there 
+are errors they will be printed out.
 
 Sample Output
 =============

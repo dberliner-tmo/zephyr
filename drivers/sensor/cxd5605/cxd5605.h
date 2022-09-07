@@ -35,6 +35,7 @@ struct cxd5605_data {
 	int num_msg;
 
 	struct fs_file_t cxdfile;
+	bool got_data;
 };
 
 int cxd5605_trigger_set(const struct device *dev,

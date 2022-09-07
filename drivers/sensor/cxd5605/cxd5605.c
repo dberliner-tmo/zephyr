@@ -128,7 +128,7 @@ int csv_split(char *string, char separator, char *fields[])
 	separates[2] = '\r';
 	separates[3] = 0;
 
-	while ((fields[field++] = strtok_r(string, separates, &string)) && (field < MAXFIELDS))
+	while ((fields[field++] = (char *)strtok_r(string, separates, &string)) && (field < MAXFIELDS))
 		;
 	
 	return (field-1);
@@ -220,6 +220,7 @@ static char * cmd_to_str(int cmd) {
 		case SENSOR_ATTRIBUTE_CXD5605_CEPS: return "CEPS";
 		case SENSOR_ATTRIBUTE_CXD5605_CEPW: return "CEPW";
 		case SENSOR_ATTRIBUTE_CXD5605_CEPC: return "CEPC";
+		case SENSOR_ATTRIBUTE_CXD5605_GENERATE_SGE_DATA: return "AEPS";
 		default:
 			return "NA";
 		break;
@@ -355,6 +356,31 @@ static void write_binary_data(const struct device *dev, int cmd, uint8_t *to_sen
 	}
 }
 
+/** @brief wait for command response from the CXD5605
+ *
+ * @param requires a struct device
+ *
+ * @return status 0 good -1 timeout
+ */
+static int cxd5605_wait_fetch(const struct device *dev)
+{
+	int ret = 0;
+	int data_timeout = 0;
+
+	struct cxd5605_data *drv_data = dev->data;
+
+	drv_data->got_data = false;
+	while (drv_data->got_data != true) {
+		k_msleep(100);
+		data_timeout++;
+		if (data_timeout > 13) { // TODO this needs to have the knowledge of GPGGA packet rate
+			return -1;	// timeout no data
+		}
+	}
+
+	return ret;
+}
+
 /** @brief Callback routine for 1PPS interrupt. It will be called every second
  *  from 1PPS output port after getting a fix
  *
@@ -387,7 +413,7 @@ static double atod(const char *str)
 	bool neg = false;
 
 	// remove leading space
-	while (isspace(*str)) str++;
+	while (isspace((int)*str)) str++;
 
 	// get sign if present
 	if (*str && (*str == '-' || *str == '+')) {
@@ -398,7 +424,7 @@ static double atod(const char *str)
 	}
 
 	// get decimal part
-	while (*str && isdigit(*str)) {
+	while (*str && isdigit((int)*str)) {
 		ret = ret * 10 + (*str - '0');
 		str++;
 	}
@@ -408,7 +434,7 @@ static double atod(const char *str)
 		double frac = 0.0;
 		double div = 1.0;
 		str++;
-		while (*str && isdigit(*str)) {
+		while (*str && isdigit((int)*str)) {
 			frac = frac * 10 + (*str - '0');
 			str++;
 			div *= 10.0;
@@ -444,6 +470,7 @@ static void callback(const struct device *dev,
 	if (ret) {
 		LOG_ERR("read_bytes function:Error reading from CXD5605! error code (%d)\n", ret);
 	} else   {
+		drv_data->got_data = true;
 		/* decode response*/
 		rd_data.data[rd_data.data_size] = 0;
 		LOG_DBG("nmea - %s\n", rd_data.data);
@@ -624,6 +651,34 @@ static void callback(const struct device *dev,
 						drv_data->cxd5605_cmd = -1;
 					}
 					break;
+					case SENSOR_ATTRIBUTE_CXD5605_SGE_STATUS:
+						if (drv_data->num_msg == 0) {
+							csv_split(rd_data.data, ',', temp_field);
+							drv_data->cxd5605_cmd_data.sge.gps_pending= strtol(temp_field[0], NULL, 16);
+							drv_data->cxd5605_cmd_data.sge.gps_available = strtol(temp_field[1], NULL, 16);
+							drv_data->num_msg++;
+						} else if (drv_data->num_msg == 1) {
+							csv_split(rd_data.data, ',', temp_field);
+							drv_data->cxd5605_cmd_data.sge.qzss_pending= strtol(temp_field[0], NULL, 16);
+							drv_data->cxd5605_cmd_data.sge.qzss_available = strtol(temp_field[1], NULL, 16);
+							drv_data->num_msg++;
+						} else if (drv_data->num_msg == 2) {
+							uint8_t sge_data[32];
+							ret = get_cmd_response(rd_data.data);
+							result = snprintf(sge_data, 32, "%x.%x\n %x.%x", 
+							drv_data->cxd5605_cmd_data.sge.gps_pending, 
+							drv_data->cxd5605_cmd_data.sge.gps_available,
+							drv_data->cxd5605_cmd_data.sge.qzss_pending, 
+							drv_data->cxd5605_cmd_data.sge.qzss_available);
+							printf("%s:%d - sge status %s ret %d\n",__FILE__,__LINE__, sge_data, ret);
+							if (result > 32 || result < 0) {
+								LOG_ERR("[%s:%d] to_send buffer error %d",__FILE__,__LINE__,result);
+							}
+
+							drv_data->num_msg = 0;
+							drv_data->cxd5605_cmd = -1;
+						}
+						break;
 
 					case SENSOR_ATTRIBUTE_CXD5605_ERASE: 
 					break;
@@ -824,6 +879,8 @@ static int cxd5605_attr_get(const struct device *dev,
 		val->val2 = 0;
 	}
 	if (chan == (enum sensor_channel)GNSS_CHANNEL_POSITION && attr == (enum sensor_attribute)GNSS_ATTRIBUTE_FIXTYPE) {
+		// TODO handle return code
+		cxd5605_wait_fetch(dev);
 		val->val1 = (int)(drv_data->pvt.position.fix_type);
 		val->val2 = 0;
 	}
@@ -865,7 +922,7 @@ static int cxd5605_attr_set(const struct device *dev,
 	uint32_t lon_min = 0;
 	uint32_t lon_sec = 0;
 
-	uint8_t year = 0;
+	uint32_t year = 0;
 	uint8_t month = 0;
 	uint8_t day = 0;
 	uint8_t hour = 0;
@@ -884,6 +941,22 @@ static int cxd5605_attr_set(const struct device *dev,
 	LOG_DBG("[cxd5605:tx] - cmd %s (%d)\r\n", cmd_to_str(drv_data->cxd5605_cmd), drv_data->cxd5605_cmd);
 
 	switch (drv_data->cxd5605_cmd) {
+
+		case SENSOR_ATTRIBUTE_CXD5605_GENERATE_SGE_DATA: 
+			result = snprintf(to_send, SEND_BUF_SIZE, "@AEPS %d\r\n", val->val1);
+			if (result > SEND_BUF_SIZE || result < 0) {
+				LOG_ERR("[%s:%d] to_send buffer error %d", __FILE__, __LINE__, result);
+				return result;
+			}
+		break;
+
+		case SENSOR_ATTRIBUTE_CXD5605_SGE_STATUS: 
+			result = snprintf(to_send, SEND_BUF_SIZE, "@AEPG\r\n");
+			if (result > SEND_BUF_SIZE || result < 0) {
+				LOG_ERR("[%s:%d] to_send buffer error %d", __FILE__, __LINE__, result);
+				return result;
+			}
+		break;
 	
 		case SENSOR_ATTRIBUTE_CXD5605_TURN_ON_1PPS:
 
@@ -1087,6 +1160,14 @@ static int cxd5605_attr_set(const struct device *dev,
 			}
 			break;
 
+		case SENSOR_ATTRIBUTE_CXD5605_GSTP:
+			result = snprintf(to_send, SEND_BUF_SIZE, "@GSTP\r\n");
+			if (result > SEND_BUF_SIZE || result < 0) {
+				LOG_ERR("[%s:%d] to_send buffer error %d", __FILE__, __LINE__, result);
+				return result;
+			}
+			break;
+
 		case SENSOR_ATTRIBUTE_CXD5605_GSW:
 			result = snprintf(to_send, SEND_BUF_SIZE, "@GSW\r\n");
 			if (result > SEND_BUF_SIZE || result < 0) {
@@ -1267,6 +1348,10 @@ static int cxd5605_attr_set(const struct device *dev,
 	}
 
 	result = write_bytes(dev, CXD5605_ADDRESS, to_send, strlen(to_send));
+	if (result < 0) {
+		return result;
+	}
+	result = cxd5605_wait_fetch(dev);
 	if (result < 0) {
 		return result;
 	}
