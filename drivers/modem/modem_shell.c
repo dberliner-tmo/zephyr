@@ -328,15 +328,6 @@ static int cmd_modem_sms_recv(const struct shell *shell, size_t argc, char *argv
 	return ret;
 }
 
-static int cmd_modem_sms(const struct shell *shell, size_t argc, char *argv[])
-{
-	ARG_UNUSED(shell);
-	ARG_UNUSED(argc);
-	ARG_UNUSED(argv);
-
-	return 0;
-}
-
 SHELL_STATIC_SUBCMD_SET_CREATE(modem_cmd_sms,
 	SHELL_CMD(send, NULL,
 		  "'cmd_sms_send <modem index> <phone number> <message>' send sms message.",
@@ -353,7 +344,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_modem,
 	SHELL_CMD(send, NULL, "Send an AT <command> to a registered modem "
 			      "receiver", cmd_modem_send),
 	SHELL_CMD(sms, &modem_cmd_sms, "Send or receive SMS message via modem",
-                  cmd_modem_sms),
+                  NULL),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 
