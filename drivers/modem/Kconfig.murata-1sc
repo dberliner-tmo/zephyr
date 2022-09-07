@@ -55,25 +55,12 @@ config MODEM_MURATA_1SC_SOCKET_COUNT
           This value sets the maximum number of allowed concurrent sockets 
           for the 1sc modem.
 
-
-config AMAZON_CA_ROOT_SLOT
-        int "Amazon Root CA slot"
-        default 10
-        help
-          This is cert profile ID for Amazon Root CA.
-
 config SNI_SLOT
         int "customer server's CA slot"
         default 8
         help
           This is cert profile ID for customer server that requires SNI extension.
-         
-config TLS_SNI_HOSTNAME
-        string "URI for customer server"
-        default "echo.hagen.tech"
-        help
-          This is URI for customer server that requires SNI extension.
-         
+
 config MODEM_ON_DELAY
         int "wait period (in ms) before turn on modem"
         default 1000
@@ -84,44 +71,5 @@ config MODEM_DEMO_LOW_POWERMODE
         bool "low-power mode (essentially disable the modem)"
         help
           This is to keep modem inactive for minimal power usage.
-
-config USER_CA_FILE
-        string "app-specific CA file in .pem format"
-        default ""
-        help
-          This is for a user to specify a server's CA file
-
-config USER_CA_DER_ENABLED
-        bool "use app-specific CA file in .der.inc format"
-        default n
-
-if USER_CA_DER_ENABLED
-
-config USER_CA_DER_FILE
-        string "app-specific CA file in .der.inc format"
-        default ""
-        help
-          Same prefix as USER_CA_FILE, but with a suffix of .der.inc
-          Note that this is a build bi-product, not a source file
-
-endif # USER_CA_DER_ENABLED
-
-config USER_CERT_FILE
-        string "app-specific cert file in .pem format"
-        default ""
-        help
-          This is for a user to specify a server's cert file
-
-config USER_PRIVATEKEY_FILE
-        string "app-specific key file in .pem format"
-        default ""
-        help
-          This is for a user to specify a server's key file
-
-config USER_ROOT_CA_FILE
-        string "app-specific root CA file in .pem format"
-        default ""
-        help
-          This is for a user to specify a root CA file
 
 endif  #MODEM_MURATA_1SC
