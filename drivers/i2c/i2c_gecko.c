@@ -117,7 +117,9 @@ static int i2c_gecko_transfer(const struct device *dev, struct i2c_msg *msgs,
 		return 0;
 	}
 
-	k_sem_take(&data->device_sync_sem, K_FOREVER);
+	if (k_sem_take(&data->device_sync_sem, K_MSEC(CONFIG_I2C_GECKO_XFER_TIMEOUT))) {
+		return -ETIMEDOUT;
+	}
 
 	seq.addr = addr << 1;
 
