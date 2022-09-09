@@ -10,8 +10,8 @@ config I2C_GECKO
 
 config I2C_GECKO_XFER_TIMEOUT
     int "Gecko I2C semaphore timeout in MS"
-    default 100
-    range 1 30000
+    default -1
+    range -1 300000
     depends on I2C_GECKO
     help
       Timeout for the transfer semaphore in the Gecko I2C Driver
