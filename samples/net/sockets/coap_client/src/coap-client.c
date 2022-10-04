@@ -30,11 +30,11 @@ struct pollfd fds[1];
 static int nfds;
 
 /* CoAP Options */
-static const char * const test_path[] = { "test", NULL };
+static const char * const test_path[] = { "echo", NULL };
 
 static const char * const large_path[] = { "large", NULL };
 
-static const char * const obs_path[] = { "obs", NULL };
+static const char * const obs_path[] = { "time", NULL };
 
 #define BLOCK_WISE_TRANSFER_SIZE_GET 2048
 
@@ -57,24 +57,23 @@ static void prepare_fds(void)
 static int start_coap_client(void)
 {
 	int ret = 0;
-	struct sockaddr_in6 addr6;
+	struct sockaddr_in addr4;
 
-	addr6.sin6_family = AF_INET6;
-	addr6.sin6_port = htons(PEER_PORT);
-	addr6.sin6_scope_id = 0U;
+	addr4.sin_family = AF_INET;
+	addr4.sin_port = htons(5683);
 
-	inet_pton(AF_INET6, CONFIG_NET_CONFIG_PEER_IPV6_ADDR,
-		  &addr6.sin6_addr);
+	inet_pton(AF_INET, CONFIG_NET_CONFIG_PEER_IPV4_ADDR,
+		  &addr4.sin_addr);
 
-	sock = socket(addr6.sin6_family, SOCK_DGRAM, IPPROTO_UDP);
+	sock = socket(addr4.sin_family, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0) {
-		LOG_ERR("Failed to create UDP socket %d", errno);
+		printk("Failed to create UDP socket %d\n", errno);
 		return -errno;
 	}
 
-	ret = connect(sock, (struct sockaddr *)&addr6, sizeof(addr6));
+	ret = connect(sock, (struct sockaddr *)&addr4, sizeof(addr4));
 	if (ret < 0) {
-		LOG_ERR("Cannot connect to UDP remote : %d", errno);
+		printk("Cannot connect to UDP remote : %d\n", errno);
 		return -errno;
 	}
 
@@ -186,6 +185,7 @@ static int send_simple_coap_request(uint8_t method)
 	net_hexdump("Request", request.data, request.offset);
 
 	r = send(sock, request.data, request.offset, 0);
+	printf("Send returned %d\n", r);
 
 end:
 	k_free(data);
@@ -205,6 +205,7 @@ static int send_simple_coap_msgs_and_wait_for_reply(void)
 			printk("\nCoAP client GET\n");
 			r = send_simple_coap_request(COAP_METHOD_GET);
 			if (r < 0) {
+				printk("Failed %d\n", r);
 				return r;
 			}
 
